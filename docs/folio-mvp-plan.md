@@ -5,7 +5,7 @@
 - **Electron** + **Electron Forge** — desktop shell and build/packaging pipeline
 - **React + Vite** — UI (renderer process), via `@electron-forge/plugin-vite`
 - **Node.js** — file watching, filesystem ops, thumbnail generation (main process)
-- **`folio.json`** — flat JSON sidecar in `~/Folio/`, single source of truth (no database)
+- **`.folio/folio.json`** — flat JSON sidecar in `~/Folio/.folio/`, single source of truth (no database)
 - **`nativeImage`** — thumbnail generation (built into Electron, no native module needed)
 - **`chokidar`** — file watching
 
@@ -22,18 +22,33 @@
 
 ### 1.2 Define folder structure and JSON schema
 
-- [ ] Create `~/Folio/output/`, `~/Folio/references/`, `~/Folio/.cache/thumbs/` on first launch if they don't exist
+- [ ] Create year/month folder structure on first import if it doesn't exist (e.g. `~/Folio/2026/02-february/`)
+- [ ] Create `~/Folio/references/`, `~/Folio/.folio/thumbs/` on first launch if they don't exist
 - [ ] Define and document the `folio.json` schema (items, piles, tags, canvas state)
 - [ ] Write TypeScript types for the full schema (`src/shared/types.ts`, imported by both main and renderer)
 
 ```
 ~/Folio/
-  output/               ← everything the user makes, flat by date
-  references/<pile-id>/ ← pile reference images, separate from output
-  .cache/thumbs/        ← generated thumbnails (400px JPEGs)
-  folio.json
-  folio.json.bak
+  2025/
+    09-september/
+      loose-warm-up.jpg
+      gesture-study.jpg
+    10-october/
+      seated-figure.jpg
+  2026/
+    01-january/
+      new-year-figure.jpg
+    02-february/
+      figure-study-5.jpg
+      hand-gestures.png
+  references/
+    <pile-id>/          ← pile reference images, separate from archive
+  .folio/
+    folio.json          ← hidden from Finder by default; all app state lives here
+    thumbs/             ← generated thumbnails (400px JPEGs)
 ```
+
+Folder names: year as `YYYY`, month as `MM-monthname` (e.g. `02-february`). Images sit loose in the month folder — no day subfolders. Folder path always determined by **import date**, never file creation date.
 
 ### 1.3 IPC bridge (preload layer)
 
@@ -50,6 +65,7 @@ window.folio.copyToFolio(filePaths);
 window.folio.copyReference(pileId, filePaths);
 window.folio.openFileDialog();
 window.folio.ensureThumbnails(itemIds);
+window.folio.getReconciliationResult(); // called once on launch by renderer
 window.folio.openInFinder(filename);
 
 // Events (main → renderer)
@@ -58,56 +74,67 @@ window.folio.onFilesAdded(callback);
 
 ### 1.4 File watcher
 
-- [ ] Install `chokidar`, start watching `~/Folio/output/` from main process on app launch
-- [ ] On new file: infer date from `YYYY-MM-DD_` filename prefix, fall back to `fs.stat` birthtime
-- [ ] On new file: infer type from extension (`jpg/png/webp/heic` → sketch, `mp3/wav/aiff` → music, `mp4/mov/gif` → animation)
-- [ ] On new file: generate ID with `nanoid`, append to `folio.json`, emit `files-added` IPC event
+- [ ] Install `chokidar`, start watching `~/Folio/` recursively (excluding `.folio/` and `references/`) from main process on app launch
+- [ ] On new file detected: check if destination path is in `recentlyCopied` Set — if so, skip (it was just added by `copyToFolio`, no hash lookup needed). Clear entries from the Set after a 2s TTL
+- [ ] On new file with no matching hash: date is always the current import date (`new Date()`), infer type from extension (`jpg/png/webp/heic` → sketch, `mp3/wav/aiff` → music, `mp4/mov/gif` → animation), generate ID with `nanoid`, append to `folio.json`, emit `files-added` IPC event
 - [ ] Debounce watcher at 300ms to batch rapid drops
-- [ ] On delete: mark item `removed: true`, preserve metadata
+- [ ] On file deleted: mark item `missing: true` in `folio.json` rather than removing the entry — metadata, tags, and pile membership are preserved
 
 ### 1.5 Filesystem operations (`main/fs.ts`)
 
-- [ ] `saveFolioData()`: atomic write — write to `folio.json.tmp`, copy current to `.bak`, rename `.tmp` → `folio.json`
-- [ ] `copyToFolio()`: copy files to `~/Folio/output/` named `YYYY-MM-DD_<sanitized-name>.<ext>`, handle collisions with `_2`, `_3` suffix
+- [ ] `saveFolioData()`: atomic write — write to `.folio/folio.json.tmp`, then rename over `.folio/folio.json` (OS-level rename; no `.bak` needed)
+- [ ] `copyToFolio()`: resolve destination as `~/Folio/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix; add destination path to `recentlyCopied` Set immediately after copy
+- [ ] `computeHash(filePath)`: read first 64KB of file, return 8-char hex hash using Node's built-in `crypto.createHash('sha256')` — fast enough for large files, unique enough for a personal archive
 - [ ] `copyReference()`: copy files to `~/Folio/references/<pile-id>/`
-- [ ] `loadFolioData()`: read `folio.json` on startup, validate schema, fall back to `.bak` if invalid
-- [ ] File sanitization: lowercase, spaces → hyphens, strip special characters
+- [ ] `loadFolioData()`: read `.folio/folio.json` on startup, validate schema
+- [ ] File sanitization helper: lowercase, spaces → hyphens, strip special characters (shared utility used by both `copyToFolio` and `copyReference`)
 
-### 1.6 Thumbnail generation
+### 1.6 Launch reconciliation
+
+Run once on every app launch, after `loadFolioData()`, before the UI renders. Diffs `folio.json` against what's actually on disk and surfaces any drift.
+
+- [ ] **Scan the archive**: walk all files under `~/Folio/` (excluding `.folio/` and `references/`) and build a set of `{path, hash}` for every file found on disk
+- [ ] **Find missing files**: items in `folio.json` whose `item.path` no longer exists on disk — mark as `missing: true`
+- [ ] **Re-locate moved/renamed files**: for each missing item, check if any on-disk file has a matching `item.hash` — if found, update `item.path` to the new location, clear `missing` flag, save silently. This handles manual renames and moves in Finder with no user interaction required
+- [ ] **Find untracked files**: files on disk with no matching entry in `folio.json` (no path match, no hash match) — these were added manually in Finder
+- [ ] **Show reconciliation UI if needed**: if there are untracked files or genuinely missing files (missing and no hash match), show a non-blocking notice at the top of the app: `"2 new files found in your Folio folder — add to archive?"` and `"1 file is missing and couldn't be located"` — user can dismiss or resolve
+- [ ] **Reconciliation is always non-destructive**: never delete metadata, never move files automatically, never block app launch — the UI is fully usable while the notice is present
+
+### 1.7 Thumbnail generation
 
 - [ ] Use `nativeImage.createThumbnailFromPath(path, { width: 400, height: 400 })` — built into Electron, no extra dependency
-- [ ] Write generated thumbnail to `~/Folio/.cache/thumbs/<id>.jpg` via `thumb.toJPEG(80)`
+- [ ] Write generated thumbnail to `~/Folio/.folio/thumbs/<id>.jpg` via `thumb.toJPEG(80)`
 - [ ] `ensureThumbnails(ids[])`: skip already-cached items, process missing ones sequentially
 - [ ] For audio files: copy a static SVG waveform placeholder into the thumbs cache under that item's ID
-- [ ] Renderer loads thumbnails as `<img src="file:///Users/x/Folio/.cache/thumbs/<id>.jpg" />`
+- [ ] Renderer loads thumbnails as `<img src="file:///Users/x/Folio/.folio/thumbs/<id>.jpg" />`
 
-### 1.7 Drop files into the app
+### 1.8 Drop files into the app
 
 - [ ] Renderer: `onDragOver` + `onDrop` on the root div
 - [ ] Extract file paths with `webUtils.getPathForFile(file)` (Electron 28+)
 - [ ] Call `window.folio.copyToFolio(paths)`, update React state with returned item objects
 - [ ] Show toast: "N items added to today"
-- [ ] File watcher also fires on drop but is idempotent — deduplicate by filename before writing
+- [ ] File watcher also fires on drop but is idempotent — deduplicate by checking `recentlyCopied` Set before doing any hash work
 
-### 1.8 Import button
+### 1.9 Import button
 
 - [ ] Header button calls `window.folio.openFileDialog()` → main calls `dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })`
 - [ ] Same `copyToFolio` path as drag-and-drop
 
-### 1.9 Daily strip view
+### 1.10 Daily strip view
 
 - [ ] Render all dates from earliest item to today, most recent at top
 - [ ] Empty date rows: faint dash line (gaps are part of the record, not hidden)
 - [ ] Thumbnails lazy-loaded with `IntersectionObserver`
 - [ ] Scroll position persisted in `sessionStorage`
 
-### 1.10 Grid view
+### 1.11 Grid view
 
 - [ ] CSS grid: `auto-fill, minmax(148px, 1fr)`
 - [ ] Type filter pills in header: all / sketch / ref / music / anim
 - [ ] Same lazy thumbnail loading as strip
 
-### 1.11 Status bar
+### 1.12 Status bar
 
 - [ ] Display: N items · N piles · N tags · N gaps · `~/Folio/`
 
@@ -201,9 +228,12 @@ window.folio.onFilesAdded(callback);
 
 ### Data integrity
 
-- [ ] All `folio.json` writes atomic: `.tmp` write → `.bak` copy → rename
-- [ ] Schema validation on load: check `version` field and required keys, restore from `.bak` if invalid
+- [ ] All `.folio/folio.json` writes atomic: `.tmp` write → rename (OS-level atomic; no `.bak` needed)
+- [ ] Schema validation on load: check `version` field and required keys
 - [ ] React state is live working copy; debounced save (500ms) on every meaningful change
+- [ ] Every item carries a `hash` (first-64KB SHA-256, truncated to 8 hex chars) used to re-locate files that were renamed or moved outside the app
+- [ ] Every item carries a `missing` boolean — set when a file can't be found and no hash match exists; cleared automatically if the file reappears
+- [ ] Reconciliation runs at every launch: silent auto-fix for moved files, non-blocking notice for untracked or genuinely missing files
 
 ### IPC security
 
@@ -216,6 +246,15 @@ window.folio.onFilesAdded(callback);
 - [ ] Strip and grid use `IntersectionObserver` for lazy loading
 - [ ] `folio.json` read once at startup, kept in memory, written only on change
 - [ ] File watcher debounced at 300ms
+
+### File naming and paths
+
+- [ ] Destination resolved from import date: `~/Folio/YYYY/MM-monthname/` (e.g. `~/Folio/2026/02-february/`)
+- [ ] Month folder format: zero-padded number + full lowercase name — `01-january` through `12-december`
+- [ ] Filename: original name, sanitized — lowercase, spaces → hyphens, special characters stripped
+- [ ] Name collision within the same month folder: append `_2`, `_3`, etc. before the extension
+- [ ] `item.title` defaults to sanitized filename without extension; user can rename at any time
+- [ ] `item.path` stores relative path from `~/Folio/` (e.g. `2026/02-february/figure-study.jpg`) — used to locate files and rebuild thumbnails if the cache is deleted
 
 ### Accepted file types
 
@@ -251,8 +290,9 @@ window.folio.onFilesAdded(callback);
 | --------- | ------------------------------------------- | ------------------- |
 | 1.1–1.3   | Scaffold + IPC bridge + schema              | 3–4 days            |
 | 1.4–1.5   | File watcher + filesystem ops               | 3–4 days            |
-| 1.6–1.8   | Thumbnails + drop + import                  | 3–4 days            |
-| 1.9–1.11  | Strip + grid + status bar                   | 4–5 days            |
+| 1.6–1.7   | Reconciliation + thumbnails                 | 3–4 days            |
+| 1.8–1.9   | File drop + import button                   | 2–3 days            |
+| 1.10–1.12 | Strip + grid + status bar                   | 4–5 days            |
 | 2.1–2.3   | Detail drawer + tags + multi-select         | 4–5 days            |
 | 2.4–2.5   | Piles: create, list, membership             | 3–4 days            |
 | 3.1–3.3   | Arrange canvas + drag + notes               | 5–6 days            |
