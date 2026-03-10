@@ -5,7 +5,7 @@
 - **Electron** + **Electron Forge** — desktop shell and build/packaging pipeline
 - **React + Vite** — UI (renderer process), via `@electron-forge/plugin-vite`
 - **Node.js** — file watching, filesystem ops, thumbnail generation (main process)
-- **`.folio/folio.json`** — flat JSON sidecar in `~/Folio/.folio/`, single source of truth (no database)
+- **`folio.json`** — flat JSON in `~/Folio/.folio/`, single source of truth (no database)
 - **`nativeImage`** — thumbnail generation (built into Electron, no native module needed)
 - **`chokidar`** — file watching
 
@@ -17,14 +17,14 @@
 
 - [x] Run `npm init electron-app@latest folio -- --template=vite-typescript`
 - [x] Add React: install `react`, `react-dom`, `@vitejs/plugin-react`, update `vite.renderer.config.ts`
-- [ ] Configure `BrowserWindow`: minimum 900×600, `titleBarStyle: 'hiddenInset'`
-- [ ] Add React Router for strip / grid / arrange view switching
+- [x] Configure `BrowserWindow`: minimum 900×600, `titleBarStyle: 'hiddenInset'`
+- [x] Add React Router for strip / grid / canvas view switching
 
 ### 1.2 Define folder structure and JSON schema
 
 - [ ] Create year/month folder structure on first import if it doesn't exist (e.g. `~/Folio/2026/02-february/`)
 - [ ] Create `~/Folio/references/`, `~/Folio/.folio/thumbs/` on first launch if they don't exist
-- [ ] Define and document the `folio.json` schema (items, piles, tags, canvas state)
+- [ ] Define and document the `folio.json` schema (items, canvases, tags)
 - [ ] Write TypeScript types for the full schema (`src/shared/types.ts`, imported by both main and renderer)
 
 ```
@@ -42,10 +42,10 @@
       figure-study-5.jpg
       hand-gestures.png
   references/
-    <pile-id>/          ← pile reference images, separate from archive
-  .folio/
-    folio.json          ← hidden from Finder by default; all app state lives here
-    thumbs/             ← generated thumbnails (400px JPEGs)
+    <canvas-id>/        ← canvas reference images, separate from archive
+  .folio/               ← hidden app state (analogous to .git/)
+    folio.json          ← single source of truth
+    thumbs/             ← generated thumbnails (400px JPEGs, regenerable)
 ```
 
 Folder names: year as `YYYY`, month as `MM-monthname` (e.g. `02-february`). Images sit loose in the month folder — no day subfolders. Folder path always determined by **import date**, never file creation date.
@@ -62,7 +62,7 @@ Folder names: year as `YYYY`, month as `MM-monthname` (e.g. `02-february`). Imag
 window.folio.getFolioData();
 window.folio.saveFolioData(data);
 window.folio.copyToFolio(filePaths);
-window.folio.copyReference(pileId, filePaths);
+window.folio.copyReference(canvasId, filePaths);
 window.folio.openFileDialog();
 window.folio.ensureThumbnails(itemIds);
 window.folio.getReconciliationResult(); // called once on launch by renderer
@@ -75,18 +75,18 @@ window.folio.onFilesAdded(callback);
 ### 1.4 File watcher
 
 - [ ] Install `chokidar`, start watching `~/Folio/` recursively (excluding `.folio/` and `references/`) from main process on app launch
-- [ ] On new file detected: check if destination path is in `recentlyCopied` Set — if so, skip (it was just added by `copyToFolio`, no hash lookup needed). Clear entries from the Set after a 2s TTL
+- [ ] On new file detected: check hash against all known `item.hash` values — if it matches an existing item, update `item.path` and clear any `missing` flag rather than creating a duplicate entry
 - [ ] On new file with no matching hash: date is always the current import date (`new Date()`), infer type from extension (`jpg/png/webp/heic` → sketch, `mp3/wav/aiff` → music, `mp4/mov/gif` → animation), generate ID with `nanoid`, append to `folio.json`, emit `files-added` IPC event
 - [ ] Debounce watcher at 300ms to batch rapid drops
-- [ ] On file deleted: mark item `missing: true` in `folio.json` rather than removing the entry — metadata, tags, and pile membership are preserved
+- [ ] On file deleted: mark item `missing: true` in `folio.json` rather than removing the entry — metadata, tags, and canvas membership are preserved
 
 ### 1.5 Filesystem operations (`main/fs.ts`)
 
-- [ ] `saveFolioData()`: atomic write — write to `.folio/folio.json.tmp`, then rename over `.folio/folio.json` (OS-level rename; no `.bak` needed)
-- [ ] `copyToFolio()`: resolve destination as `~/Folio/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix; add destination path to `recentlyCopied` Set immediately after copy
+- [ ] `saveFolioData()`: atomic write — write to `.folio/folio.json.tmp`, rename over `.folio/folio.json`; the OS-level rename is the crash guard (no `.bak` file needed)
+- [ ] `copyToFolio()`: resolve destination as `~/Folio/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix
 - [ ] `computeHash(filePath)`: read first 64KB of file, return 8-char hex hash using Node's built-in `crypto.createHash('sha256')` — fast enough for large files, unique enough for a personal archive
-- [ ] `copyReference()`: copy files to `~/Folio/references/<pile-id>/`
-- [ ] `loadFolioData()`: read `.folio/folio.json` on startup, validate schema
+- [ ] `copyReference()`: copy files to `~/Folio/references/<canvas-id>/`
+- [ ] `loadFolioData()`: read `.folio/folio.json` on startup; if missing, create a fresh empty schema; if present but schema validation fails, surface the error to the user clearly (no silent fallback — `.bak` no longer exists)
 - [ ] File sanitization helper: lowercase, spaces → hyphens, strip special characters (shared utility used by both `copyToFolio` and `copyReference`)
 
 ### 1.6 Launch reconciliation
@@ -114,7 +114,7 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [ ] Extract file paths with `webUtils.getPathForFile(file)` (Electron 28+)
 - [ ] Call `window.folio.copyToFolio(paths)`, update React state with returned item objects
 - [ ] Show toast: "N items added to today"
-- [ ] File watcher also fires on drop but is idempotent — deduplicate by checking `recentlyCopied` Set before doing any hash work
+- [ ] File watcher deduplication: when `copyToFolio()` copies a file, it adds the destination path to a short-lived `recentlyCopied` Set that clears each entry after 2 seconds; when the watcher fires on that same path it checks this set first and skips without hashing — fast path for the common case
 
 ### 1.9 Import button
 
@@ -136,16 +136,16 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 1.12 Status bar
 
-- [ ] Display: N items · N piles · N tags · N gaps · `~/Folio/`
+- [ ] Display: N items · N canvases · N tags · N gaps · `~/Folio/`
 
 ---
 
-## Phase 2 — Organize: tags and piles
+## Phase 2 — Organize: tags and canvases
 
 ### 2.1 Detail drawer
 
 - [ ] Single click on any item opens drawer (slides up from bottom)
-- [ ] Show: thumbnail preview, title (editable inline), date, file type, pile membership
+- [ ] Show: thumbnail preview, title (editable inline), date, file type, canvas membership
 - [ ] Inline title edit: update React state immediately, debounce `saveFolioData` 500ms
 - [ ] "Show in Finder" button: `window.folio.openInFinder(filename)`
 - [ ] Click outside or press Escape to close
@@ -163,39 +163,40 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [ ] ⌘+click (macOS) / Ctrl+click to toggle selection
 - [ ] Shift+click for range select in grid view
 - [ ] Amber border on selected items
-- [ ] Selection hint bar: "N selected — name and pull into a pile →"
+- [ ] Selection hint bar: "N selected — drag onto a canvas or open on new canvas →"
 - [ ] Escape or click background to clear selection
 
-### 2.4 Create a pile
+### 2.4 Open items on a canvas
 
-- [ ] With items selected, sidebar shows inline form: pile name + optional observation note
-- [ ] Submit: create pile in `folio.json`, clear selection, auto-assign color from warm palette
-- [ ] Items can belong to multiple piles
+- [ ] With items selected in strip/grid, user can drag them directly onto an open canvas, or use "open on new canvas" to create a blank canvas pre-populated with the selection
+- [ ] New canvas: prompt for name + optional opening note, auto-assign color from warm palette, save to `folio.json`
+- [ ] Items can appear on multiple canvases simultaneously — canvas membership reflects what's been dragged onto each canvas
 
-### 2.5 Pile sidebar list
+### 2.5 Canvas sidebar list
 
-- [ ] Each pile row: colored dot, name, item count, ◎N ref badge, ✎N note badge
-- [ ] Expand pile: italic observation note, member thumbnail grid (max 8), "arrange this pile" button
-- [ ] "Arrange this pile" only visible when Arrange tab is active
-- [ ] Pile dots shown under strip thumbnails (one dot per pile membership)
-- [ ] Pile chips shown in detail drawer
+- [ ] Each canvas row: colored dot, name, item count, ◎N ref badge, ✎N note badge, ✦N edge badge
+- [ ] Expand canvas: italic opening note, member thumbnail grid (max 8), "open canvas" button
+- [ ] "Open canvas" navigates to the canvas view with that canvas loaded
+- [ ] Canvas dots shown under strip thumbnails (one colored dot per canvas membership)
+- [ ] Canvas chips shown in detail drawer
 
 ---
 
-## Phase 3 — Arrange: spatial canvas with notes
+## Phase 3 — Canvas: the thinking surface
 
-### 3.1 Arrange view entry
+### 3.1 Canvas view entry
 
-- [ ] Arrange tab shows empty dotted canvas with instruction text until a context is selected
-- [ ] Sidebar: "arrange this pile" or "arrange this tag" loads items onto canvas
-- [ ] Toolbar shows active context: colored dot + name + "N items · N notes"
-- [ ] Switching context: save current positions to `folio.json` before loading new context
+- [ ] Canvas tab shows list of existing canvases + "new canvas" button when no canvas is open
+- [ ] Opening a canvas from the sidebar loads its items, positions, notes, edges, and strokes exactly as left
+- [ ] Toolbar shows: colored dot + canvas name (editable) + "N items · N notes · N connections"
+- [ ] Switching canvas: auto-save current state to `folio.json` before loading the next
 
-### 3.2 Draggable item cards
+### 3.2 Draggable item cards and drag-in from strip/grid
 
-- [ ] Items positioned absolutely on a 1400×1100px scrollable canvas
+- [ ] Items positioned absolutely on a large scrollable canvas surface (2400×1800px to give room to spread)
 - [ ] Drag: mousedown → track mousemove delta → mouseup saves position to `folio.json`
-- [ ] Positions stored per context key (`pile-{id}` or `tag-{name}`) in `folio.json`
+- [ ] Positions stored per canvas in `folio.json` under `canvas.positions`
+- [ ] Items can be dragged directly from the strip or grid view onto an open canvas — they appear at the drop position
 - [ ] First-time layout: auto-arrange in a loose grid if no saved positions
 - [ ] Dotted grid background: 24px radial-gradient pattern
 
@@ -207,20 +208,35 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [ ] Empty note on blur: auto-delete
 - [ ] Escape exits edit mode without deleting
 - [ ] Delete link visible only while editing
-- [ ] Notes saved to context's `canvasNotes[]` in `folio.json`
+- [ ] Notes saved to `canvas.notes[]` in `folio.json`
 
 ### 3.4 References panel
 
-- [ ] 200px panel on right edge of arrange view, shown only for pile contexts
+Reference images belong to a canvas, not to items.
+
+- [ ] 200px panel on right edge of canvas view
 - [ ] Drop zone: drag image files onto panel to add references
-- [ ] Browse button: `window.folio.openFileDialog()` → `copyReference(pileId, paths)`
+- [ ] Browse button: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)`
 - [ ] Each reference card: thumbnail, filename, date added, × remove (deletes file + updates `folio.json`)
-- [ ] Panel footer: `~/Folio/references/<pile-name>/`
+- [ ] Panel footer: `~/Folio/references/<canvas-name>/`
 
-### 3.5 Tag canvas
+### 3.5 Edges (connections between items)
 
-- [ ] Same canvas and notes as pile canvas
-- [ ] No references panel — show quiet note: "references belong to piles, not tags"
+- [ ] Hold Shift and drag from one item card to another to draw a connection edge
+- [ ] Edge renders as a curved line between the two cards, with an optional label
+- [ ] Click an edge to select it; double-click to edit the label inline
+- [ ] Delete selected edge with Backspace/Delete
+- [ ] Edges stored as `{ id, fromId, toId, label? }` in `canvas.edges[]`
+- [ ] Edges update position dynamically as cards are dragged
+
+### 3.6 Freehand strokes
+
+- [ ] Pen tool in canvas toolbar toggles freehand drawing mode
+- [ ] Draw directly on the canvas surface — to circle items, annotate, sketch quick marks
+- [ ] Strokes render as SVG paths overlaid on the canvas
+- [ ] Stroke color inherits canvas color by default, picker available in toolbar
+- [ ] Strokes stored as `{ id, path, color }` in `canvas.strokes[]`
+- [ ] Undo (⌘Z) removes last stroke
 
 ---
 
@@ -228,11 +244,12 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### Data integrity
 
-- [ ] All `.folio/folio.json` writes atomic: `.tmp` write → rename (OS-level atomic; no `.bak` needed)
-- [ ] Schema validation on load: check `version` field and required keys
+- [ ] All `folio.json` writes atomic: write `.folio/folio.json.tmp` → rename over `.folio/folio.json` (OS rename is crash-safe; no `.bak` file)
+- [ ] Schema validation on load: check `version` field and required keys; surface a clear error to the user if invalid (no `.bak` fallback)
 - [ ] React state is live working copy; debounced save (500ms) on every meaningful change
 - [ ] Every item carries a `hash` (first-64KB SHA-256, truncated to 8 hex chars) used to re-locate files that were renamed or moved outside the app
 - [ ] Every item carries a `missing` boolean — set when a file can't be found and no hash match exists; cleared automatically if the file reappears
+- [ ] Canvas membership is derived from `canvas.itemIds[]` — no separate denormalized list on items
 - [ ] Reconciliation runs at every launch: silent auto-fix for moved files, non-blocking notice for untracked or genuinely missing files
 
 ### IPC security
@@ -245,6 +262,7 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [ ] Thumbnails generated in a sequential async queue, never blocking the main process event loop
 - [ ] Strip and grid use `IntersectionObserver` for lazy loading
 - [ ] `folio.json` read once at startup, kept in memory, written only on change
+- [ ] `recentlyCopied` is an in-memory `Set<string>` on the main process; entries are added by `copyToFolio()` and auto-deleted after 2 seconds via `setTimeout`
 - [ ] File watcher debounced at 300ms
 
 ### File naming and paths
@@ -294,8 +312,8 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 | 1.8–1.9   | File drop + import button                   | 2–3 days            |
 | 1.10–1.12 | Strip + grid + status bar                   | 4–5 days            |
 | 2.1–2.3   | Detail drawer + tags + multi-select         | 4–5 days            |
-| 2.4–2.5   | Piles: create, list, membership             | 3–4 days            |
-| 3.1–3.3   | Arrange canvas + drag + notes               | 5–6 days            |
-| 3.4–3.5   | References panel + tag canvas               | 2–3 days            |
+| 2.4–2.5   | Canvases: create, open, sidebar list        | 3–4 days            |
+| 3.1–3.3   | Canvas view + drag-in + notes               | 5–6 days            |
+| 3.4–3.6   | References panel + edges + strokes          | 3–4 days            |
 | Polish    | Empty states, errors, edge cases, packaging | 4–5 days            |
 | **Total** |                                             | **~7–8 weeks solo** |
