@@ -25,7 +25,7 @@
 - [ ] Create year/month folder structure on first import if it doesn't exist (e.g. `~/Folio/2026/02-february/`)
 - [ ] Create `~/Folio/references/`, `~/Folio/.folio/thumbs/` on first launch if they don't exist
 - [ ] Define and document the `folio.json` schema (items, canvases, tags)
-- [ ] Write TypeScript types for the full schema (`src/shared/types.ts`, imported by both main and renderer)
+- [x] Write TypeScript types for the full schema (`src/shared/types.ts`, imported by both main and renderer)
 
 ```
 ~/Folio/
@@ -210,15 +210,16 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [ ] Delete link visible only while editing
 - [ ] Notes saved to `canvas.notes[]` in `folio.json`
 
-### 3.4 References panel
+### 3.4 References on the canvas
 
-Reference images belong to a canvas, not to items.
+Reference images belong to a canvas, not to items. They are first-class positionable objects on the canvas surface — drag them around alongside items and notes.
 
-- [ ] 200px panel on right edge of canvas view
-- [ ] Drop zone: drag image files onto panel to add references
-- [ ] Browse button: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)`
-- [ ] Each reference card: thumbnail, filename, date added, × remove (deletes file + updates `folio.json`)
-- [ ] Panel footer: `~/Folio/references/<canvas-name>/`
+- [ ] Drop image files directly onto the canvas to add a reference at the drop position
+- [ ] Browse button in toolbar: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)` — drops new reference at a default position near the centre of the current viewport
+- [ ] References file to `~/Folio/references/<canvasId>/` on disk, never into the main archive
+- [ ] Reference card on canvas: thumbnail, drag handle, × remove button (deletes file from disk + removes from `folio.json`)
+- [ ] Reference cards can be moved freely like item cards — position saved to `canvas.references[].x/y`
+- [ ] Edges can connect reference cards to item cards (same `CanvasEdge` mechanism — `fromId`/`toId` can point to either)
 
 ### 3.5 Edges (connections between items)
 

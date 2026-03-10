@@ -25,20 +25,6 @@ Electron gives you two JavaScript environments running simultaneously and talkin
 
 The main process is like a small backend. The renderer is like a browser tab. They never share memory — they pass messages through IPC. A crash or bug in the UI can't affect the filesystem code, and vice versa.
 
----
-
-## Why Electron
-
-The two alternatives were Tauri and a plain web app.
-
-**Tauri** is faster and produces smaller binaries, but its backend is Rust. For Folio that means writing file watching, thumbnail generation, folder management, and reconciliation in a different language from everything else. The speed gains don't justify the context-switching cost on a solo build.
-
-**A plain web app** can't write to `~/Folio/` or watch a folder on the user's machine. Those are hard filesystem requirements that a browser sandbox simply doesn't allow.
-
-Electron is the simplest path to local filesystem access with a React UI, written in a single language throughout.
-
----
-
 ## The three-layer structure
 
 ### Layer 1: Main process
@@ -50,12 +36,12 @@ Node.js with full filesystem access. Runs in the background for the lifetime of 
 A thin typed bridge between main and renderer. Uses Electron's `contextBridge` API to expose a clean `window.folio.*` interface to the UI — without giving the UI any direct access to Node.
 
 ```typescript
-contextBridge.exposeInMainWorld('folio', {
-  getFolioData:  () => ipcRenderer.invoke('get-folio-data'),
-  saveFolioData: (data) => ipcRenderer.invoke('save-folio-data', data),
-  copyToFolio:   (paths) => ipcRenderer.invoke('copy-to-folio', paths),
-  onFilesAdded:  (cb) => ipcRenderer.on('files-added', cb),
-})
+contextBridge.exposeInMainWorld("folio", {
+  getFolioData: () => ipcRenderer.invoke("get-folio-data"),
+  saveFolioData: (data) => ipcRenderer.invoke("save-folio-data", data),
+  copyToFolio: (paths) => ipcRenderer.invoke("copy-to-folio", paths),
+  onFilesAdded: (cb) => ipcRenderer.on("files-added", cb),
+});
 ```
 
 With `contextIsolation: true` and `nodeIntegration: false`, the renderer can only call what is explicitly listed here. It cannot accidentally call `fs.unlink()` or access any other Node API. The preload script is the security boundary.
@@ -179,10 +165,21 @@ Canvases are stored as a top-level array in `folio.json`. Each canvas is a self-
       "note": "something about the weight of them",
       "itemIds": [1, 2, 4, 8],
       "positions": { "1": { "x": 60, "y": 80 } },
-      "notes": [ { "id": "n1", "x": 340, "y": 185, "text": "not the face — the torso" } ],
-      "edges": [ { "id": "e1", "fromId": 1, "toId": 4, "label": "same stance?" } ],
-      "strokes": [ { "id": "s1", "path": "M 120 80 L 240 160", "color": "#a06830" } ],
-      "references": [ { "id": "r1", "filename": "vermeer-window.jpg", "path": "references/1/vermeer-window.jpg" } ]
+      "notes": [
+        { "id": "n1", "x": 340, "y": 185, "text": "not the face — the torso" }
+      ],
+      "edges": [
+        { "id": "e1", "fromId": 1, "toId": 4, "label": "same stance?" }
+      ],
+      "references": [
+        {
+          "id": "r1",
+          "filename": "vermeer-window.jpg",
+          "path": "references/1/vermeer-window.jpg",
+          "x": 820,
+          "y": 120
+        }
+      ]
     }
   ]
 }
@@ -249,16 +246,16 @@ Silent auto-recovery (step 3) handles the common case. Only genuinely missing or
 
 ## Key decisions
 
-| Decision | Why |
-|---|---|
-| Electron over Tauri | One language (JS/TS) throughout; faster iteration on a solo build |
-| `folio.json` over a database | Data is small; human-readable, portable, inspectable without tooling |
-| No backend | Single-user, offline-first; main process covers what a backend would do |
-| Typed preload / contextBridge | Explicit security boundary; renderer has no direct filesystem access |
-| Atomic JSON writes | Write to `.folio/folio.json.tmp`, rename over `.folio/folio.json` — OS rename is the crash guard, no `.bak` needed |
-| Debounced saves (500ms) | UI stays responsive; writes batch naturally |
-| Import date governs folder placement | Archive reflects working sessions, not file provenance |
-| Hash-based file tracking | Survives renames and Finder moves without locking the folder |
-| `recentlyCopied` set | When `copyToFolio()` runs, the destination path is added to a short-lived set (2s TTL); the file watcher checks this set first and skips without hashing — fast path for the common case |
-| Non-destructive reconciliation | Folio never moves or deletes files automatically; user stays in control |
-| Electron Forge | Maintained by the Electron team; handles build, packaging, and signing together |
+| Decision                             | Why                                                                                                                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Electron over Tauri                  | One language (JS/TS) throughout; faster iteration on a solo build                                                                                                                        |
+| `folio.json` over a database         | Data is small; human-readable, portable, inspectable without tooling                                                                                                                     |
+| No backend                           | Single-user, offline-first; main process covers what a backend would do                                                                                                                  |
+| Typed preload / contextBridge        | Explicit security boundary; renderer has no direct filesystem access                                                                                                                     |
+| Atomic JSON writes                   | Write to `.folio/folio.json.tmp`, rename over `.folio/folio.json` — OS rename is the crash guard, no `.bak` needed                                                                       |
+| Debounced saves (500ms)              | UI stays responsive; writes batch naturally                                                                                                                                              |
+| Import date governs folder placement | Archive reflects working sessions, not file provenance                                                                                                                                   |
+| Hash-based file tracking             | Survives renames and Finder moves without locking the folder                                                                                                                             |
+| `recentlyCopied` set                 | When `copyToFolio()` runs, the destination path is added to a short-lived set (2s TTL); the file watcher checks this set first and skips without hashing — fast path for the common case |
+| Non-destructive reconciliation       | Folio never moves or deletes files automatically; user stays in control                                                                                                                  |
+| Electron Forge                       | Maintained by the Electron team; handles build, packaging, and signing together                                                                                                          |
