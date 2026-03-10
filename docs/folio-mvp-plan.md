@@ -22,24 +22,24 @@
 
 ### 1.2 Define folder structure and JSON schema
 
-- [ ] Create `~/Documents/Folio/items/` and year/month folder structure on first import (e.g. `~/Documents/Folio/items/2026/02-february/`)
-- [ ] Create `~/Documents/Folio/references/`, `~/Documents/Folio/.folio/thumbs/` on first launch if they don't exist
-- [ ] Define and document the `folio.json` schema (items, canvases, tags)
+- [x] Create `~/Documents/Folio/items/` and year/month folder structure on first import (e.g. `~/Documents/Folio/items/2026/02-february/`)
+- [x] Create `~/Documents/Folio/references/`, `~/Documents/Folio/.folio/thumbs/` on first launch if they don't exist
+- [x] Define and document the `folio.json` schema (items, canvases, tags)
 - [x] Write TypeScript types for the full schema (`src/shared/types.ts`, imported by both main and renderer)
 
 ```
 ~/Documents/Folio/
   items/
     2025/
-      09-september/
+      09_september/
         loose-warm-up.jpg
         gesture-study.jpg
-      10-october/
+      10_october/
         seated-figure.jpg
     2026/
-      01-january/
+      01_january/
         new-year-figure.jpg
-      02-february/
+      02_february/
         figure-study-5.jpg
         hand-gestures.png
   references/
@@ -49,13 +49,13 @@
     thumbs/             ← generated thumbnails (400px JPEGs, regenerable)
 ```
 
-Folder names: year as `YYYY`, month as `MM-monthname` (e.g. `02-february`) inside the `items/` directory. Images sit loose in the month folder — no day subfolders. Folder path always determined by **import date**, never file creation date.
+Folder names: year as `YYYY`, month as `MM_monthname` (e.g. `02_february`) inside the `items/` directory. Images sit loose in the month folder — no day subfolders. Folder path always determined by **import date**, never file creation date.
 
 ### 1.3 IPC bridge (preload layer)
 
-- [ ] Set `contextIsolation: true`, `nodeIntegration: false` on `BrowserWindow`
+- [x] Set `contextIsolation: true`, `nodeIntegration: false` on `BrowserWindow`
 - [ ] Write `preload/index.ts` — expose `window.folio.*` API via `contextBridge`
-- [ ] Wire each method to an `ipcMain.handle()` in `main/index.ts`
+- [x] Wire each method to an `ipcMain.handle()` in `main/index.ts`
 - [ ] Add TypeScript declaration file so the renderer gets full type checking on `window.folio`
 
 ```typescript
@@ -269,12 +269,12 @@ Reference images belong to a canvas, not to items. They are first-class position
 
 ### File naming and paths
 
-- [ ] Destination resolved from import date: `~/Documents/Folio/items/YYYY/MM-monthname/` (e.g. `~/Documents/Folio/items/2026/02-february/`)
-- [ ] Month folder format: zero-padded number + full lowercase name — `01-january` through `12-december`
+- [ ] Destination resolved from import date: `~/Documents/Folio/items/YYYY/MM_monthname/` (e.g. `~/Documents/Folio/items/2026/02_february/`)
+- [ ] Month folder format: zero-padded number + full lowercase name — `01_january` through `12_december`
 - [ ] Filename: original name, sanitized — lowercase, spaces → hyphens, special characters stripped
 - [ ] Name collision within the same month folder: append `_2`, `_3`, etc. before the extension
 - [ ] `item.title` defaults to sanitized filename without extension; user can rename at any time
-- [ ] `item.path` stores relative path from `~/Documents/Folio/` (e.g. `items/2026/02-february/figure-study.jpg`) — used to locate files and rebuild thumbnails if the cache is deleted
+- [ ] `item.path` stores relative path from `~/Documents/Folio/` (e.g. `items/2026/02_february/figure-study.jpg`) — used to locate files and rebuild thumbnails if the cache is deleted
 
 ### Accepted file types
 

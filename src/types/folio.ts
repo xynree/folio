@@ -12,7 +12,7 @@ export interface FolioData {
 }
 
 /** Supported media types in the archive */
-export type ItemType = "image" | "audio" | "video" | "text";
+export type ItemType = "image" | "audio" | "video" | "text" | "other";
 
 /** A single metadata entry for a file in the archive */
 export interface FolioItem {
@@ -22,6 +22,7 @@ export interface FolioItem {
   type: ItemType;
   date: string; // Import date (ISO string)
   title: string;
+  description: string;
   tagIds: string[]; // References to Tag.id
   missing?: boolean; // True if file is missing from disk
 }
