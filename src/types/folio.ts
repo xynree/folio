@@ -1,26 +1,32 @@
 import { Canvas } from "./canvas";
 
+/**
+ * The root data structure for the entire application.
+ * Persisted as folio.json.
+ */
 export interface FolioData {
-  version: number;
-  items: FolioItem[];
-  canvases: Canvas[];
-  tags: Tag[];
+  version: number; // Schema version for migrations
+  items: FolioItem[]; // All items in the archive
+  canvases: Canvas[]; // Spatial canvases
+  tags: Tag[]; // Globally defined tags
 }
 
+/** Supported media types in the archive */
 export type ItemType = "image" | "audio" | "video" | "text";
 
+/** A single metadata entry for a file in the archive */
 export interface FolioItem {
   id: string;
-  path: string;
-  hash: string;
+  path: string; // Path relative to ~/Folio/
+  hash: string; // Fingerprint for reconciliation
   type: ItemType;
-  date: string; // import date ISO string
+  date: string; // Import date (ISO string)
   title: string;
-  tagIds: string[]; // References ids from Folio tags
-  missing?: boolean;
+  tagIds: string[]; // References to Tag.id
+  missing?: boolean; // True if file is missing from disk
 }
 
-// Tags enable filtering, partitioning items in grid
+/** User-defined label for filtering and organization */
 export interface Tag {
   id: string;
   text: string;
