@@ -136,12 +136,13 @@ Folio organises imported files into a year/month folder structure automatically:
 
 ```
 ~/Folio/
-  2026/
-    01-january/
-      new-year-figure.jpg
-    02-february/
-      figure-study.jpg
-      hand-gestures.png
+  items/
+    2026/
+      01-january/
+        new-year-figure.jpg
+      02-february/
+        figure-study.jpg
+        hand-gestures.png
   references/
     <canvas-id>/
   .folio/
@@ -151,7 +152,7 @@ Folio organises imported files into a year/month folder structure automatically:
 
 The destination is always computed from the **import date** — when the file was dragged into Folio — not the file's creation date or any embedded metadata. This makes the folder structure a record of your working sessions, which is more meaningful than a record of when files were created elsewhere.
 
-Each item in `folio.json` stores both a bare `filename` and a `path` relative to `~/Folio/`. The relative path is what the app uses to locate files and reconstruct thumbnails. The folder structure is fully legible in Finder without the app open.
+Each item in `folio.json` stores both a bare `filename` and a `path` relative to `~/Documents/Folio/`. The relative path (e.g. `items/2026/02-february/figure-study.jpg`) is what the app uses to locate files and reconstruct thumbnails. The folder structure is fully legible in Finder without the app open.
 
 Canvases are stored as a top-level array in `folio.json`. Each canvas is a self-contained thinking surface:
 
@@ -175,7 +176,7 @@ Canvases are stored as a top-level array in `folio.json`. Each canvas is a self-
         {
           "id": "r1",
           "filename": "vermeer-window.jpg",
-          "path": "references/1/vermeer-window.jpg",
+          "path": "items/2026/02-february/figure-study.jpg",
           "x": 820,
           "y": 120
         }

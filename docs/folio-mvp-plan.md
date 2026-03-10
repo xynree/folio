@@ -5,7 +5,7 @@
 - **Electron** + **Electron Forge** — desktop shell and build/packaging pipeline
 - **React + Vite** — UI (renderer process), via `@electron-forge/plugin-vite`
 - **Node.js** — file watching, filesystem ops, thumbnail generation (main process)
-- **`folio.json`** — flat JSON in `~/Folio/.folio/`, single source of truth (no database)
+- **`.folio/folio.json`** — flat JSON in `~/Documents/Folio/.folio/`, single source of truth (no database)
 - **`nativeImage`** — thumbnail generation (built into Electron, no native module needed)
 - **`chokidar`** — file watching
 
@@ -22,25 +22,26 @@
 
 ### 1.2 Define folder structure and JSON schema
 
-- [ ] Create year/month folder structure on first import if it doesn't exist (e.g. `~/Folio/2026/02-february/`)
-- [ ] Create `~/Folio/references/`, `~/Folio/.folio/thumbs/` on first launch if they don't exist
+- [ ] Create `~/Documents/Folio/items/` and year/month folder structure on first import (e.g. `~/Documents/Folio/items/2026/02-february/`)
+- [ ] Create `~/Documents/Folio/references/`, `~/Documents/Folio/.folio/thumbs/` on first launch if they don't exist
 - [ ] Define and document the `folio.json` schema (items, canvases, tags)
 - [x] Write TypeScript types for the full schema (`src/shared/types.ts`, imported by both main and renderer)
 
 ```
-~/Folio/
-  2025/
-    09-september/
-      loose-warm-up.jpg
-      gesture-study.jpg
-    10-october/
-      seated-figure.jpg
-  2026/
-    01-january/
-      new-year-figure.jpg
-    02-february/
-      figure-study-5.jpg
-      hand-gestures.png
+~/Documents/Folio/
+  items/
+    2025/
+      09-september/
+        loose-warm-up.jpg
+        gesture-study.jpg
+      10-october/
+        seated-figure.jpg
+    2026/
+      01-january/
+        new-year-figure.jpg
+      02-february/
+        figure-study-5.jpg
+        hand-gestures.png
   references/
     <canvas-id>/        ← canvas reference images, separate from archive
   .folio/               ← hidden app state (analogous to .git/)
@@ -48,7 +49,7 @@
     thumbs/             ← generated thumbnails (400px JPEGs, regenerable)
 ```
 
-Folder names: year as `YYYY`, month as `MM-monthname` (e.g. `02-february`). Images sit loose in the month folder — no day subfolders. Folder path always determined by **import date**, never file creation date.
+Folder names: year as `YYYY`, month as `MM-monthname` (e.g. `02-february`) inside the `items/` directory. Images sit loose in the month folder — no day subfolders. Folder path always determined by **import date**, never file creation date.
 
 ### 1.3 IPC bridge (preload layer)
 
@@ -74,7 +75,7 @@ window.folio.onFilesAdded(callback);
 
 ### 1.4 File watcher
 
-- [ ] Install `chokidar`, start watching `~/Folio/` recursively (excluding `.folio/` and `references/`) from main process on app launch
+- [ ] Install `chokidar`, start watching `~/Documents/Folio/` recursively (excluding `.folio/` and `references/`) from main process on app launch
 - [ ] On new file detected: check hash against all known `item.hash` values — if it matches an existing item, update `item.path` and clear any `missing` flag rather than creating a duplicate entry
 - [ ] On new file with no matching hash: date is always the current import date (`new Date()`), infer type from extension (`jpg/png/webp/heic` → sketch, `mp3/wav/aiff` → music, `mp4/mov/gif` → animation), generate ID with `nanoid`, append to `folio.json`, emit `files-added` IPC event
 - [ ] Debounce watcher at 300ms to batch rapid drops
@@ -83,9 +84,9 @@ window.folio.onFilesAdded(callback);
 ### 1.5 Filesystem operations (`main/fs.ts`)
 
 - [ ] `saveFolioData()`: atomic write — write to `.folio/folio.json.tmp`, rename over `.folio/folio.json`; the OS-level rename is the crash guard (no `.bak` file needed)
-- [ ] `copyToFolio()`: resolve destination as `~/Folio/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix
+- [ ] `copyToFolio()`: resolve destination as `~/Documents/Folio/items/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix
 - [ ] `computeHash(filePath)`: read first 64KB of file, return 8-char hex hash using Node's built-in `crypto.createHash('sha256')` — fast enough for large files, unique enough for a personal archive
-- [ ] `copyReference()`: copy files to `~/Folio/references/<canvas-id>/`
+- [ ] `copyReference()`: copy files to `~/Documents/Folio/references/<canvas-id>/`
 - [ ] `loadFolioData()`: read `.folio/folio.json` on startup; if missing, create a fresh empty schema; if present but schema validation fails, surface the error to the user clearly (no silent fallback — `.bak` no longer exists)
 - [ ] File sanitization helper: lowercase, spaces → hyphens, strip special characters (shared utility used by both `copyToFolio` and `copyReference`)
 
@@ -93,7 +94,7 @@ window.folio.onFilesAdded(callback);
 
 Run once on every app launch, after `loadFolioData()`, before the UI renders. Diffs `folio.json` against what's actually on disk and surfaces any drift.
 
-- [ ] **Scan the archive**: walk all files under `~/Folio/` (excluding `.folio/` and `references/`) and build a set of `{path, hash}` for every file found on disk
+- [ ] **Scan the archive**: walk all files under `~/Documents/Folio/items/` (excluding `.folio/` and `references/`) and build a set of `{path, hash}` for every file found on disk
 - [ ] **Find missing files**: items in `folio.json` whose `item.path` no longer exists on disk — mark as `missing: true`
 - [ ] **Re-locate moved/renamed files**: for each missing item, check if any on-disk file has a matching `item.hash` — if found, update `item.path` to the new location, clear `missing` flag, save silently. This handles manual renames and moves in Finder with no user interaction required
 - [ ] **Find untracked files**: files on disk with no matching entry in `folio.json` (no path match, no hash match) — these were added manually in Finder
@@ -136,7 +137,7 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 1.12 Status bar
 
-- [ ] Display: N items · N canvases · N tags · N gaps · `~/Folio/`
+- [ ] Display: N items · N canvases · N tags · N gaps · `~/Documents/Folio/`
 
 ---
 
@@ -268,12 +269,12 @@ Reference images belong to a canvas, not to items. They are first-class position
 
 ### File naming and paths
 
-- [ ] Destination resolved from import date: `~/Folio/YYYY/MM-monthname/` (e.g. `~/Folio/2026/02-february/`)
+- [ ] Destination resolved from import date: `~/Documents/Folio/items/YYYY/MM-monthname/` (e.g. `~/Documents/Folio/items/2026/02-february/`)
 - [ ] Month folder format: zero-padded number + full lowercase name — `01-january` through `12-december`
 - [ ] Filename: original name, sanitized — lowercase, spaces → hyphens, special characters stripped
 - [ ] Name collision within the same month folder: append `_2`, `_3`, etc. before the extension
 - [ ] `item.title` defaults to sanitized filename without extension; user can rename at any time
-- [ ] `item.path` stores relative path from `~/Folio/` (e.g. `2026/02-february/figure-study.jpg`) — used to locate files and rebuild thumbnails if the cache is deleted
+- [ ] `item.path` stores relative path from `~/Documents/Folio/` (e.g. `items/2026/02-february/figure-study.jpg`) — used to locate files and rebuild thumbnails if the cache is deleted
 
 ### Accepted file types
 

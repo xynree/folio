@@ -72,9 +72,12 @@ app.on("activate", () => {
 export async function initialize() {
   // 1. Create the base Folio folder and all required subdirectories.
   // Using { recursive: true } makes this idempotent (safe to run multiple times).
+  const currentYear = new Date().getFullYear().toString();
   const dirs = [
     FOLIO_ROOT,
     path.join(FOLIO_ROOT, "references"),
+    path.join(FOLIO_ROOT, "items"),
+    path.join(FOLIO_ROOT, "items", currentYear),
     DOT_FOLIO,
     path.join(DOT_FOLIO, "thumbs"),
   ];
