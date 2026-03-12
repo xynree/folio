@@ -3,7 +3,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { nanoid } from "nanoid";
 import { FolioData, FolioItem, ImportSource, ItemType } from "../types";
-import { computeHash, createDirectoryByDate, exists } from "src/helpers/node";
+import { computeHash, createDirectoryByDate, exists } from "../helpers";
 import { SCHEMA_VERSION } from "../constants";
 
 /**
