@@ -1,14 +1,17 @@
 import { Canvas } from "./canvas";
 
 /**
- * The root data structure for the entire application.
- * Persisted as folio.json.
+ * The unified data structure for the application state in memory.
+ * Persisted on disk across three separate files:
+ * - folio.json (version and items)
+ * - tags.json (tags array)
+ * - canvases.json (canvases array)
  */
 export interface FolioData {
-  version: number; // Schema version for migrations
-  items: FolioItem[]; // All items in the archive
-  canvases: Canvas[]; // Spatial canvases
-  tags: Tag[]; // Globally defined tags
+  version: number;
+  items: FolioItem[];
+  canvases: Canvas[];
+  tags: Tag[];
 }
 
 /** Supported media types in the archive */

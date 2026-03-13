@@ -2,9 +2,17 @@ import { app, ipcMain } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { nanoid } from "nanoid";
-import { FolioData, FolioItem, ImportSource, ItemType } from "../types";
+import {
+  FolioData,
+  FolioItem,
+  ImportSource,
+  ItemType,
+  Canvas,
+  Tag,
+} from "../types";
 import { computeHash, createDirectoryByDate, exists } from "../helpers";
 import { SCHEMA_VERSION } from "../constants";
+import { FolioStorage } from "./store";
 
 /**
  * The core engine of the main process.
@@ -17,8 +25,14 @@ export interface FolioManagerInterface {
   /** Loads folio.json from disk into memory. */
   loadData(): Promise<FolioData>;
 
-  /** Atomically writes data to folio.json. */
-  saveData(newData: FolioData): Promise<void>;
+  /** Atomically writes items to folio.json. */
+  saveItems(items: FolioItem[]): Promise<void>;
+
+  /** Atomically writes canvases to canvases.json. */
+  saveCanvases(canvases: Canvas[]): Promise<void>;
+
+  /** Atomically writes tags to tags.json. */
+  saveTags(tags: Tag[]): Promise<void>;
 
   /**
    * Imports one or more files into the archive.
@@ -37,54 +51,94 @@ export interface FolioManagerInterface {
 }
 
 export class FolioManager implements FolioManagerInterface {
-  private data: FolioData | null = null;
+  private items: FolioItem[] = [];
+  private canvases: Canvas[] = [];
+  private tags: Tag[] = [];
+  private version: number = SCHEMA_VERSION;
+
   private readonly folioRoot: string;
   private readonly dotFolio: string;
   private readonly dbPath: string;
+  private readonly tagsPath: string;
+  private readonly canvasesPath: string;
   private recentlyCopied = new Set<string>();
+  private store = FolioStorage.getInstance();
 
   constructor() {
     this.folioRoot = path.join(app.getPath("home"), "Documents", "Folio");
     this.dotFolio = path.join(this.folioRoot, ".folio");
     this.dbPath = path.join(this.dotFolio, "folio.json");
+    this.tagsPath = path.join(this.dotFolio, "tags.json");
+    this.canvasesPath = path.join(this.dotFolio, "canvases.json");
   }
 
   registerHandlers() {
     ipcMain.handle("folio:get-data", () => this.loadData());
-    ipcMain.handle("folio:save-data", (_, data: FolioData) =>
-      this.saveData(data),
+    ipcMain.handle("folio:save-items", (_: unknown, items: FolioItem[]) =>
+      this.saveItems(items),
+    );
+    ipcMain.handle("folio:save-canvases", (_: unknown, canvases: Canvas[]) =>
+      this.saveCanvases(canvases),
+    );
+    ipcMain.handle("folio:save-tags", (_: unknown, tags: Tag[]) =>
+      this.saveTags(tags),
     );
 
     // Single unified import handler for archive items
-    ipcMain.handle("folio:import-items", (_, sources: ImportSource[]) =>
-      this.importItems(sources),
+    ipcMain.handle(
+      "folio:import-items",
+      (_: unknown, sources: ImportSource[]) => this.importItems(sources),
     );
 
     // Single unified import handler for canvas references
     ipcMain.handle(
       "folio:import-references",
-      (_, canvasId: string, sources: ImportSource[]) =>
+      (_: unknown, canvasId: string, sources: ImportSource[]) =>
         this.importReferences(canvasId, sources),
     );
   }
 
   async loadData(): Promise<FolioData> {
-    const raw = await fs.readFile(this.dbPath, "utf-8");
-    const data = JSON.parse(raw) as FolioData;
+    const [rawFolio, rawTags, rawCanvases] = await Promise.all([
+      fs.readFile(this.dbPath, "utf-8"),
+      fs.readFile(this.tagsPath, "utf-8"),
+      fs.readFile(this.canvasesPath, "utf-8"),
+    ]);
 
-    if (data.version !== SCHEMA_VERSION) {
-      throw new Error(`Unsupported schema version: ${data.version}`);
-    }
+    const folioBase = JSON.parse(rawFolio);
+    const tagsBase = JSON.parse(rawTags);
+    const canvasesBase = JSON.parse(rawCanvases);
 
-    this.data = data;
-    return data;
+    this.version = SCHEMA_VERSION;
+    this.items = folioBase.items;
+    this.tags = tagsBase.tags;
+    this.canvases = canvasesBase.canvases;
+
+    return {
+      version: SCHEMA_VERSION,
+      items: this.items,
+      tags: this.tags,
+      canvases: this.canvases,
+    };
   }
 
-  async saveData(newData: FolioData): Promise<void> {
-    this.data = newData;
-    const tmpPath = `${this.dbPath}.tmp`;
-    await fs.writeFile(tmpPath, JSON.stringify(this.data, null, 2));
-    await fs.rename(tmpPath, this.dbPath);
+  async saveItems(items: FolioItem[]): Promise<void> {
+    this.items = items;
+    await this.store.saveItems(this.dbPath, this.items, this.version);
+  }
+
+  async saveCanvases(canvases: Canvas[]): Promise<void> {
+    this.canvases = canvases;
+    await this.store.saveCanvases(
+      this.canvasesPath,
+      this.canvases,
+      this.version,
+    );
+  }
+
+  async saveTags(tags: Tag[]): Promise<void> {
+    this.tags = tags;
+    await this.store.saveTags(this.tagsPath, this.tags, this.version);
   }
 
   async importItems(sources: ImportSource[]): Promise<FolioItem[]> {
@@ -173,9 +227,15 @@ export class FolioManager implements FolioManagerInterface {
     }
 
     if (source.kind === "path") {
-      await fs.copyFile(source.filePath, destPath);
+      await this.store.saveFile(destPath, {
+        kind: "path",
+        source: source.filePath,
+      });
     } else {
-      await fs.writeFile(destPath, source.data);
+      await this.store.saveFile(destPath, {
+        kind: "buffer",
+        source: source.data,
+      });
     }
 
     return destPath;

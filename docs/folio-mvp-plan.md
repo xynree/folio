@@ -5,7 +5,7 @@
 - **Electron** + **Electron Forge** — desktop shell and build/packaging pipeline
 - **React + Vite** — UI (renderer process), via `@electron-forge/plugin-vite`
 - **Node.js** — file watching, filesystem ops, thumbnail generation (main process)
-- **`.folio/folio.json`** — flat JSON in `~/Documents/Folio/.folio/`, single source of truth (no database)
+- **`.folio/*.json`** — split flat JSON in `~/Documents/Folio/.folio/` (`folio.json`, `tags.json`, `canvases.json`), single source of truth (no database)
 - **`nativeImage`** — thumbnail generation (built into Electron, no native module needed)
 - **`chokidar`** — file watching
 
@@ -24,7 +24,7 @@
 
 - [x] Create `~/Documents/Folio/items/` and year/month folder structure on first import (e.g. `~/Documents/Folio/items/2026/02-february/`)
 - [x] Create `~/Documents/Folio/references/`, `~/Documents/Folio/.folio/thumbs/` on first launch if they don't exist
-- [x] Define and document the `folio.json` schema (items, canvases, tags)
+- [x] Define and document the split JSON schema (folio.json, tags.json, canvases.json)
 - [x] Write TypeScript types for the full schema (`src/shared/types.ts`, imported by both main and renderer)
 
 ```
@@ -45,7 +45,9 @@
   references/
     <canvas-id>/        ← canvas reference images, separate from archive
   .folio/               ← hidden app state (analogous to .git/)
-    folio.json          ← single source of truth
+    folio.json          ← items metadata and schema version
+    tags.json           ← global tags list
+    canvases.json       ← canvas structures and positions
     thumbs/             ← generated thumbnails (400px JPEGs, regenerable)
 ```
 
@@ -83,11 +85,11 @@ window.folio.onFilesAdded(callback);
 
 ### 1.5 Filesystem operations (`main/fs.ts`)
 
-- [ ] `saveFolioData()`: atomic write — write to `.folio/folio.json.tmp`, rename over `.folio/folio.json`; the OS-level rename is the crash guard (no `.bak` file needed)
+- [x] `saveFolioData()`: atomic writes — split data and write to respective `.json.tmp` files, then rename over target files; the OS-level rename is the crash guard
 - [ ] `copyToFolio()`: resolve destination as `~/Documents/Folio/items/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix
 - [ ] `computeHash(filePath)`: read first 64KB of file, return 8-char hex hash using Node's built-in `crypto.createHash('sha256')` — fast enough for large files, unique enough for a personal archive
 - [ ] `copyReference()`: copy files to `~/Documents/Folio/references/<canvas-id>/`
-- [ ] `loadFolioData()`: read `.folio/folio.json` on startup; if missing, create a fresh empty schema; if present but schema validation fails, surface the error to the user clearly (no silent fallback — `.bak` no longer exists)
+- [x] `loadFolioData()`: read all three `.json` files in parallel on startup; if missing, create fresh empty schemas via `initialize()`
 - [ ] File sanitization helper: lowercase, spaces → hyphens, strip special characters (shared utility used by both `copyToFolio` and `copyReference`)
 
 ### 1.6 Launch reconciliation

@@ -29,7 +29,7 @@ The main process is like a small backend. The renderer is like a browser tab. Th
 
 ### Layer 1: Main process
 
-Node.js with full filesystem access. Runs in the background for the lifetime of the app. Everything that touches disk happens here and only here: reading and writing `folio.json`, watching the archive folder, copying imported files, generating thumbnails, and running launch reconciliation. It never touches the UI directly.
+Node.js with full filesystem access. Runs in the background for the lifetime of the app. Everything that touches disk happens here and only here: reading and writing the split JSON database (`folio.json`, `tags.json`, `canvases.json`), watching the archive folder, copying imported files, generating thumbnails, and running launch reconciliation. It never touches the UI directly.
 
 ### Layer 2: Preload script
 
@@ -52,19 +52,19 @@ A normal React app running inside Chromium. It has no idea it's inside Electron 
 
 ---
 
-## Why `folio.json` instead of a database
+## Why split flat files instead of a database
 
 The right storage format is the one that matches the shape of the problem. Folio's data is small, single-user, and needs to be portable.
 
-**The data is small.** Each item is around 200 bytes of metadata — a title, a relative path, a date, tags, canvas IDs, a hash. A serious artist making work every day for five years accumulates around 1,800 items. That's under 400KB of JSON. There is no query volume, no concurrency, nothing that would stress a flat file.
+**The data is small but modular.** Each item is around 200 bytes of metadata. A serious artist making work every day for five years accumulates around 1,800 items. That's under 400KB of JSON. By splitting the data into `folio.json` (items), `tags.json`, and `canvases.json`, we ensure that adding a tag or moving a note on a canvas doesn't require rewriting the entire archive metadata. This keeps save operations fast and reduces the risk of file corruption.
 
 **It should be readable without the app.** If Folio stops working, the user can open `folio.json` in any text editor and see exactly what's in it. A database requires tooling to inspect. For an archive of someone's creative work — something that should outlast any particular piece of software — human-readability matters.
 
-**It's portable.** The entire state of the app is one file alongside the images. Put it in iCloud, email it, copy it to a new machine. No migration scripts, no connection strings, no schema versions to manage beyond a single `version` field.
+**It's portable.** The entire state of the app is a set of files alongside the images. Put it in iCloud, email it, copy it to a new machine. No migration scripts, no connection strings, no schema versions to manage beyond a single `version` field.
 
 **It's simpler to implement correctly.** The only tricky part is atomic writes: write new content to `.folio/folio.json.tmp`, then rename it over `.folio/folio.json`. The OS-level rename is atomic — if the process dies mid-write, the original file is untouched. That's about five lines of Node.js. Setting up a database with proper concurrency handling and migrations in Electron is significantly more work for no benefit at this scale.
 
-The one real limitation is concurrent writes — if two processes tried to write `folio.json` simultaneously they could conflict. But Folio has one user and one window, so this isn't a real concern.
+The one real limitation is concurrent writes. But Folio has one user and one window, so this isn't a real concern.
 
 ---
 
@@ -119,8 +119,10 @@ All app-managed state lives in a single hidden directory at `~/Folio/.folio/`. T
   references/
     <canvas-id>/              ← canvas reference images
   .folio/                     ← app state (hidden in Finder by default)
-    folio.json                ← single source of truth
-    folio.json.tmp            ← in-flight atomic write (transient)
+    folio.json                ← items and schema version
+    tags.json                 ← global tags list
+    canvases.json             ← canvas structures and positions
+    *.json.tmp                ← in-flight atomic writes (transient)
     thumbs/                   ← generated thumbnail cache
 ```
 
@@ -239,8 +241,8 @@ Silent auto-recovery (step 3) handles the common case. Only genuinely missing or
 1. Renderer: user adds a tag
 2. Renderer: updates React state immediately (UI feels instant)
 3. Renderer: debounces saveFolioData call by 500ms
-4. Main: writes new content to `.folio/folio.json.tmp`
-5. Main: renames `.folio/folio.json.tmp` → `.folio/folio.json` (atomic)
+4. Main: split incoming data and write new content to respective `.json.tmp` files
+5. Main: renames `.json.tmp` → `.json` (atomic)
 ```
 
 ---
