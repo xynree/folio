@@ -1,49 +1,22 @@
 import { app, ipcMain } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { nanoid } from "nanoid";
-import {
-  FolioData,
-  FolioItem,
-  ImportSource,
-  ItemType,
-  Canvas,
-  Tag,
-} from "../types";
-import { computeHash, createDirectoryByDate, exists } from "../helpers";
+import { FolioData, FolioItem, ImportSource, Canvas, Tag } from "../types";
 import { SCHEMA_VERSION } from "../constants";
-import { FolioStorage } from "./store";
+import { FolioStorage } from "./storage.manager";
+import { ArchiveManager } from "./archive.manager";
 
 /**
  * The core engine of the main process.
  * Manages the in-memory data state, file operations, and IPC registration.
  */
 export interface FolioManagerInterface {
-  /** Registers all window.folio IPC handlers. Call this during app "ready". */
   registerHandlers(): void;
-
-  /** Loads folio.json from disk into memory. */
   loadData(): Promise<FolioData>;
-
-  /** Atomically writes items to folio.json. */
   saveItems(items: FolioItem[]): Promise<void>;
-
-  /** Atomically writes canvases to canvases.json. */
   saveCanvases(canvases: Canvas[]): Promise<void>;
-
-  /** Atomically writes tags to tags.json. */
   saveTags(tags: Tag[]): Promise<void>;
-
-  /**
-   * Imports one or more files into the archive.
-   * Accepts either file paths (drag & drop) or raw buffers (clipboard paste).
-   */
   importItems(sources: ImportSource[]): Promise<FolioItem[]>;
-
-  /**
-   * Imports one or more files as references for a specific canvas.
-   * Returns relative paths for the newly saved reference files.
-   */
   importReferences(
     canvasId: string,
     sources: ImportSource[],
@@ -51,7 +24,6 @@ export interface FolioManagerInterface {
 }
 
 export class FolioManager implements FolioManagerInterface {
-  private items: FolioItem[] = [];
   private canvases: Canvas[] = [];
   private tags: Tag[] = [];
   private version: number = SCHEMA_VERSION;
@@ -61,8 +33,9 @@ export class FolioManager implements FolioManagerInterface {
   private readonly dbPath: string;
   private readonly tagsPath: string;
   private readonly canvasesPath: string;
-  private recentlyCopied = new Set<string>();
-  private store = FolioStorage.getInstance();
+
+  private archiveManager: ArchiveManager;
+  private storageManager = FolioStorage.getInstance();
 
   constructor() {
     this.folioRoot = path.join(app.getPath("home"), "Documents", "Folio");
@@ -70,6 +43,8 @@ export class FolioManager implements FolioManagerInterface {
     this.dbPath = path.join(this.dotFolio, "folio.json");
     this.tagsPath = path.join(this.dotFolio, "tags.json");
     this.canvasesPath = path.join(this.dotFolio, "canvases.json");
+
+    this.archiveManager = new ArchiveManager(this.folioRoot, this.dbPath);
   }
 
   registerHandlers() {
@@ -84,13 +59,11 @@ export class FolioManager implements FolioManagerInterface {
       this.saveTags(tags),
     );
 
-    // Single unified import handler for archive items
     ipcMain.handle(
       "folio:import-items",
       (_: unknown, sources: ImportSource[]) => this.importItems(sources),
     );
 
-    // Single unified import handler for canvas references
     ipcMain.handle(
       "folio:import-references",
       (_: unknown, canvasId: string, sources: ImportSource[]) =>
@@ -110,26 +83,26 @@ export class FolioManager implements FolioManagerInterface {
     const canvasesBase = JSON.parse(rawCanvases);
 
     this.version = SCHEMA_VERSION;
-    this.items = folioBase.items;
+    this.archiveManager.setItems(folioBase.items);
     this.tags = tagsBase.tags;
     this.canvases = canvasesBase.canvases;
 
     return {
       version: SCHEMA_VERSION,
-      items: this.items,
+      items: this.archiveManager.getItems(),
       tags: this.tags,
       canvases: this.canvases,
     };
   }
 
   async saveItems(items: FolioItem[]): Promise<void> {
-    this.items = items;
-    await this.store.saveItems(this.dbPath, this.items, this.version);
+    this.archiveManager.setItems(items);
+    await this.archiveManager.save(this.version);
   }
 
   async saveCanvases(canvases: Canvas[]): Promise<void> {
     this.canvases = canvases;
-    await this.store.saveCanvases(
+    await this.storageManager.saveCanvases(
       this.canvasesPath,
       this.canvases,
       this.version,
@@ -138,29 +111,11 @@ export class FolioManager implements FolioManagerInterface {
 
   async saveTags(tags: Tag[]): Promise<void> {
     this.tags = tags;
-    await this.store.saveTags(this.tagsPath, this.tags, this.version);
+    await this.storageManager.saveTags(this.tagsPath, this.tags, this.version);
   }
 
   async importItems(sources: ImportSource[]): Promise<FolioItem[]> {
-    const destDir = await createDirectoryByDate(this.folioRoot);
-    const items: FolioItem[] = [];
-
-    for (const source of sources) {
-      const { filename, ext } = this.resolveSourceMeta(source);
-      const destPath = await this.saveToDirectory(
-        source,
-        filename,
-        ext,
-        destDir,
-      );
-      const hash = await computeHash(destPath);
-      const item = this.buildItem(destPath, filename, ext, hash);
-
-      this.trackRecentlyCopied(destPath);
-      items.push(item);
-    }
-
-    return items;
+    return this.archiveManager.importItems(sources);
   }
 
   async importReferences(
@@ -173,8 +128,8 @@ export class FolioManager implements FolioManagerInterface {
     const paths: string[] = [];
 
     for (const source of sources) {
-      const { filename, ext } = this.resolveSourceMeta(source);
-      const destPath = await this.saveToDirectory(
+      const { filename, ext } = this.archiveManager.resolveSourceMeta(source);
+      const destPath = await this.archiveManager.saveToDirectory(
         source,
         filename,
         ext,
@@ -184,102 +139,5 @@ export class FolioManager implements FolioManagerInterface {
     }
 
     return paths;
-  }
-
-  /**
-   * Resolves the filename and extension from any ImportSource.
-   */
-  private resolveSourceMeta(source: ImportSource): {
-    filename: string;
-    ext: string;
-  } {
-    if (source.kind === "path") {
-      const ext = path.extname(source.filePath);
-      const filename = path.basename(source.filePath, ext);
-      return { filename, ext };
-    }
-    return {
-      filename: source.filename ?? "pasted-image",
-      ext: source.ext,
-    };
-  }
-
-  /**
-   * Saves a file or buffer to a directory with sanitization and collision handling.
-   * Returns the absolute destination path.
-   */
-  private async saveToDirectory(
-    source: ImportSource,
-    filename: string,
-    ext: string,
-    destDir: string,
-  ): Promise<string> {
-    const sanitizedName = filename.toLowerCase().replace(/[^a-z0-9]/g, "-");
-    let destFilename = `${sanitizedName}${ext}`;
-    let destPath = path.join(destDir, destFilename);
-
-    // Collision handling: append _2, _3, etc.
-    let counter = 2;
-    while (await exists(destPath)) {
-      destFilename = `${sanitizedName}_${counter}${ext}`;
-      destPath = path.join(destDir, destFilename);
-      counter++;
-    }
-
-    if (source.kind === "path") {
-      await this.store.saveFile(destPath, {
-        kind: "path",
-        source: source.filePath,
-      });
-    } else {
-      await this.store.saveFile(destPath, {
-        kind: "buffer",
-        source: source.data,
-      });
-    }
-
-    return destPath;
-  }
-
-  /**
-   * Constructs a FolioItem from a finalized destination path and metadata.
-   */
-  private buildItem(
-    destPath: string,
-    filename: string,
-    ext: string,
-    hash: string,
-  ): FolioItem {
-    return {
-      id: nanoid(),
-      path: path.relative(this.folioRoot, destPath),
-      hash,
-      type: this.inferType(ext),
-      date: new Date().toISOString(),
-      title: filename,
-      tagIds: [],
-      description: "",
-    };
-  }
-
-  /**
-   * Adds a path to the recently-copied set and auto-removes it after 2s.
-   * Prevents the file watcher from double-counting freshly imported files.
-   */
-  private trackRecentlyCopied(destPath: string) {
-    this.recentlyCopied.add(destPath);
-    setTimeout(() => this.recentlyCopied.delete(destPath), 2000);
-  }
-
-  /**
-   * Infers item type from file extension.
-   */
-  private inferType(ext: string): ItemType {
-    const e = ext.toLowerCase();
-    if ([".jpg", ".jpeg", ".png", ".webp", ".heic"].includes(e)) return "image";
-    if ([".mp3", ".wav", ".aiff", ".m4a"].includes(e)) return "audio";
-    if ([".mp4", ".mov", ".gif"].includes(e)) return "video";
-    if ([".md", ".docx", ".txt"].includes(e)) return "text";
-    return "other";
   }
 }
