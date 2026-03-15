@@ -2,7 +2,7 @@ import { app, BrowserWindow } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 import { initialize } from "./main/initialize";
-import { FolioManager } from "./main/manager";
+import { FolioManager } from "./main/base.manager";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
