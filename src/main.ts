@@ -33,6 +33,7 @@ const createWindow = () => {
 
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
+  return mainWindow;
 };
 
 const manager = new FolioManager();
@@ -47,7 +48,9 @@ app.on("ready", async () => {
   // Register window.folio IPC handlers
   manager.registerHandlers();
 
-  createWindow();
+  const mainWindow = createWindow();
+  manager.startWatcher(mainWindow);
+
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

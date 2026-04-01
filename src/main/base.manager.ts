@@ -1,10 +1,12 @@
-import { app, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { FolioData, FolioItem, ImportSource, Canvas, Tag } from "../types";
 import { SCHEMA_VERSION } from "../constants";
 import { FolioStorage } from "./storage.manager";
 import { ArchiveManager } from "./archive.manager";
+import chokidar from "chokidar";
+
 
 /**
  * The core engine of the main process.
@@ -21,6 +23,7 @@ export interface FolioManagerInterface {
     canvasId: string,
     sources: ImportSource[],
   ): Promise<string[]>;
+  startWatcher(mainWindow: BrowserWindow): void;
 }
 
 export class FolioManager implements FolioManagerInterface {
@@ -69,6 +72,33 @@ export class FolioManager implements FolioManagerInterface {
       (_: unknown, canvasId: string, sources: ImportSource[]) =>
         this.importReferences(canvasId, sources),
     );
+  }
+
+  public startWatcher(mainWindow: BrowserWindow) {
+    const watcher = chokidar.watch(path.join(this.folioRoot, "items"), {
+      ignored: /(\.folio|references)/,
+      ignoreInitial: true,  // don't fire for files already on disk at startup
+      awaitWriteFinish: { stabilityThreshold: 300 }, // debounce
+    });
+    watcher.on("add", async (filePath) => {
+      // skip files we just copied ourselves
+      if (this.archiveManager.isRecentlyCopied(filePath)) return;
+      // file appeared in Finder — process it
+      const items = await this.archiveManager.importItems([{ kind: "path", filePath }]);
+      await this.archiveManager.save(this.version);
+      // push to renderer
+      mainWindow.webContents.send("folio:files-added", items);
+    });
+    watcher.on("unlink", (filePath) => {
+      // mark item missing rather than deleting metadata
+      const item = this.archiveManager.getItems().find(i =>
+        path.join(this.folioRoot, i.path) === filePath
+      );
+      if (item) {
+        item.missing = true;
+        this.archiveManager.save(this.version);
+      }
+    });
   }
 
   async loadData(): Promise<FolioData> {
