@@ -18,7 +18,7 @@
 - [x] Run `npm init electron-app@latest folio -- --template=vite-typescript`
 - [x] Add React: install `react`, `react-dom`, `@vitejs/plugin-react`, update `vite.renderer.config.ts`
 - [x] Configure `BrowserWindow`: minimum 900×600, `titleBarStyle: 'hiddenInset'`
-- [x] Add React Router for strip / grid / canvas view switching
+- [x] Add renderer state for Strip/Grid switching with Canvas docked as a right-side board panel
 
 ### 1.2 Define folder structure and JSON schema
 
@@ -123,7 +123,7 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 1.9 Import button
 
-- [x] Header button calls `window.folio.openFileDialog()` → main calls `dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })`
+- [x] Import button next to the Strip/Grid selector calls `window.folio.openFileDialog()` → main calls `dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })`
 - [x] Same `copyToFolio` path as drag-and-drop
 
 ### 1.10 Daily strip view

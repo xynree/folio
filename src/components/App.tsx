@@ -6,13 +6,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  HashRouter,
-  Navigate,
-  NavLink,
-  Route,
-  Routes,
-} from "react-router";
 import type {
   Canvas,
   CanvasNote,
@@ -26,6 +19,7 @@ import type {
   ThumbnailUrls,
 } from "../types";
 
+type ArchiveViewMode = "strip" | "grid";
 type GridTagFilter = "all" | string;
 type DataUpdater = (current: FolioData) => FolioData;
 type ItemOpenHandler = (
@@ -34,6 +28,7 @@ type ItemOpenHandler = (
   orderedItems: FolioItem[],
   rangeEnabled: boolean,
 ) => void;
+type ItemDetailsOpenHandler = (itemId: string) => void;
 
 const EMPTY_DATA: FolioData = {
   version: 1,
@@ -54,6 +49,10 @@ const TYPE_LABELS: Record<ItemType, string> = {
 const CANVAS_COLORS = ["#9f6b3d", "#385d56", "#7c5d92", "#b06d4a", "#546f9a"];
 const ITEM_DRAG_MIME = "application/x-folio-item-ids";
 const IMAGE_FILE_PATTERN = /\.(avif|gif|heic|jpeg|jpg|png|svg|webp)$/i;
+const ARCHIVE_PANEL_MIN_WIDTH = 390;
+const CANVAS_DOCK_MIN_WIDTH = 420;
+const CANVAS_DOCK_DEFAULT_WIDTH = 560;
+const CANVAS_SPLITTER_WIDTH = 8;
 
 function createId(prefix: string) {
   if ("randomUUID" in crypto) {
@@ -222,10 +221,12 @@ function itemCanUseDirectPreview(item: FolioItem): boolean {
 function AppShell() {
   const [data, setData] = useState<FolioData>(EMPTY_DATA);
   const dataRef = useRef<FolioData>(EMPTY_DATA);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [archiveView, setArchiveView] = useState<ArchiveViewMode>("strip");
+  const [canvasMinimized, setCanvasMinimized] = useState(false);
+  const [canvasDockWidth, setCanvasDockWidth] = useState(CANVAS_DOCK_DEFAULT_WIDTH);
   const [gridTagFilter, setGridTagFilter] = useState<GridTagFilter>("all");
   const [thumbUrls, setThumbUrls] = useState<ThumbnailUrls>({});
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -235,6 +236,7 @@ function AppShell() {
   const [reconciliation, setReconciliation] =
     useState<ReconciliationResult | null>(null);
   const [reconciliationDismissed, setReconciliationDismissed] = useState(false);
+  const studioWorkspaceRef = useRef<HTMLElement | null>(null);
   const dragDepth = useRef(0);
 
   useEffect(() => {
@@ -319,8 +321,6 @@ function AppShell() {
       } catch (error) {
         console.error(error);
         if (!cancelled) setToast("Folio data could not be loaded");
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     }
 
@@ -337,6 +337,70 @@ function AppShell() {
     const timeout = window.setTimeout(() => setToast(null), 2400);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  const clampCanvasDockWidth = useCallback((width: number) => {
+    const workspaceWidth =
+      studioWorkspaceRef.current?.getBoundingClientRect().width ?? window.innerWidth;
+    const maxWidth = Math.max(
+      CANVAS_DOCK_MIN_WIDTH,
+      workspaceWidth - ARCHIVE_PANEL_MIN_WIDTH - CANVAS_SPLITTER_WIDTH,
+    );
+    return Math.round(
+      Math.min(Math.max(width, CANVAS_DOCK_MIN_WIDTH), maxWidth),
+    );
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      setCanvasDockWidth((current) => clampCanvasDockWidth(current));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [clampCanvasDockWidth]);
+
+  const startCanvasDockResize = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (canvasMinimized) return;
+      const workspace = studioWorkspaceRef.current;
+      if (!workspace) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const previousCursor = document.body.style.cursor;
+      const previousUserSelect = document.body.style.userSelect;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      const resizeToPointer = (clientX: number) => {
+        const rect = workspace.getBoundingClientRect();
+        setCanvasDockWidth(clampCanvasDockWidth(rect.right - clientX));
+      };
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        resizeToPointer(moveEvent.clientX);
+      };
+
+      const onPointerUp = () => {
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousUserSelect;
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+      };
+
+      resizeToPointer(event.clientX);
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+    },
+    [canvasMinimized, clampCanvasDockWidth],
+  );
+
+  const nudgeCanvasDockWidth = useCallback(
+    (delta: number) => {
+      setCanvasDockWidth((current) => clampCanvasDockWidth(current + delta));
+    },
+    [clampCanvasDockWidth],
+  );
 
   const sortedItems = useMemo(
     () =>
@@ -423,6 +487,12 @@ function AppShell() {
     },
     [lastSelectedItemId, selectedItemIds],
   );
+
+  const openItemDetails = useCallback<ItemDetailsOpenHandler>((itemId) => {
+    setSelectedItemIds([itemId]);
+    setSelectedItemId(itemId);
+    setLastSelectedItemId(itemId);
+  }, []);
 
   const startArchiveItemDrag = useCallback(
     (itemId: string, event: React.DragEvent<HTMLElement>) => {
@@ -583,7 +653,7 @@ function AppShell() {
 
       if (targetCanvasId) {
         setActiveCanvasId(targetCanvasId);
-        window.location.hash = "/canvas";
+        setCanvasMinimized(false);
       }
     },
     [activeCanvasId, commitData],
@@ -614,7 +684,7 @@ function AppShell() {
 
     if (targetCanvasId) {
       setActiveCanvasId(targetCanvasId);
-      window.location.hash = "/canvas";
+      setCanvasMinimized(false);
     }
     clearSelection();
   }, [activeCanvasId, clearSelection, commitData, selectedItemIds]);
@@ -640,7 +710,7 @@ function AppShell() {
     );
 
     setActiveCanvasId(board.id);
-    window.location.hash = "/canvas";
+    setCanvasMinimized(false);
     clearSelection();
   }, [clearSelection, commitData, selectedItemIds]);
 
@@ -676,6 +746,10 @@ function AppShell() {
     [putData],
   );
 
+  const studioGridTemplateColumns = canvasMinimized
+    ? `minmax(${ARCHIVE_PANEL_MIN_WIDTH}px, 1fr) 58px`
+    : `minmax(${ARCHIVE_PANEL_MIN_WIDTH}px, 1fr) ${CANVAS_SPLITTER_WIDTH}px ${canvasDockWidth}px`;
+
   return (
     <div
       className="app-shell"
@@ -684,26 +758,6 @@ function AppShell() {
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
-      <header className="app-header">
-        <div className="brand-block">
-          <div className="brand-mark" aria-hidden="true" />
-          <div>
-            <h1>Folio</h1>
-            <p>{loading ? "Opening archive" : formatCount(data.items.length, "item")}</p>
-          </div>
-        </div>
-
-        <nav className="view-tabs" aria-label="Views">
-          <NavLink to="/strip">Strip</NavLink>
-          <NavLink to="/grid">Grid</NavLink>
-          <NavLink to="/canvas">Canvas</NavLink>
-        </nav>
-
-        <button className="primary-action" type="button" onClick={handleOpenDialog}>
-          {busy ? "Importing" : "Import"}
-        </button>
-      </header>
-
       <ReconciliationNotice
         reconciliation={reconciliation}
         dismissed={reconciliationDismissed}
@@ -719,24 +773,57 @@ function AppShell() {
       />
 
       <main className="app-main">
-        <Routes>
-          <Route path="/" element={<Navigate to="/strip" replace />} />
-          <Route
-            path="/strip"
-            element={
-              <ArchiveWorkspace
-                sidebar={
-                  <TagsSidebar
-                    items={sortedItems}
-                    tags={data.tags}
-                    canvases={data.canvases}
-                    thumbUrls={thumbUrls}
-                    setThumbUrls={setThumbUrls}
-                    tagFilter={gridTagFilter}
-                    setTagFilter={setGridTagFilter}
-                  />
-                }
-              >
+        <section
+          ref={studioWorkspaceRef}
+          className={`studio-workspace ${
+            canvasMinimized ? "studio-workspace-canvas-minimized" : ""
+          }`}
+          style={{ gridTemplateColumns: studioGridTemplateColumns }}
+        >
+          <section className="archive-panel">
+            <header className="archive-panel-header">
+              <div>
+                <strong>Archive</strong>
+                <span>{formatCount(visibleArchiveItems.length, "visible item")}</span>
+              </div>
+              <div className="archive-panel-actions">
+                <div className="view-tabs archive-view-toggle" aria-label="Archive view">
+                  <button
+                    className={archiveView === "strip" ? "active" : ""}
+                    type="button"
+                    onClick={() => setArchiveView("strip")}
+                  >
+                    Strip
+                  </button>
+                  <button
+                    className={archiveView === "grid" ? "active" : ""}
+                    type="button"
+                    onClick={() => setArchiveView("grid")}
+                  >
+                    Grid
+                  </button>
+                </div>
+                <button className="primary-action" type="button" onClick={handleOpenDialog}>
+                  {busy ? "Importing" : "Import"}
+                </button>
+              </div>
+            </header>
+
+            <ArchiveWorkspace
+              sidebar={
+                <TagsSidebar
+                  items={sortedItems}
+                  tags={data.tags}
+                  canvases={data.canvases}
+                  thumbUrls={thumbUrls}
+                  setThumbUrls={setThumbUrls}
+                  onOpenItem={openItemDetails}
+                  tagFilter={gridTagFilter}
+                  setTagFilter={setGridTagFilter}
+                />
+              }
+            >
+              {archiveView === "strip" ? (
                 <DailyStripView
                   items={visibleArchiveItems}
                   tags={data.tags}
@@ -748,25 +835,7 @@ function AppShell() {
                   onDragStart={startArchiveItemDrag}
                   onItemOpen={handleItemOpen}
                 />
-              </ArchiveWorkspace>
-            }
-          />
-          <Route
-            path="/grid"
-            element={
-              <ArchiveWorkspace
-                sidebar={
-                  <TagsSidebar
-                    items={sortedItems}
-                    tags={data.tags}
-                    canvases={data.canvases}
-                    thumbUrls={thumbUrls}
-                    setThumbUrls={setThumbUrls}
-                    tagFilter={gridTagFilter}
-                    setTagFilter={setGridTagFilter}
-                  />
-                }
-              >
+              ) : (
                 <GridView
                   items={sortedItems}
                   tags={data.tags}
@@ -780,16 +849,56 @@ function AppShell() {
                   onDragStart={startArchiveItemDrag}
                   onItemOpen={handleItemOpen}
                 />
-              </ArchiveWorkspace>
-            }
-          />
-          <Route
-            path="/canvas"
-            element={
+              )}
+            </ArchiveWorkspace>
+          </section>
+
+          {canvasMinimized ? null : (
+            <div
+              className="canvas-resize-handle"
+              role="separator"
+              aria-label="Resize open board panel"
+              aria-orientation="vertical"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft") {
+                  event.preventDefault();
+                  nudgeCanvasDockWidth(32);
+                }
+                if (event.key === "ArrowRight") {
+                  event.preventDefault();
+                  nudgeCanvasDockWidth(-32);
+                }
+              }}
+              onPointerDown={startCanvasDockResize}
+            />
+          )}
+
+          <aside
+            className={`canvas-dock ${canvasMinimized ? "canvas-dock-minimized" : ""}`}
+          >
+            <header className="canvas-dock-header">
+              <div>
+                <strong>{canvasMinimized ? "Board" : "Open board"}</strong>
+                <span>
+                  {data.canvases.find((canvas) => canvas.id === activeCanvasId)
+                    ?.title ?? data.canvases[0]?.title ?? "No board"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCanvasMinimized((current) => !current)}
+              >
+                {canvasMinimized ? "Open" : "Minimize"}
+              </button>
+            </header>
+
+            {canvasMinimized ? null : (
               <CanvasView
                 data={data}
                 activeCanvasId={activeCanvasId}
                 setActiveCanvasId={setActiveCanvasId}
+                onOpenItem={openItemDetails}
                 thumbUrls={thumbUrls}
                 setThumbUrls={setThumbUrls}
                 selectedItemIds={selectedItemIds}
@@ -800,9 +909,9 @@ function AppShell() {
                   setDragging(false);
                 }}
               />
-            }
-          />
-        </Routes>
+            )}
+          </aside>
+        </section>
       </main>
 
       <StatusBar
@@ -936,6 +1045,7 @@ function TagsSidebar({
   canvases,
   thumbUrls,
   setThumbUrls,
+  onOpenItem,
   tagFilter,
   setTagFilter,
 }: {
@@ -944,6 +1054,7 @@ function TagsSidebar({
   canvases: Canvas[];
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
+  onOpenItem: ItemDetailsOpenHandler;
   tagFilter: GridTagFilter;
   setTagFilter: React.Dispatch<React.SetStateAction<GridTagFilter>>;
 }) {
@@ -1014,14 +1125,20 @@ function TagsSidebar({
                 <div className="tag-thumbnail-strip">
                   {tagItems.length ? (
                     tagItems.slice(0, 8).map((item) => (
-                      <span className="mini-thumb" key={item.id} title={item.title}>
+                      <button
+                        className="mini-thumb mini-thumb-button"
+                        key={item.id}
+                        title={item.title}
+                        type="button"
+                        onClick={() => onOpenItem(item.id)}
+                      >
                         <LazyThumbnail
                           item={item}
                           thumbUrls={thumbUrls}
                           setThumbUrls={setThumbUrls}
                         />
                         <CanvasDots colors={canvasColorsForItem(item.id, canvases)} />
-                      </span>
+                      </button>
                     ))
                   ) : (
                     <span className="muted">No items</span>
@@ -1967,7 +2084,6 @@ function CanvasView({
   const openCanvas = useCallback(
     (canvasId: string) => {
       setActiveCanvasId(canvasId);
-      window.location.hash = "/canvas";
     },
     [setActiveCanvasId],
   );
@@ -1993,7 +2109,7 @@ function CanvasView({
 
   return (
     <section className="canvas-workspace">
-      <aside className="canvas-sidebar">
+      <div className="canvas-board-strip">
         <button className="primary-action full-width" type="button" onClick={createBoard}>
           New board
         </button>
@@ -2068,7 +2184,7 @@ function CanvasView({
             );
           })}
         </div>
-      </aside>
+      </div>
 
       <div className="canvas-panel">
         <header className="canvas-toolbar">
@@ -2372,9 +2488,5 @@ function StatusBar({
 }
 
 export default function App() {
-  return (
-    <HashRouter>
-      <AppShell />
-    </HashRouter>
-  );
+  return <AppShell />;
 }
