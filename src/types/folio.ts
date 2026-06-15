@@ -15,7 +15,7 @@ export interface FolioData {
 }
 
 /** Supported media types in the archive */
-export type ItemType = "image" | "audio" | "video" | "text" | "other";
+export type ItemType = "sketch" | "ref" | "music" | "anim" | "text" | "other";
 
 /** A single metadata entry for a file in the archive */
 export interface FolioItem {
@@ -35,3 +35,18 @@ export interface Tag {
   id: string;
   text: string;
 }
+
+export interface ReconciliationFile {
+  path: string;
+  absolutePath: string;
+  hash: string;
+}
+
+export interface ReconciliationResult {
+  scannedAt: string;
+  untrackedFiles: ReconciliationFile[];
+  missingItems: FolioItem[];
+  relocatedItems: FolioItem[];
+}
+
+export type ThumbnailUrls = Record<string, string>;

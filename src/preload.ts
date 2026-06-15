@@ -1,34 +1,53 @@
-import { contextBridge, ipcRenderer } from "electron";
-import type { FolioData, FolioItem, Canvas, Tag, ImportSource } from "./types";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
+import type {
+  CanvasReference,
+  FolioData,
+  FolioItem,
+  ReconciliationResult,
+  ThumbnailUrls,
+} from "./types";
 
 const folioApi = {
-  // Load the full data state from disk (called once on mount)
-  getData: (): Promise<FolioData> => ipcRenderer.invoke("folio:get-data"),
+  getFolioData: (): Promise<FolioData> =>
+    ipcRenderer.invoke("folio:get-folio-data"),
 
-  // Granular save methods — each writes only its own file
-  saveItems: (items: FolioItem[]): Promise<void> =>
-    ipcRenderer.invoke("folio:save-items", items),
+  saveFolioData: (data: FolioData): Promise<void> =>
+    ipcRenderer.invoke("folio:save-folio-data", data),
 
-  saveCanvases: (canvases: Canvas[]): Promise<void> =>
-    ipcRenderer.invoke("folio:save-canvases", canvases),
+  copyToFolio: (filePaths: string[]): Promise<FolioItem[]> =>
+    ipcRenderer.invoke("folio:copy-to-folio", filePaths),
 
-  saveTags: (tags: Tag[]): Promise<void> =>
-    ipcRenderer.invoke("folio:save-tags", tags),
+  copyReference: (
+    canvasId: string,
+    filePaths: string[],
+  ): Promise<CanvasReference[]> =>
+    ipcRenderer.invoke("folio:copy-reference", canvasId, filePaths),
 
-  // Import files into the archive (returns created FolioItems)
-  importItems: (sources: ImportSource[]): Promise<FolioItem[]> =>
-    ipcRenderer.invoke("folio:import-items", sources),
+  deleteItems: (itemIds: string[]): Promise<FolioData> =>
+    ipcRenderer.invoke("folio:delete-items", itemIds),
 
-  // Copy reference images into a specific canvas's reference folder
-  importReferences: (canvasId: string, sources: ImportSource[]): Promise<string[]> =>
-    ipcRenderer.invoke("folio:import-references", canvasId, sources),
+  openFileDialog: (): Promise<string[]> =>
+    ipcRenderer.invoke("folio:open-file-dialog"),
 
-  // Events: main → renderer
+  ensureThumbnails: (itemIds: string[]): Promise<ThumbnailUrls> =>
+    ipcRenderer.invoke("folio:ensure-thumbnails", itemIds),
+
+  getFileDataUrl: (filePath: string): Promise<string> =>
+    ipcRenderer.invoke("folio:get-file-data-url", filePath),
+
+  getReconciliationResult: (): Promise<ReconciliationResult> =>
+    ipcRenderer.invoke("folio:get-reconciliation-result"),
+
+  openInFinder: (filePath: string): Promise<void> =>
+    ipcRenderer.invoke("folio:open-in-finder", filePath),
+
+  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
+
   onFilesAdded: (callback: (items: FolioItem[]) => void) => {
-    const listener = (_: Electron.IpcRendererEvent, items: FolioItem[]) =>
+    const listener = (_: Electron.IpcRendererEvent, items: FolioItem[]) => {
       callback(items);
+    };
     ipcRenderer.on("folio:files-added", listener);
-    // Return a cleanup function so callers can unsubscribe
     return () => ipcRenderer.removeListener("folio:files-added", listener);
   },
 };

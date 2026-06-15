@@ -1,12 +1,26 @@
-import type { FolioData, FolioItem, Canvas, Tag, ImportSource } from "./index";
+import type {
+  CanvasReference,
+  FolioData,
+  FolioItem,
+  ReconciliationResult,
+  ThumbnailUrls,
+} from "./index";
 
 export interface FolioApi {
-  getData: () => Promise<FolioData>;
-  saveItems: (items: FolioItem[]) => Promise<void>;
-  saveCanvases: (canvases: Canvas[]) => Promise<void>;
-  saveTags: (tags: Tag[]) => Promise<void>;
-  importItems: (sources: ImportSource[]) => Promise<FolioItem[]>;
-  importReferences: (canvasId: string, sources: ImportSource[]) => Promise<string[]>;
+  getFolioData: () => Promise<FolioData>;
+  saveFolioData: (data: FolioData) => Promise<void>;
+  copyToFolio: (filePaths: string[]) => Promise<FolioItem[]>;
+  copyReference: (
+    canvasId: string,
+    filePaths: string[],
+  ) => Promise<CanvasReference[]>;
+  deleteItems: (itemIds: string[]) => Promise<FolioData>;
+  openFileDialog: () => Promise<string[]>;
+  ensureThumbnails: (itemIds: string[]) => Promise<ThumbnailUrls>;
+  getFileDataUrl: (filePath: string) => Promise<string>;
+  getReconciliationResult: () => Promise<ReconciliationResult>;
+  openInFinder: (filePath: string) => Promise<void>;
+  getPathForFile: (file: File) => string;
   /** Subscribe to files-added events pushed from the main process. Returns an unsubscribe function. */
   onFilesAdded: (callback: (items: FolioItem[]) => void) => () => void;
 }

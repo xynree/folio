@@ -1,8 +1,20 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, dialog, protocol } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 import { initialize } from "./main/initialize";
 import { FolioManager } from "./main/base.manager";
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "folio",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+]);
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -14,6 +26,8 @@ const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 600,
+    minWidth: 900,
+    minHeight: 600,
     titleBarStyle: "hiddenInset",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -42,15 +56,28 @@ const manager = new FolioManager();
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on("ready", async () => {
-  // Ensure folder structure and database are ready before creating the window
-  await initialize(app);
+  try {
+    // Ensure folder structure and database are ready before creating the window
+    await initialize(app);
 
-  // Register window.folio IPC handlers
-  manager.registerHandlers();
+    // Register window.folio IPC handlers
+    manager.registerHandlers();
+    manager.registerProtocol();
 
-  const mainWindow = createWindow();
-  manager.startWatcher(mainWindow);
+    await manager.prepareForLaunch();
 
+    const mainWindow = createWindow();
+    manager.startWatcher(mainWindow);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Folio could not start.";
+    await dialog.showMessageBox({
+      type: "error",
+      title: "Folio data error",
+      message,
+    });
+    app.quit();
+  }
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common

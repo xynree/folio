@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import type { ItemType } from "../types";
 
 /**
  * Helper to check if a file exists.
@@ -28,6 +29,37 @@ export async function computeHash(filePath: string): Promise<string> {
     .update(buffer.subarray(0, bytesRead))
     .digest("hex")
     .substring(0, 8);
+}
+
+export function sanitizeFileBaseName(filename: string): string {
+  const sanitized = filename
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9_-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "");
+
+  return sanitized || "untitled";
+}
+
+export function inferItemType(ext: string): ItemType {
+  const normalized = ext.toLowerCase();
+  if ([".jpg", ".jpeg", ".png", ".webp", ".heic"].includes(normalized)) {
+    return "sketch";
+  }
+  if ([".mp3", ".wav", ".aiff", ".m4a"].includes(normalized)) {
+    return "music";
+  }
+  if ([".mp4", ".mov", ".gif"].includes(normalized)) {
+    return "anim";
+  }
+  if ([".md", ".docx", ".txt", ".rtf"].includes(normalized)) {
+    return "text";
+  }
+  return "other";
 }
 
 export async function createDirectoryByDate(rootDir: string) {

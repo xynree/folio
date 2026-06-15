@@ -56,9 +56,9 @@ Folder names: year as `YYYY`, month as `MM_monthname` (e.g. `02_february`) insid
 ### 1.3 IPC bridge (preload layer)
 
 - [x] Set `contextIsolation: true`, `nodeIntegration: false` on `BrowserWindow`
-- [ ] Write `preload/index.ts` — expose `window.folio.*` API via `contextBridge`
+- [x] Write `preload/index.ts` — expose `window.folio.*` API via `contextBridge`
 - [x] Wire each method to an `ipcMain.handle()` in `main/index.ts`
-- [ ] Add TypeScript declaration file so the renderer gets full type checking on `window.folio`
+- [x] Add TypeScript declaration file so the renderer gets full type checking on `window.folio`
 
 ```typescript
 // Invocations (renderer → main)
@@ -66,8 +66,10 @@ window.folio.getFolioData();
 window.folio.saveFolioData(data);
 window.folio.copyToFolio(filePaths);
 window.folio.copyReference(canvasId, filePaths);
+window.folio.deleteItems(itemIds);
 window.folio.openFileDialog();
 window.folio.ensureThumbnails(itemIds);
+window.folio.getFileDataUrl(filePath);
 window.folio.getReconciliationResult(); // called once on launch by renderer
 window.folio.openInFinder(filename);
 
@@ -77,69 +79,69 @@ window.folio.onFilesAdded(callback);
 
 ### 1.4 File watcher
 
-- [ ] Install `chokidar`, start watching `~/Documents/Folio/` recursively (excluding `.folio/` and `references/`) from main process on app launch
-- [ ] On new file detected: check hash against all known `item.hash` values — if it matches an existing item, update `item.path` and clear any `missing` flag rather than creating a duplicate entry
-- [ ] On new file with no matching hash: date is always the current import date (`new Date()`), infer type from extension (`jpg/png/webp/heic` → sketch, `mp3/wav/aiff` → music, `mp4/mov/gif` → animation), generate ID with `nanoid`, append to `folio.json`, emit `files-added` IPC event
-- [ ] Debounce watcher at 300ms to batch rapid drops
-- [ ] On file deleted: mark item `missing: true` in `folio.json` rather than removing the entry — metadata, tags, and canvas membership are preserved
+- [x] Install `chokidar`, start watching `~/Documents/Folio/` recursively (excluding `.folio/` and `references/`) from main process on app launch
+- [x] On new file detected: check hash against all known `item.hash` values — if it matches an existing item, update `item.path` and clear any `missing` flag rather than creating a duplicate entry
+- [x] On new file with no matching hash: date is always the current import date (`new Date()`), infer type from extension (`jpg/png/webp/heic` → sketch, `mp3/wav/aiff` → music, `mp4/mov/gif` → animation), generate ID with `nanoid`, append to `folio.json`, emit `files-added` IPC event
+- [x] Debounce watcher at 300ms to batch rapid drops
+- [x] On file deleted: mark item `missing: true` in `folio.json` rather than removing the entry — metadata, tags, and canvas membership are preserved
 
 ### 1.5 Filesystem operations (`main/fs.ts`)
 
 - [x] `saveFolioData()`: atomic writes — split data and write to respective `.json.tmp` files, then rename over target files; the OS-level rename is the crash guard
-- [ ] `copyToFolio()`: resolve destination as `~/Documents/Folio/items/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix
-- [ ] `computeHash(filePath)`: read first 64KB of file, return 8-char hex hash using Node's built-in `crypto.createHash('sha256')` — fast enough for large files, unique enough for a personal archive
-- [ ] `copyReference()`: copy files to `~/Documents/Folio/references/<canvas-id>/`
+- [x] `copyToFolio()`: resolve destination as `~/Documents/Folio/items/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix
+- [x] `computeHash(filePath)`: read first 64KB of file, return 8-char hex hash using Node's built-in `crypto.createHash('sha256')` — fast enough for large files, unique enough for a personal archive
+- [x] `copyReference()`: copy files to `~/Documents/Folio/references/<canvas-id>/`
 - [x] `loadFolioData()`: read all three `.json` files in parallel on startup; if missing, create fresh empty schemas via `initialize()`
-- [ ] File sanitization helper: lowercase, spaces → hyphens, strip special characters (shared utility used by both `copyToFolio` and `copyReference`)
+- [x] File sanitization helper: lowercase, spaces → hyphens, strip special characters (shared utility used by both `copyToFolio` and `copyReference`)
 
 ### 1.6 Launch reconciliation
 
 Run once on every app launch, after `loadFolioData()`, before the UI renders. Diffs `folio.json` against what's actually on disk and surfaces any drift.
 
-- [ ] **Scan the archive**: walk all files under `~/Documents/Folio/items/` (excluding `.folio/` and `references/`) and build a set of `{path, hash}` for every file found on disk
-- [ ] **Find missing files**: items in `folio.json` whose `item.path` no longer exists on disk — mark as `missing: true`
-- [ ] **Re-locate moved/renamed files**: for each missing item, check if any on-disk file has a matching `item.hash` — if found, update `item.path` to the new location, clear `missing` flag, save silently. This handles manual renames and moves in Finder with no user interaction required
-- [ ] **Find untracked files**: files on disk with no matching entry in `folio.json` (no path match, no hash match) — these were added manually in Finder
-- [ ] **Show reconciliation UI if needed**: if there are untracked files or genuinely missing files (missing and no hash match), show a non-blocking notice at the top of the app: `"2 new files found in your Folio folder — add to archive?"` and `"1 file is missing and couldn't be located"` — user can dismiss or resolve
-- [ ] **Reconciliation is always non-destructive**: never delete metadata, never move files automatically, never block app launch — the UI is fully usable while the notice is present
+- [x] **Scan the archive**: walk all files under `~/Documents/Folio/items/` (excluding `.folio/` and `references/`) and build a set of `{path, hash}` for every file found on disk
+- [x] **Find missing files**: items in `folio.json` whose `item.path` no longer exists on disk — mark as `missing: true`
+- [x] **Re-locate moved/renamed files**: for each missing item, check if any on-disk file has a matching `item.hash` — if found, update `item.path` to the new location, clear `missing` flag, save silently. This handles manual renames and moves in Finder with no user interaction required
+- [x] **Find untracked files**: files on disk with no matching entry in `folio.json` (no path match, no hash match) — these were added manually in Finder
+- [x] **Show reconciliation UI if needed**: if there are untracked files or genuinely missing files (missing and no hash match), show a non-blocking notice at the top of the app: `"2 new files found in your Folio folder — add to archive?"` and `"1 file is missing and couldn't be located"` — user can dismiss or resolve
+- [x] **Reconciliation is always non-destructive**: never delete metadata, never move files automatically, never block app launch — the UI is fully usable while the notice is present
 
 ### 1.7 Thumbnail generation
 
-- [ ] Use `nativeImage.createThumbnailFromPath(path, { width: 400, height: 400 })` — built into Electron, no extra dependency
-- [ ] Write generated thumbnail to `~/Folio/.folio/thumbs/<id>.jpg` via `thumb.toJPEG(80)`
-- [ ] `ensureThumbnails(ids[])`: skip already-cached items, process missing ones sequentially
-- [ ] For audio files: copy a static SVG waveform placeholder into the thumbs cache under that item's ID
-- [ ] Renderer loads thumbnails as `<img src="file:///Users/x/Folio/.folio/thumbs/<id>.jpg" />`
+- [x] Use `nativeImage.createThumbnailFromPath(path, { width: 400, height: 400 })` — built into Electron, no extra dependency
+- [x] Write generated thumbnail to `~/Folio/.folio/thumbs/<id>.jpg` via `thumb.toJPEG(80)`
+- [x] `ensureThumbnails(ids[])`: skip already-cached items, process missing ones sequentially
+- [x] For audio files: create a static SVG waveform placeholder in the thumbs cache under that item's ID
+- [x] Renderer loads thumbnails from the main-process `folio://thumb/...` protocol so dev-server origins do not block local media
 
 ### 1.8 Drop files into the app
 
-- [ ] Renderer: `onDragOver` + `onDrop` on the root div
-- [ ] Extract file paths with `webUtils.getPathForFile(file)` (Electron 28+)
-- [ ] Call `window.folio.copyToFolio(paths)`, update React state with returned item objects
-- [ ] Show toast: "N items added to today"
-- [ ] File watcher deduplication: when `copyToFolio()` copies a file, it adds the destination path to a short-lived `recentlyCopied` Set that clears each entry after 2 seconds; when the watcher fires on that same path it checks this set first and skips without hashing — fast path for the common case
+- [x] Renderer: `onDragOver` + `onDrop` on the root div
+- [x] Extract file paths with `webUtils.getPathForFile(file)` (Electron 28+)
+- [x] Call `window.folio.copyToFolio(paths)`, update React state with returned item objects
+- [x] Show toast: "N items added to today"
+- [x] File watcher deduplication: when `copyToFolio()` copies a file, it adds the destination path to a short-lived `recentlyCopied` Set that clears each entry after 2 seconds; when the watcher fires on that same path it checks this set first and skips without hashing — fast path for the common case
 
 ### 1.9 Import button
 
-- [ ] Header button calls `window.folio.openFileDialog()` → main calls `dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })`
-- [ ] Same `copyToFolio` path as drag-and-drop
+- [x] Header button calls `window.folio.openFileDialog()` → main calls `dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })`
+- [x] Same `copyToFolio` path as drag-and-drop
 
 ### 1.10 Daily strip view
 
-- [ ] Render all dates from earliest item to today, most recent at top
-- [ ] Empty date rows: faint dash line (gaps are part of the record, not hidden)
-- [ ] Thumbnails lazy-loaded with `IntersectionObserver`
-- [ ] Scroll position persisted in `sessionStorage`
+- [x] Render all dates from earliest item to today, most recent at top
+- [x] Empty date rows: faint dash line (gaps are part of the record, not hidden)
+- [x] Thumbnails lazy-loaded with `IntersectionObserver`
+- [x] Scroll position persisted in `sessionStorage`
 
 ### 1.11 Grid view
 
-- [ ] CSS grid: `auto-fill, minmax(148px, 1fr)`
-- [ ] Type filter pills in header: all / sketch / ref / music / anim
-- [ ] Same lazy thumbnail loading as strip
+- [x] CSS grid: `auto-fill, minmax(148px, 1fr)`
+- [x] Grid filter pills show `All` plus only user-created tags from `tags.json`
+- [x] Same lazy thumbnail loading as strip
 
 ### 1.12 Status bar
 
-- [ ] Display: N items · N canvases · N tags · N gaps · `~/Documents/Folio/`
+- [x] Display: N items · N canvases · N tags · N gaps · `~/Documents/Folio/`
 
 ---
 
@@ -147,17 +149,18 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 2.1 Detail drawer
 
-- [ ] Single click on any item opens drawer (slides up from bottom)
-- [ ] Show: thumbnail preview, title (editable inline), date, file type, canvas membership
-- [ ] Inline title edit: update React state immediately, debounce `saveFolioData` 500ms
-- [ ] "Show in Finder" button: `window.folio.openInFinder(filename)`
-- [ ] Click outside or press Escape to close
+- [x] Single click on any item opens drawer (right-side detail panel)
+- [x] Show: thumbnail preview, title (editable inline), file type, canvas membership
+- [x] Inline title edit: update React state and persist with `saveFolioData` on blur
+- [x] "Show in Finder" button: `window.folio.openInFinder(filename)`
+- [x] Delete button moves the file to Trash, removes metadata, and clears canvas memberships
+- [x] Click outside or press Escape to close
 
 ### 2.2 Tags
 
-- [ ] Tag input in drawer: type name + Enter to add, × to remove
-- [ ] Store as strings in `item.tags[]`, deduplicate in `folio.json.tags`
-- [ ] Show tag chips on grid cards and in detail drawer
+- [x] Tag input in drawer: type name + Enter to add, x to remove
+- [x] Store tag IDs in `item.tagIds[]`, deduplicate global records in `tags.json`
+- [x] Show tag chips on grid cards and in detail drawer
 - [ ] Sidebar TAGS section: list all tags with item count, expand to see thumbnail strip
 - [ ] Clicking a tag in sidebar filters the active view to items with that tag
 
@@ -172,14 +175,16 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 ### 2.4 Open items on a canvas
 
 - [ ] With items selected in strip/grid, user can drag them directly onto an open canvas, or use "open on new canvas" to create a blank canvas pre-populated with the selection
-- [ ] New canvas: prompt for name + optional opening note, auto-assign color from warm palette, save to `folio.json`
-- [ ] Items can appear on multiple canvases simultaneously — canvas membership reflects what's been dragged onto each canvas
+- [x] Detail drawer can add the current item to the active canvas, creating a new board if needed
+- [x] Canvas toolbar can import new archive items directly onto the active board
+- [x] New canvas: auto-assign color from warm palette, save to `folio.json`
+- [x] Items can appear on multiple canvases simultaneously — canvas membership reflects what's been added to each canvas
 
 ### 2.5 Canvas sidebar list
 
-- [ ] Each canvas row: colored dot, name, item count, ◎N ref badge, ✎N note badge, ✦N edge badge
+- [x] Each canvas row: colored dot, name, item count
 - [ ] Expand canvas: italic opening note, member thumbnail grid (max 8), "open canvas" button
-- [ ] "Open canvas" navigates to the canvas view with that canvas loaded
+- [x] "Open canvas" navigates to the canvas view with that canvas loaded
 - [ ] Canvas dots shown under strip thumbnails (one colored dot per canvas membership)
 - [ ] Canvas chips shown in detail drawer
 
@@ -189,39 +194,40 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 3.1 Canvas view entry
 
-- [ ] Canvas tab shows list of existing canvases + "new canvas" button when no canvas is open
-- [ ] Opening a canvas from the sidebar loads its items, positions, notes, edges, and strokes exactly as left
-- [ ] Toolbar shows: colored dot + canvas name (editable) + "N items · N notes · N connections"
-- [ ] Switching canvas: auto-save current state to `folio.json` before loading the next
+- [x] Canvas tab shows list of existing canvases + "new canvas" button when no canvas is open
+- [x] Opening a canvas from the sidebar loads its items, positions, notes, and references exactly as left
+- [x] Toolbar shows: colored dot + canvas name (editable) + "N items · N notes · N references"
+- [x] Switching canvas loads persisted state from `folio.json`
 
 ### 3.2 Draggable item cards and drag-in from strip/grid
 
-- [ ] Items positioned absolutely on a large scrollable canvas surface (2400×1800px to give room to spread)
-- [ ] Drag: mousedown → track mousemove delta → mouseup saves position to `folio.json`
-- [ ] Positions stored per canvas in `folio.json` under `canvas.positions`
+- [x] Items positioned absolutely on a large scrollable canvas surface (2400×1800px to give room to spread)
+- [x] Drag: pointer down → track pointer move delta → pointer up saves position to `folio.json`
+- [x] Positions stored per canvas in `folio.json` under `canvas.positions`
 - [ ] Items can be dragged directly from the strip or grid view onto an open canvas — they appear at the drop position
-- [ ] First-time layout: auto-arrange in a loose grid if no saved positions
-- [ ] Dotted grid background: 24px radial-gradient pattern
+- [x] Canvas archive rail shows uploaded archive items and can add any item not already on the open canvas
+- [x] First-time layout: auto-arrange in a loose grid if no saved positions
+- [x] Dotted grid background: 24px radial-gradient pattern
 
 ### 3.3 Canvas notes
 
-- [ ] "+ note" in toolbar: create note card centered in current scroll viewport
-- [ ] Note card: amber drag-handle strip, auto-resizing textarea, delete link in footer
-- [ ] Click note body to enter edit mode, blur to save and exit
-- [ ] Empty note on blur: auto-delete
+- [x] "+ note" in toolbar: create note card on the canvas surface
+- [x] Note card: amber header strip, editable textarea, delete action
+- [x] Click note body to edit, blur to save and exit
+- [x] Empty note on blur: auto-delete
 - [ ] Escape exits edit mode without deleting
 - [ ] Delete link visible only while editing
-- [ ] Notes saved to `canvas.notes[]` in `folio.json`
+- [x] Notes saved to `canvas.notes[]` in `folio.json`
 
 ### 3.4 References on the canvas
 
 Reference images belong to a canvas, not to items. They are first-class positionable objects on the canvas surface — drag them around alongside items and notes.
 
-- [ ] Drop image files directly onto the canvas to add a reference at the drop position
+- [x] Drop image files directly onto the canvas to add a reference at the drop position
 - [ ] Browse button in toolbar: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)` — drops new reference at a default position near the centre of the current viewport
-- [ ] References file to `~/Folio/references/<canvasId>/` on disk, never into the main archive
-- [ ] Reference card on canvas: thumbnail, drag handle, × remove button (deletes file from disk + removes from `folio.json`)
-- [ ] Reference cards can be moved freely like item cards — position saved to `canvas.references[].x/y`
+- [x] References file to `~/Folio/references/<canvasId>/` on disk, never into the main archive
+- [x] Reference card on canvas: thumbnail, drag handle, remove button (removes from `folio.json`)
+- [x] Reference cards can be moved freely like item cards — position saved to `canvas.references[].x/y`
 - [ ] Edges can connect reference cards to item cards (same `CanvasEdge` mechanism — `fromId`/`toId` can point to either)
 
 ### 3.5 Edges (connections between items)
@@ -248,47 +254,47 @@ Reference images belong to a canvas, not to items. They are first-class position
 
 ### Data integrity
 
-- [ ] All `folio.json` writes atomic: write `.folio/folio.json.tmp` → rename over `.folio/folio.json` (OS rename is crash-safe; no `.bak` file)
-- [ ] Schema validation on load: check `version` field and required keys; surface a clear error to the user if invalid (no `.bak` fallback)
-- [ ] React state is live working copy; debounced save (500ms) on every meaningful change
-- [ ] Every item carries a `hash` (first-64KB SHA-256, truncated to 8 hex chars) used to re-locate files that were renamed or moved outside the app
-- [ ] Every item carries a `missing` boolean — set when a file can't be found and no hash match exists; cleared automatically if the file reappears
-- [ ] Canvas membership is derived from `canvas.itemIds[]` — no separate denormalized list on items
-- [ ] Reconciliation runs at every launch: silent auto-fix for moved files, non-blocking notice for untracked or genuinely missing files
+- [x] All `folio.json` writes atomic: write `.folio/folio.json.tmp` → rename over `.folio/folio.json` (OS rename is crash-safe; no `.bak` file)
+- [x] Schema validation on load: check `version` field and required keys; surface a clear error to the user if invalid (no `.bak` fallback)
+- [x] React state is live working copy; meaningful edits persist through `saveFolioData`
+- [x] Every item carries a `hash` (first-64KB SHA-256, truncated to 8 hex chars) used to re-locate files that were renamed or moved outside the app
+- [x] Every item carries a `missing` boolean — set when a file can't be found and no hash match exists; cleared automatically if the file reappears
+- [x] Canvas membership is derived from `canvas.itemIds[]` — no separate denormalized list on items
+- [x] Reconciliation runs at every launch: silent auto-fix for moved files, non-blocking notice for untracked or genuinely missing files
 
 ### IPC security
 
-- [ ] `contextIsolation: true`, `nodeIntegration: false` on all windows
+- [x] `contextIsolation: true`, `nodeIntegration: false` on all windows
 - [ ] Validate and sanitize all IPC arguments in main process before acting
 
 ### Performance
 
-- [ ] Thumbnails generated in a sequential async queue, never blocking the main process event loop
-- [ ] Strip and grid use `IntersectionObserver` for lazy loading
-- [ ] `folio.json` read once at startup, kept in memory, written only on change
-- [ ] `recentlyCopied` is an in-memory `Set<string>` on the main process; entries are added by `copyToFolio()` and auto-deleted after 2 seconds via `setTimeout`
-- [ ] File watcher debounced at 300ms
+- [x] Thumbnails generated sequentially by `ensureThumbnails`, never blocking the main process event loop
+- [x] Strip and grid use `IntersectionObserver` for lazy loading
+- [x] `folio.json` read once at startup, kept in memory, written only on change
+- [x] `recentlyCopied` is an in-memory `Set<string>` on the main process; entries are added by `copyToFolio()` and auto-deleted after 2 seconds via `setTimeout`
+- [x] File watcher debounced at 300ms
 
 ### File naming and paths
 
-- [ ] Destination resolved from import date: `~/Documents/Folio/items/YYYY/MM_monthname/` (e.g. `~/Documents/Folio/items/2026/02_february/`)
-- [ ] Month folder format: zero-padded number + full lowercase name — `01_january` through `12_december`
-- [ ] Filename: original name, sanitized — lowercase, spaces → hyphens, special characters stripped
-- [ ] Name collision within the same month folder: append `_2`, `_3`, etc. before the extension
-- [ ] `item.title` defaults to sanitized filename without extension; user can rename at any time
-- [ ] `item.path` stores relative path from `~/Documents/Folio/` (e.g. `items/2026/02_february/figure-study.jpg`) — used to locate files and rebuild thumbnails if the cache is deleted
+- [x] Destination resolved from import date: `~/Documents/Folio/items/YYYY/MM_monthname/` (e.g. `~/Documents/Folio/items/2026/02_february/`)
+- [x] Month folder format: zero-padded number + full lowercase name — `01_january` through `12_december`
+- [x] Filename: original name, sanitized — lowercase, spaces → hyphens, special characters stripped
+- [x] Name collision within the same month folder: append `_2`, `_3`, etc. before the extension
+- [x] `item.title` defaults to filename without extension; user can rename at any time
+- [x] `item.path` stores relative path from `~/Documents/Folio/` (e.g. `items/2026/02_february/figure-study.jpg`) — used to locate files and rebuild thumbnails if the cache is deleted
 
 ### Accepted file types
 
-- [ ] Images: `jpg`, `jpeg`, `png`, `gif`, `webp`, `heic`, `avif`
-- [ ] Audio: `mp3`, `wav`, `aiff`, `m4a`
-- [ ] Video: `mp4`, `mov`
+- [x] Images: `jpg`, `jpeg`, `png`, `gif`, `webp`, `heic`
+- [x] Audio: `mp3`, `wav`, `aiff`, `m4a`
+- [x] Video: `mp4`, `mov`
 - [ ] Reject anything else with a toast message, copy nothing
 
 ### Packaging
 
 - [ ] `forge.config.ts`: add `@electron-forge/maker-dmg` for macOS `.dmg`
-- [ ] Confirm all three Vite targets (main, preload, renderer) build cleanly
+- [x] Confirm all three Vite targets (main, preload, renderer) build cleanly
 - [ ] Code-sign with Apple Developer certificate for Gatekeeper
 - [ ] Windows later: add `@electron-forge/maker-squirrel`, no other changes needed
 

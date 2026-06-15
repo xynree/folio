@@ -1,12 +1,41 @@
+import { nativeImage } from "electron";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { nanoid } from "nanoid";
-import { FolioItem, ImportSource, ItemType } from "../types";
-import { computeHash, createDirectoryByDate, exists } from "../helpers";
+import {
+  computeHash,
+  createDirectoryByDate,
+  exists,
+  inferItemType,
+  sanitizeFileBaseName,
+} from "../helpers";
+import { SCHEMA_VERSION } from "../constants";
+import type {
+  CanvasReference,
+  FolioItem,
+  ImportSource,
+  ItemType,
+  ThumbnailUrls,
+} from "../types";
 import { FolioStorage } from "./storage.manager";
 
+interface ImportResult {
+  items: FolioItem[];
+  changed: boolean;
+}
+
+const PLACEHOLDER_SVG_BY_TYPE: Record<ItemType, string> = {
+  sketch: "Sketch",
+  ref: "Reference",
+  music: "Audio",
+  anim: "Motion",
+  text: "Text",
+  other: "File",
+};
+
 /**
- * ArchiveManager handles all filesystem-level operations for the media archive,
- * including importing files, generating paths, and persisting item metadata.
+ * ArchiveManager handles filesystem-level operations for the media archive:
+ * importing files, tracking Finder changes, deduplicating by hash, and caching thumbnails.
  */
 export class ArchiveManager {
   private items: FolioItem[] = [];
@@ -23,33 +52,49 @@ export class ArchiveManager {
   }
 
   public setItems(items: FolioItem[]) {
-    this.items = items;
+    this.items = items.map((item) => ({
+      ...item,
+      type: this.normalizeItemType(item.type),
+      tagIds: item.tagIds ?? [],
+      description: item.description ?? "",
+    }));
   }
 
   /**
-   * Imports one or more files into the archive.
+   * Copy files into today's Folio folder. Files already inside Folio/items are
+   * registered in place, which is used by reconciliation's "add to archive" UI.
+   */
+  async copyToFolio(filePaths: string[]): Promise<FolioItem[]> {
+    const result = await this.importFilePaths(filePaths, "copy-external");
+    return result.items;
+  }
+
+  /**
+   * Track files that appeared directly in Folio/items via Finder or launch reconciliation.
+   */
+  async trackExistingFiles(filePaths: string[]): Promise<ImportResult> {
+    return this.importFilePaths(filePaths, "register-in-place");
+  }
+
+  /**
+   * Legacy source-based import support for clipboard/buffer callers.
    */
   async importItems(sources: ImportSource[]): Promise<FolioItem[]> {
     const destDir = await createDirectoryByDate(this.folioRoot);
-    const newItems: FolioItem[] = [];
+    const imported: FolioItem[] = [];
 
     for (const source of sources) {
       const { filename, ext } = this.resolveSourceMeta(source);
-      const destPath = await this.saveToDirectory(
-        source,
-        filename,
-        ext,
-        destDir,
-      );
-      const hash = await computeHash(destPath);
-      const item = this.buildItem(destPath, filename, ext, hash);
+      const destPath = await this.saveToDirectory(source, filename, ext, destDir);
+      const result = await this.registerArchivedFile(destPath, filename, true);
 
+      if (result.created) {
+        imported.push(result.item);
+      }
       this.trackRecentlyCopied(destPath);
-      newItems.push(item);
-      this.items.push(item);
     }
 
-    return newItems;
+    return imported;
   }
 
   /**
@@ -60,13 +105,13 @@ export class ArchiveManager {
     ext: string;
   } {
     if (source.kind === "path") {
-      const ext = path.extname(source.filePath);
+      const ext = path.extname(source.filePath).toLowerCase();
       const filename = path.basename(source.filePath, ext);
       return { filename, ext };
     }
     return {
       filename: source.filename ?? "pasted-image",
-      ext: source.ext,
+      ext: source.ext.toLowerCase(),
     };
   }
 
@@ -80,16 +125,16 @@ export class ArchiveManager {
     ext: string,
     destDir: string,
   ): Promise<string> {
-    const sanitizedName = filename.toLowerCase().replace(/[^a-z0-9]/g, "-");
-    let destFilename = `${sanitizedName}${ext}`;
+    const sanitizedName = sanitizeFileBaseName(filename);
+    const normalizedExt = ext.toLowerCase();
+    let destFilename = `${sanitizedName}${normalizedExt}`;
     let destPath = path.join(destDir, destFilename);
 
-    // Collision handling: append _2, _3, etc.
     let counter = 2;
     while (await exists(destPath)) {
-      destFilename = `${sanitizedName}_${counter}${ext}`;
+      destFilename = `${sanitizedName}_${counter}${normalizedExt}`;
       destPath = path.join(destDir, destFilename);
-      counter++;
+      counter += 1;
     }
 
     if (source.kind === "path") {
@@ -107,9 +152,176 @@ export class ArchiveManager {
     return destPath;
   }
 
+  async copyReferences(
+    canvasId: string,
+    filePaths: string[],
+  ): Promise<CanvasReference[]> {
+    const destDir = path.join(this.folioRoot, "references", canvasId);
+    await fs.mkdir(destDir, { recursive: true });
+
+    const references: CanvasReference[] = [];
+    for (const filePath of filePaths) {
+      const ext = path.extname(filePath).toLowerCase();
+      const filename = path.basename(filePath, ext);
+      const destPath = await this.saveToDirectory(
+        { kind: "path", filePath },
+        filename,
+        ext,
+        destDir,
+      );
+
+      references.push({
+        id: nanoid(),
+        filename: path.basename(destPath),
+        path: path.relative(this.folioRoot, destPath),
+        x: 0,
+        y: 0,
+      });
+    }
+
+    return references;
+  }
+
+  public isRecentlyCopied(filePath: string): boolean {
+    return this.recentlyCopied.has(path.resolve(filePath));
+  }
+
+  public isInArchiveItems(filePath: string): boolean {
+    const relative = path.relative(path.join(this.folioRoot, "items"), filePath);
+    return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+  }
+
+  public async ensureThumbnails(itemIds: string[]): Promise<ThumbnailUrls> {
+    const urls: ThumbnailUrls = {};
+    let repairedMissingFlag = false;
+
+    for (const itemId of itemIds) {
+      const item = this.items.find((candidate) => candidate.id === itemId);
+      if (!item) continue;
+
+      if (item.missing && (await exists(this.getAbsolutePath(item.path)))) {
+        item.missing = false;
+        repairedMissingFlag = true;
+      }
+
+      let thumbPath = this.getPrimaryThumbnailPath(item);
+      if (!(await exists(thumbPath))) {
+        thumbPath = await this.createThumbnail(item, thumbPath);
+      }
+      urls[item.id] = this.getThumbnailUrl(thumbPath);
+    }
+
+    if (repairedMissingFlag) {
+      await this.save(SCHEMA_VERSION);
+    }
+
+    return urls;
+  }
+
+  public async getFileDataUrl(relativeOrAbsolutePath: string): Promise<string> {
+    const absolutePath = this.getAbsolutePath(relativeOrAbsolutePath);
+    const relativePath = path.relative(this.folioRoot, absolutePath);
+    return `folio://file/${encodeURIComponent(relativePath)}`;
+  }
+
+  public getAbsolutePath(relativeOrAbsolutePath: string): string {
+    return path.isAbsolute(relativeOrAbsolutePath)
+      ? relativeOrAbsolutePath
+      : path.join(this.folioRoot, relativeOrAbsolutePath);
+  }
+
   /**
-   * Constructs a FolioItem from a finalized destination path and metadata.
+   * Saves the current items to disk.
    */
+  async save(version: number): Promise<void> {
+    await this.store.saveItems(this.dbPath, this.items, version);
+  }
+
+  private async importFilePaths(
+    filePaths: string[],
+    mode: "copy-external" | "register-in-place",
+  ): Promise<ImportResult> {
+    const imported: FolioItem[] = [];
+    let changed = false;
+
+    for (const filePath of filePaths) {
+      const absoluteSource = path.resolve(filePath);
+      const sourceExt = path.extname(absoluteSource).toLowerCase();
+      const sourceFilename = path.basename(absoluteSource, sourceExt);
+      let archivedPath = absoluteSource;
+      let copied = false;
+
+      if (mode === "copy-external" && !this.isInArchiveItems(absoluteSource)) {
+        const sourceHash = await computeHash(absoluteSource);
+        const duplicate = this.items.find((item) => item.hash === sourceHash);
+
+        if (duplicate && !duplicate.missing) {
+          continue;
+        }
+
+        const destDir = await createDirectoryByDate(this.folioRoot);
+        archivedPath = await this.saveToDirectory(
+          { kind: "path", filePath: absoluteSource },
+          sourceFilename,
+          sourceExt,
+          destDir,
+        );
+        copied = true;
+        this.trackRecentlyCopied(archivedPath);
+      }
+
+      const result = await this.registerArchivedFile(
+        archivedPath,
+        sourceFilename,
+        copied,
+      );
+      if (result.created || result.changed) {
+        imported.push(result.item);
+      }
+      changed = changed || result.changed;
+    }
+
+    return { items: imported, changed };
+  }
+
+  private async registerArchivedFile(
+    filePath: string,
+    fallbackTitle: string,
+    recentlyCopied: boolean,
+  ): Promise<{ item: FolioItem; created: boolean; changed: boolean }> {
+    const absolutePath = path.resolve(filePath);
+    const relativePath = path.relative(this.folioRoot, absolutePath);
+    const ext = path.extname(absolutePath).toLowerCase();
+    const hash = await computeHash(absolutePath);
+
+    const pathMatch = this.items.find(
+      (item) => path.resolve(this.folioRoot, item.path) === absolutePath,
+    );
+    if (pathMatch) {
+      if (pathMatch.missing) {
+        pathMatch.missing = false;
+        return { item: pathMatch, created: false, changed: true };
+      }
+      return { item: pathMatch, created: false, changed: false };
+    }
+
+    const hashMatch = this.items.find((item) => item.hash === hash);
+    if (hashMatch) {
+      hashMatch.path = relativePath;
+      hashMatch.missing = false;
+      return { item: hashMatch, created: false, changed: true };
+    }
+
+    const item = this.buildItem(absolutePath, fallbackTitle, ext, hash);
+    this.items.push(item);
+
+    if (recentlyCopied) {
+      this.trackRecentlyCopied(absolutePath);
+    }
+
+    return { item, created: true, changed: true };
+  }
+
   private buildItem(
     destPath: string,
     filename: string,
@@ -120,11 +332,12 @@ export class ArchiveManager {
       id: nanoid(),
       path: path.relative(this.folioRoot, destPath),
       hash,
-      type: this.inferType(ext),
+      type: inferItemType(ext),
       date: new Date().toISOString(),
       title: filename,
       tagIds: [],
       description: "",
+      missing: false,
     };
   }
 
@@ -133,30 +346,82 @@ export class ArchiveManager {
    * Prevents the file watcher from double-counting freshly imported files.
    */
   private trackRecentlyCopied(destPath: string) {
-    this.recentlyCopied.add(destPath);
-    setTimeout(() => this.recentlyCopied.delete(destPath), 2000);
+    const resolvedPath = path.resolve(destPath);
+    this.recentlyCopied.add(resolvedPath);
+    setTimeout(() => this.recentlyCopied.delete(resolvedPath), 2000);
   }
 
-  /**
-   * Infers item type from file extension.
-   */
-  private inferType(ext: string): ItemType {
-    const e = ext.toLowerCase();
-    if ([".jpg", ".jpeg", ".png", ".webp", ".heic"].includes(e)) return "image";
-    if ([".mp3", ".wav", ".aiff", ".m4a"].includes(e)) return "audio";
-    if ([".mp4", ".mov", ".gif"].includes(e)) return "video";
-    if ([".md", ".docx", ".txt"].includes(e)) return "text";
+  private async createThumbnail(
+    item: FolioItem,
+    thumbPath: string,
+  ): Promise<string> {
+    await fs.mkdir(path.dirname(thumbPath), { recursive: true });
+
+    const sourcePath = this.getAbsolutePath(item.path);
+    const sourceExists = await exists(sourcePath);
+
+    if (!sourceExists || !["sketch", "ref", "anim"].includes(item.type)) {
+      const placeholderPath = this.getPlaceholderPath(item);
+      await this.writePlaceholderThumbnail(item, placeholderPath);
+      return placeholderPath;
+    }
+
+    try {
+      const thumb = await nativeImage.createThumbnailFromPath(sourcePath, {
+        width: 400,
+        height: 400,
+      });
+
+      if (thumb.isEmpty()) {
+        const placeholderPath = this.getPlaceholderPath(item);
+        await this.writePlaceholderThumbnail(item, placeholderPath);
+        return placeholderPath;
+      }
+
+      await fs.writeFile(thumbPath, thumb.toJPEG(80));
+      return thumbPath;
+    } catch {
+      const placeholderPath = this.getPlaceholderPath(item);
+      await this.writePlaceholderThumbnail(item, placeholderPath);
+      return placeholderPath;
+    }
+  }
+
+  private async writePlaceholderThumbnail(item: FolioItem, thumbPath: string) {
+    const label = PLACEHOLDER_SVG_BY_TYPE[item.type] ?? "File";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#f3efe7"/>
+  <rect x="42" y="42" width="316" height="316" rx="22" fill="#fffdf8" stroke="#d7c9b4" stroke-width="2"/>
+  <path d="M96 246 C128 206, 156 270, 192 224 S258 186, 304 228" fill="none" stroke="#9f6b3d" stroke-width="12" stroke-linecap="round"/>
+  <text x="200" y="316" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="32" fill="#6b5a48">${label}</text>
+</svg>`;
+    await fs.writeFile(thumbPath, svg, "utf-8");
+  }
+
+  private getPrimaryThumbnailPath(item: FolioItem): string {
+    const thumbsDir = path.join(this.folioRoot, ".folio", "thumbs");
+    if (!["sketch", "ref", "anim"].includes(item.type)) {
+      return path.join(thumbsDir, `${item.id}.svg`);
+    }
+    return path.join(thumbsDir, `${item.id}.jpg`);
+  }
+
+  private getPlaceholderPath(item: FolioItem): string {
+    return path.join(this.folioRoot, ".folio", "thumbs", `${item.id}.svg`);
+  }
+
+  private getThumbnailUrl(thumbPath: string): string {
+    const filename = path.basename(thumbPath);
+    return `folio://thumb/${encodeURIComponent(filename)}`;
+  }
+
+  private normalizeItemType(type: string): ItemType {
+    if (type === "image") return "sketch";
+    if (type === "audio") return "music";
+    if (type === "video") return "anim";
+    if (["sketch", "ref", "music", "anim", "text", "other"].includes(type)) {
+      return type as ItemType;
+    }
     return "other";
-  }
-
-  public isRecentlyCopied(filePath: string): boolean {
-    return this.recentlyCopied.has(filePath);
-  }
-
-  /**
-   * Saves the current items to disk.
-   */
-  async save(version: number): Promise<void> {
-    await this.store.saveItems(this.dbPath, this.items, version);
   }
 }
