@@ -28,6 +28,12 @@ import type {
 
 type GridTagFilter = "all" | string;
 type DataUpdater = (current: FolioData) => FolioData;
+type ItemOpenHandler = (
+  itemId: string,
+  event: React.MouseEvent,
+  orderedItems: FolioItem[],
+  rangeEnabled: boolean,
+) => void;
 
 const EMPTY_DATA: FolioData = {
   version: 1,
@@ -46,6 +52,8 @@ const TYPE_LABELS: Record<ItemType, string> = {
 };
 
 const CANVAS_COLORS = ["#9f6b3d", "#385d56", "#7c5d92", "#b06d4a", "#546f9a"];
+const ITEM_DRAG_MIME = "application/x-folio-item-ids";
+const IMAGE_FILE_PATTERN = /\.(avif|gif|heic|jpeg|jpg|png|svg|webp)$/i;
 
 function createId(prefix: string) {
   if ("randomUUID" in crypto) {
@@ -143,11 +151,11 @@ function formatCount(count: number, singular: string, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-function createCanvas(index: number): Canvas {
+function createCanvas(index: number, title?: string, description?: string): Canvas {
   return {
     id: createId("canvas"),
-    title: `Board ${index + 1}`,
-    description: "",
+    title: title?.trim() || `Board ${index + 1}`,
+    description: description?.trim() ?? "",
     color: CANVAS_COLORS[index % CANVAS_COLORS.length],
     itemIds: [],
     positions: {},
@@ -158,25 +166,57 @@ function createCanvas(index: number): Canvas {
 }
 
 function addItemToCanvas(canvas: Canvas, itemId: string): Canvas {
-  if (canvas.itemIds.includes(itemId)) return canvas;
-  const index = canvas.itemIds.length;
+  return addItemsToCanvas(canvas, [itemId]);
+}
+
+function addItemsToCanvas(
+  canvas: Canvas,
+  itemIds: string[],
+  origin?: CanvasPosition,
+): Canvas {
+  const nextItemIds = [...canvas.itemIds];
+  const positions = { ...canvas.positions };
+  let placedCount = 0;
+
+  Array.from(new Set(itemIds)).forEach((itemId) => {
+    if (nextItemIds.includes(itemId)) return;
+
+    const gridIndex = nextItemIds.length;
+    positions[itemId] = origin
+      ? {
+          x: Math.max(0, origin.x + (placedCount % 4) * 184),
+          y: Math.max(0, origin.y + Math.floor(placedCount / 4) * 228),
+        }
+      : {
+          x: 80 + (gridIndex % 4) * 190,
+          y: 90 + Math.floor(gridIndex / 4) * 230,
+        };
+
+    nextItemIds.push(itemId);
+    placedCount += 1;
+  });
 
   return {
     ...canvas,
-    itemIds: [...canvas.itemIds, itemId],
-    positions: {
-      ...canvas.positions,
-      [itemId]: {
-        x: 80 + (index % 4) * 190,
-        y: 90 + Math.floor(index / 4) * 230,
-      },
-    },
+    itemIds: nextItemIds,
+    positions,
   };
 }
 
 function tagTextsForItem(item: FolioItem, tags: Tag[]) {
   const byId = new Map(tags.map((tag) => [tag.id, tag.text]));
   return item.tagIds.map((tagId) => byId.get(tagId)).filter(Boolean) as string[];
+}
+
+function canvasColorsForItem(itemId: string, canvases: Canvas[]): string[] {
+  return canvases
+    .filter((canvas) => canvas.itemIds.includes(itemId))
+    .map((canvas, index) => canvas.color ?? CANVAS_COLORS[index % CANVAS_COLORS.length]);
+}
+
+function itemCanUseDirectPreview(item: FolioItem): boolean {
+  return !item.missing && ["sketch", "ref", "anim"].includes(item.type)
+    && IMAGE_FILE_PATTERN.test(item.path);
 }
 
 function AppShell() {
@@ -189,6 +229,8 @@ function AppShell() {
   const [gridTagFilter, setGridTagFilter] = useState<GridTagFilter>("all");
   const [thumbUrls, setThumbUrls] = useState<ThumbnailUrls>({});
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [lastSelectedItemId, setLastSelectedItemId] = useState<string | null>(null);
   const [activeCanvasId, setActiveCanvasId] = useState<string | null>(null);
   const [reconciliation, setReconciliation] =
     useState<ReconciliationResult | null>(null);
@@ -296,16 +338,6 @@ function AppShell() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
-  useEffect(() => {
-    if (!selectedItemId) return undefined;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSelectedItemId(null);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedItemId]);
-
   const sortedItems = useMemo(
     () =>
       [...data.items].sort(
@@ -314,8 +346,92 @@ function AppShell() {
     [data.items],
   );
 
+  const visibleArchiveItems = useMemo(
+    () =>
+      gridTagFilter === "all"
+        ? sortedItems
+        : sortedItems.filter((item) => item.tagIds.includes(gridTagFilter)),
+    [gridTagFilter, sortedItems],
+  );
+
+  const selectedItemSet = useMemo(
+    () => new Set(selectedItemIds),
+    [selectedItemIds],
+  );
+
   const selectedItem =
     data.items.find((item) => item.id === selectedItemId) ?? null;
+
+  const clearSelection = useCallback(() => {
+    setSelectedItemIds([]);
+    setLastSelectedItemId(null);
+  }, []);
+
+  useEffect(() => {
+    if (gridTagFilter === "all") return;
+    if (!data.tags.some((tag) => tag.id === gridTagFilter)) {
+      setGridTagFilter("all");
+    }
+  }, [data.tags, gridTagFilter]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setSelectedItemId(null);
+      clearSelection();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [clearSelection]);
+
+  const handleItemOpen = useCallback<ItemOpenHandler>(
+    (itemId, event, orderedItems, rangeEnabled) => {
+      event.stopPropagation();
+
+      if (event.metaKey || event.ctrlKey) {
+        setSelectedItemId(null);
+        setLastSelectedItemId(itemId);
+        setSelectedItemIds((current) =>
+          current.includes(itemId)
+            ? current.filter((selectedId) => selectedId !== itemId)
+            : [...current, itemId],
+        );
+        return;
+      }
+
+      if (event.shiftKey && rangeEnabled) {
+        const fallbackStartId =
+          lastSelectedItemId ?? selectedItemIds[selectedItemIds.length - 1];
+        const startIndex = orderedItems.findIndex(
+          (item) => item.id === fallbackStartId,
+        );
+        const endIndex = orderedItems.findIndex((item) => item.id === itemId);
+
+        if (startIndex >= 0 && endIndex >= 0) {
+          const [from, to] =
+            startIndex < endIndex ? [startIndex, endIndex] : [endIndex, startIndex];
+          setSelectedItemId(null);
+          setSelectedItemIds(orderedItems.slice(from, to + 1).map((item) => item.id));
+          setLastSelectedItemId(itemId);
+          return;
+        }
+      }
+
+      setSelectedItemIds([itemId]);
+      setSelectedItemId(itemId);
+      setLastSelectedItemId(itemId);
+    },
+    [lastSelectedItemId, selectedItemIds],
+  );
+
+  const startArchiveItemDrag = useCallback(
+    (itemId: string, event: React.DragEvent<HTMLElement>) => {
+      const itemIds = selectedItemSet.has(itemId) ? selectedItemIds : [itemId];
+      event.dataTransfer.setData(ITEM_DRAG_MIME, JSON.stringify(itemIds));
+      event.dataTransfer.effectAllowed = "copy";
+    },
+    [selectedItemIds, selectedItemSet],
+  );
 
   const handleOpenDialog = useCallback(async () => {
     const filePaths = await window.folio.openFileDialog();
@@ -473,6 +589,61 @@ function AppShell() {
     [activeCanvasId, commitData],
   );
 
+  const addSelectedToActiveCanvas = useCallback(() => {
+    if (!selectedItemIds.length) return;
+    let targetCanvasId = activeCanvasId;
+    let createdCanvas: Canvas | null = null;
+
+    commitData((current) => {
+      let canvases = [...current.canvases];
+      if (!targetCanvasId || !canvases.some((canvas) => canvas.id === targetCanvasId)) {
+        createdCanvas = createCanvas(canvases.length);
+        targetCanvasId = createdCanvas.id;
+        canvases = [createdCanvas, ...canvases];
+      }
+
+      return {
+        ...current,
+        canvases: canvases.map((canvas) =>
+          canvas.id === targetCanvasId
+            ? addItemsToCanvas(canvas, selectedItemIds)
+            : canvas,
+        ),
+      };
+    }, createdCanvas ? "Board created" : "Selection added to board");
+
+    if (targetCanvasId) {
+      setActiveCanvasId(targetCanvasId);
+      window.location.hash = "/canvas";
+    }
+    clearSelection();
+  }, [activeCanvasId, clearSelection, commitData, selectedItemIds]);
+
+  const openSelectedOnNewCanvas = useCallback(() => {
+    if (!selectedItemIds.length) return;
+
+    const defaultTitle = `Board ${dataRef.current.canvases.length + 1}`;
+    const title = window.prompt("Board name", defaultTitle);
+    if (title === null) return;
+    const description = window.prompt("Opening note (optional)", "") ?? "";
+    const board = addItemsToCanvas(
+      createCanvas(dataRef.current.canvases.length, title, description),
+      selectedItemIds,
+    );
+
+    commitData(
+      (current) => ({
+        ...current,
+        canvases: [board, ...current.canvases],
+      }),
+      "Board created",
+    );
+
+    setActiveCanvasId(board.id);
+    window.location.hash = "/canvas";
+    clearSelection();
+  }, [clearSelection, commitData, selectedItemIds]);
+
   const deleteItem = useCallback(
     async (itemId: string) => {
       const item = dataRef.current.items.find((candidate) => candidate.id === itemId);
@@ -486,6 +657,9 @@ function AppShell() {
         const nextData = await window.folio.deleteItems([itemId]);
         putData(nextData);
         setSelectedItemId(null);
+        setSelectedItemIds((current) =>
+          current.filter((selectedId) => selectedId !== itemId),
+        );
         setThumbUrls((current) => {
           const next = { ...current };
           delete next[itemId];
@@ -537,33 +711,76 @@ function AppShell() {
         onDismiss={() => setReconciliationDismissed(true)}
       />
 
+      <SelectionBar
+        count={selectedItemIds.length}
+        onAddToBoard={addSelectedToActiveCanvas}
+        onClear={clearSelection}
+        onOpenNewBoard={openSelectedOnNewCanvas}
+      />
+
       <main className="app-main">
         <Routes>
           <Route path="/" element={<Navigate to="/strip" replace />} />
           <Route
             path="/strip"
             element={
-              <DailyStripView
-                items={sortedItems}
-                tags={data.tags}
-                thumbUrls={thumbUrls}
-                setThumbUrls={setThumbUrls}
-                onItemOpen={setSelectedItemId}
-              />
+              <ArchiveWorkspace
+                sidebar={
+                  <TagsSidebar
+                    items={sortedItems}
+                    tags={data.tags}
+                    canvases={data.canvases}
+                    thumbUrls={thumbUrls}
+                    setThumbUrls={setThumbUrls}
+                    tagFilter={gridTagFilter}
+                    setTagFilter={setGridTagFilter}
+                  />
+                }
+              >
+                <DailyStripView
+                  items={visibleArchiveItems}
+                  tags={data.tags}
+                  canvases={data.canvases}
+                  thumbUrls={thumbUrls}
+                  setThumbUrls={setThumbUrls}
+                  selectedItemIds={selectedItemIds}
+                  onBackgroundClick={clearSelection}
+                  onDragStart={startArchiveItemDrag}
+                  onItemOpen={handleItemOpen}
+                />
+              </ArchiveWorkspace>
             }
           />
           <Route
             path="/grid"
             element={
-              <GridView
-                items={sortedItems}
-                tags={data.tags}
-                thumbUrls={thumbUrls}
-                setThumbUrls={setThumbUrls}
-                tagFilter={gridTagFilter}
-                setTagFilter={setGridTagFilter}
-                onItemOpen={setSelectedItemId}
-              />
+              <ArchiveWorkspace
+                sidebar={
+                  <TagsSidebar
+                    items={sortedItems}
+                    tags={data.tags}
+                    canvases={data.canvases}
+                    thumbUrls={thumbUrls}
+                    setThumbUrls={setThumbUrls}
+                    tagFilter={gridTagFilter}
+                    setTagFilter={setGridTagFilter}
+                  />
+                }
+              >
+                <GridView
+                  items={sortedItems}
+                  tags={data.tags}
+                  canvases={data.canvases}
+                  thumbUrls={thumbUrls}
+                  setThumbUrls={setThumbUrls}
+                  tagFilter={gridTagFilter}
+                  setTagFilter={setGridTagFilter}
+                  selectedItemIds={selectedItemIds}
+                  onBackgroundClick={clearSelection}
+                  onDragStart={startArchiveItemDrag}
+                  onItemOpen={handleItemOpen}
+                />
+              </ArchiveWorkspace>
             }
           />
           <Route
@@ -575,6 +792,7 @@ function AppShell() {
                 setActiveCanvasId={setActiveCanvasId}
                 thumbUrls={thumbUrls}
                 setThumbUrls={setThumbUrls}
+                selectedItemIds={selectedItemIds}
                 commitData={commitData}
                 saveData={saveData}
                 clearDragState={() => {
@@ -665,22 +883,186 @@ function ReconciliationNotice({
   );
 }
 
+function SelectionBar({
+  count,
+  onAddToBoard,
+  onClear,
+  onOpenNewBoard,
+}: {
+  count: number;
+  onAddToBoard: () => void;
+  onClear: () => void;
+  onOpenNewBoard: () => void;
+}) {
+  if (!count) return null;
+
+  return (
+    <section className="selection-bar" aria-live="polite">
+      <strong>{formatCount(count, "item")} selected</strong>
+      <span>Drag onto a board or open on new board -&gt;</span>
+      <div className="selection-actions">
+        <button type="button" onClick={onAddToBoard}>
+          Add to active board
+        </button>
+        <button type="button" onClick={onOpenNewBoard}>
+          Open on new board
+        </button>
+        <button type="button" onClick={onClear}>
+          Clear
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function ArchiveWorkspace({
+  sidebar,
+  children,
+}: {
+  sidebar: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="archive-workspace">
+      {sidebar}
+      <div className="archive-route">{children}</div>
+    </section>
+  );
+}
+
+function TagsSidebar({
+  items,
+  tags,
+  canvases,
+  thumbUrls,
+  setThumbUrls,
+  tagFilter,
+  setTagFilter,
+}: {
+  items: FolioItem[];
+  tags: Tag[];
+  canvases: Canvas[];
+  thumbUrls: ThumbnailUrls;
+  setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
+  tagFilter: GridTagFilter;
+  setTagFilter: React.Dispatch<React.SetStateAction<GridTagFilter>>;
+}) {
+  const [expandedTagIds, setExpandedTagIds] = useState<string[]>([]);
+
+  const itemCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    items.forEach((item) => {
+      item.tagIds.forEach((tagId) => {
+        counts.set(tagId, (counts.get(tagId) ?? 0) + 1);
+      });
+    });
+    return counts;
+  }, [items]);
+
+  const toggleExpanded = (tagId: string) => {
+    setExpandedTagIds((current) =>
+      current.includes(tagId)
+        ? current.filter((expandedId) => expandedId !== tagId)
+        : [...current, tagId],
+    );
+  };
+
+  return (
+    <aside className="tags-sidebar" aria-label="Tags">
+      <div className="sidebar-heading">
+        <strong>Tags</strong>
+        <span>{formatCount(tags.length, "tag")}</span>
+      </div>
+
+      <button
+        className={`tag-sidebar-row ${tagFilter === "all" ? "active" : ""}`}
+        type="button"
+        onClick={() => setTagFilter("all")}
+      >
+        <span>All</span>
+        <small>{items.length}</small>
+      </button>
+
+      {tags.length ? (
+        tags.map((tag) => {
+          const tagItems = items.filter((item) => item.tagIds.includes(tag.id));
+          const expanded = expandedTagIds.includes(tag.id);
+          return (
+            <article className="tag-sidebar-item" key={tag.id}>
+              <div className="tag-sidebar-controls">
+                <button
+                  className={`tag-sidebar-row ${
+                    tag.id === tagFilter ? "active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => setTagFilter(tag.id)}
+                >
+                  <span>{tag.text}</span>
+                  <small>{itemCounts.get(tag.id) ?? 0}</small>
+                </button>
+                <button
+                  className="tag-expand-button"
+                  type="button"
+                  onClick={() => toggleExpanded(tag.id)}
+                  aria-label={`${expanded ? "Collapse" : "Expand"} ${tag.text}`}
+                >
+                  {expanded ? "Hide" : "Show"}
+                </button>
+              </div>
+
+              {expanded ? (
+                <div className="tag-thumbnail-strip">
+                  {tagItems.length ? (
+                    tagItems.slice(0, 8).map((item) => (
+                      <span className="mini-thumb" key={item.id} title={item.title}>
+                        <LazyThumbnail
+                          item={item}
+                          thumbUrls={thumbUrls}
+                          setThumbUrls={setThumbUrls}
+                        />
+                        <CanvasDots colors={canvasColorsForItem(item.id, canvases)} />
+                      </span>
+                    ))
+                  ) : (
+                    <span className="muted">No items</span>
+                  )}
+                </div>
+              ) : null}
+            </article>
+          );
+        })
+      ) : (
+        <p className="sidebar-empty">No user tags yet</p>
+      )}
+    </aside>
+  );
+}
+
 function DailyStripView({
   items,
   tags,
+  canvases,
   thumbUrls,
   setThumbUrls,
+  selectedItemIds,
+  onBackgroundClick,
+  onDragStart,
   onItemOpen,
 }: {
   items: FolioItem[];
   tags: Tag[];
+  canvases: Canvas[];
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
-  onItemOpen: (itemId: string) => void;
+  selectedItemIds: string[];
+  onBackgroundClick: () => void;
+  onDragStart: (itemId: string, event: React.DragEvent<HTMLElement>) => void;
+  onItemOpen: ItemOpenHandler;
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const groups = useMemo(() => groupItemsByDate(items), [items]);
   const dates = useMemo(() => buildDateRange(items), [items]);
+  const selectedSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -696,7 +1078,14 @@ function DailyStripView({
   }, []);
 
   return (
-    <section className="view-scroller strip-view" ref={scrollerRef} onScroll={handleScroll}>
+    <section
+      className="view-scroller strip-view"
+      ref={scrollerRef}
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) onBackgroundClick();
+      }}
+      onScroll={handleScroll}
+    >
       {items.length ? null : <EmptyState label="No archive items yet" />}
       {dates.map((date) => {
         const dayItems = groups.get(date) ?? [];
@@ -704,6 +1093,9 @@ function DailyStripView({
           <article
             className={`day-row ${dayItems.length ? "" : "day-row-empty"}`}
             key={date}
+            onMouseDown={(event) => {
+              if (event.currentTarget === event.target) onBackgroundClick();
+            }}
           >
             <div className="day-meta">
               <strong>{formatDateLabel(date)}</strong>
@@ -711,16 +1103,27 @@ function DailyStripView({
             </div>
 
             {dayItems.length ? (
-              <div className="strip-items">
+              <div
+                className="strip-items"
+                onMouseDown={(event) => {
+                  if (event.currentTarget === event.target) onBackgroundClick();
+                }}
+              >
                 {dayItems.map((item) => (
                   <ItemCard
                     compact
                     item={item}
                     tags={tags}
+                    canvasColors={canvasColorsForItem(item.id, canvases)}
                     key={item.id}
                     thumbUrls={thumbUrls}
                     setThumbUrls={setThumbUrls}
-                    onOpen={onItemOpen}
+                    isSelected={selectedSet.has(item.id)}
+                    selectedItemIds={selectedItemIds}
+                    onDragStart={onDragStart}
+                    onOpen={(itemId, event) =>
+                      onItemOpen(itemId, event, items, true)
+                    }
                   />
                 ))}
               </div>
@@ -737,19 +1140,27 @@ function DailyStripView({
 function GridView({
   items,
   tags,
+  canvases,
   thumbUrls,
   setThumbUrls,
   tagFilter,
   setTagFilter,
+  selectedItemIds,
+  onBackgroundClick,
+  onDragStart,
   onItemOpen,
 }: {
   items: FolioItem[];
   tags: Tag[];
+  canvases: Canvas[];
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   tagFilter: GridTagFilter;
   setTagFilter: React.Dispatch<React.SetStateAction<GridTagFilter>>;
-  onItemOpen: (itemId: string) => void;
+  selectedItemIds: string[];
+  onBackgroundClick: () => void;
+  onDragStart: (itemId: string, event: React.DragEvent<HTMLElement>) => void;
+  onItemOpen: ItemOpenHandler;
 }) {
   const filteredItems = useMemo(
     () =>
@@ -758,9 +1169,15 @@ function GridView({
         : items.filter((item) => item.tagIds.includes(tagFilter)),
     [items, tagFilter],
   );
+  const selectedSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
 
   return (
-    <section className="view-scroller grid-view">
+    <section
+      className="view-scroller grid-view"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) onBackgroundClick();
+      }}
+    >
       <div className="filter-bar">
         <button
           className={tagFilter === "all" ? "active" : ""}
@@ -782,15 +1199,26 @@ function GridView({
       </div>
 
       {filteredItems.length ? (
-        <div className="item-grid">
+        <div
+          className="item-grid"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) onBackgroundClick();
+          }}
+        >
           {filteredItems.map((item) => (
             <ItemCard
               item={item}
               tags={tags}
+              canvasColors={canvasColorsForItem(item.id, canvases)}
               key={item.id}
               thumbUrls={thumbUrls}
               setThumbUrls={setThumbUrls}
-              onOpen={onItemOpen}
+              isSelected={selectedSet.has(item.id)}
+              selectedItemIds={selectedItemIds}
+              onDragStart={onDragStart}
+              onOpen={(itemId, event) =>
+                onItemOpen(itemId, event, filteredItems, true)
+              }
             />
           ))}
         </div>
@@ -804,16 +1232,24 @@ function GridView({
 function ItemCard({
   item,
   tags,
+  canvasColors,
   thumbUrls,
   setThumbUrls,
+  isSelected,
+  selectedItemIds,
+  onDragStart,
   onOpen,
   compact = false,
 }: {
   item: FolioItem;
   tags: Tag[];
+  canvasColors: string[];
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
-  onOpen: (itemId: string) => void;
+  isSelected: boolean;
+  selectedItemIds: string[];
+  onDragStart: (itemId: string, event: React.DragEvent<HTMLElement>) => void;
+  onOpen: (itemId: string, event: React.MouseEvent) => void;
   compact?: boolean;
 }) {
   const itemTags = tagTextsForItem(item, tags);
@@ -822,16 +1258,19 @@ function ItemCard({
     <button
       className={`item-card ${compact ? "item-card-compact" : ""} ${
         item.missing ? "item-missing" : ""
-      }`}
+      } ${isSelected ? "item-selected" : ""}`}
+      draggable={!item.missing}
       type="button"
       title={item.path}
-      onClick={() => onOpen(item.id)}
+      onClick={(event) => onOpen(item.id, event)}
+      onDragStart={(event) => onDragStart(item.id, event)}
     >
       <LazyThumbnail
         item={item}
         thumbUrls={thumbUrls}
         setThumbUrls={setThumbUrls}
       />
+      <CanvasDots colors={canvasColors} />
       <span className="item-title">{item.title || basename(item.path)}</span>
       <span className="item-subtitle">
         {TYPE_LABELS[item.type]} · {basename(item.path)}
@@ -845,7 +1284,26 @@ function ItemCard({
           ))}
         </span>
       ) : null}
+      {isSelected && selectedItemIds.length > 1 ? (
+        <span className="selection-count">+{selectedItemIds.length - 1}</span>
+      ) : null}
     </button>
+  );
+}
+
+function CanvasDots({ colors }: { colors: string[] }) {
+  if (!colors.length) return <span className="canvas-membership-dots empty" />;
+
+  return (
+    <span className="canvas-membership-dots" aria-label={`${colors.length} boards`}>
+      {colors.slice(0, 6).map((color, index) => (
+        <span
+          key={`${color}-${index}`}
+          style={{ background: color }}
+          aria-hidden="true"
+        />
+      ))}
+    </span>
   );
 }
 
@@ -860,6 +1318,11 @@ function LazyThumbnail({
 }) {
   const shellRef = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
+  const [directSrc, setDirectSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDirectSrc(null);
+  }, [item.id, item.path]);
 
   useEffect(() => {
     const node = shellRef.current;
@@ -897,12 +1360,37 @@ function LazyThumbnail({
     };
   }, [item.id, setThumbUrls, thumbUrls, visible]);
 
-  const src = thumbUrls[item.id];
+  useEffect(() => {
+    if (!visible || !itemCanUseDirectPreview(item)) return undefined;
+
+    let cancelled = false;
+    window.folio
+      .getFileDataUrl(item.path)
+      .then((url) => {
+        if (!cancelled) setDirectSrc(url);
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [item.missing, item.path, item.type, visible]);
+
+  const src = directSrc ?? thumbUrls[item.id];
 
   return (
     <span className="thumb-shell" ref={shellRef}>
       {src ? (
-        <img loading="lazy" src={src} alt="" />
+        <img
+          loading="lazy"
+          src={src}
+          alt=""
+          onError={() => {
+            if (directSrc) setDirectSrc(null);
+          }}
+        />
       ) : (
         <span className="thumb-placeholder">{item.missing ? "Missing" : "Preview"}</span>
       )}
@@ -938,6 +1426,7 @@ function DetailDrawer({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tagInput, setTagInput] = useState("");
+  const drawerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     setTitle(item?.title ?? "");
@@ -945,10 +1434,24 @@ function DetailDrawer({
     setTagInput("");
   }, [item]);
 
+  useEffect(() => {
+    if (!item) return undefined;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (drawerRef.current?.contains(target)) return;
+      onClose();
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [item, onClose]);
+
   if (!item) return null;
 
   const itemTags = tagTextsForItem(item, tags);
-  const canvasCount = canvases.filter((canvas) => canvas.itemIds.includes(item.id)).length;
+  const itemCanvases = canvases.filter((canvas) => canvas.itemIds.includes(item.id));
 
   const saveTitle = () => {
     const trimmed = title.trim() || basename(item.path);
@@ -969,13 +1472,7 @@ function DetailDrawer({
 
   return (
     <>
-      <button
-        className="drawer-backdrop"
-        type="button"
-        aria-label="Close details"
-        onClick={onClose}
-      />
-      <aside className="detail-drawer" aria-label="Item details">
+      <aside className="detail-drawer" aria-label="Item details" ref={drawerRef}>
       <div className="drawer-header">
         <div>
           <p>{TYPE_LABELS[item.type]}</p>
@@ -1053,7 +1550,18 @@ function DetailDrawer({
 
       <div className="drawer-section">
         <div className="drawer-label">Board membership</div>
-        <p className="muted">{formatCount(canvasCount, "board")}</p>
+        {itemCanvases.length ? (
+          <div className="canvas-chip-list">
+            {itemCanvases.map((canvas) => (
+              <span className="canvas-chip" key={canvas.id}>
+                <span style={{ background: canvas.color }} aria-hidden="true" />
+                {canvas.title}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No boards</p>
+        )}
       </div>
 
       <div className="drawer-actions">
@@ -1082,6 +1590,7 @@ function CanvasView({
   setActiveCanvasId,
   thumbUrls,
   setThumbUrls,
+  selectedItemIds,
   commitData,
   saveData,
   clearDragState,
@@ -1091,6 +1600,7 @@ function CanvasView({
   setActiveCanvasId: React.Dispatch<React.SetStateAction<string | null>>;
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
+  selectedItemIds: string[];
   commitData: (updater: DataUpdater, message?: string) => void;
   saveData: (data: FolioData, message?: string) => void;
   clearDragState: () => void;
@@ -1105,6 +1615,7 @@ function CanvasView({
     kind: "item" | "reference";
     position: CanvasPosition;
   } | null>(null);
+  const [expandedCanvasIds, setExpandedCanvasIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!activeCanvas && data.canvases[0]) {
@@ -1128,7 +1639,11 @@ function CanvasView({
   );
 
   const createBoard = useCallback(() => {
-    const board = createCanvas(data.canvases.length);
+    const defaultTitle = `Board ${data.canvases.length + 1}`;
+    const title = window.prompt("Board name", defaultTitle);
+    if (title === null) return;
+    const description = window.prompt("Opening note (optional)", "") ?? "";
+    const board = createCanvas(data.canvases.length, title, description);
     setActiveCanvasId(board.id);
     commitData(
       (current) => ({
@@ -1160,6 +1675,22 @@ function CanvasView({
       updateCanvas(activeCanvas.id, (canvas) => addItemToCanvas(canvas, itemId), "Added");
     },
     [activeCanvas, updateCanvas],
+  );
+
+  const addDroppedItems = useCallback(
+    (itemIds: string[], position: CanvasPosition) => {
+      if (!activeCanvas || !itemIds.length) return;
+      const knownItemIds = new Set(data.items.map((item) => item.id));
+      const validItemIds = itemIds.filter((itemId) => knownItemIds.has(itemId));
+      if (!validItemIds.length) return;
+
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => addItemsToCanvas(canvas, validItemIds, position),
+        "Selection added to board",
+      );
+    },
+    [activeCanvas, data.items, updateCanvas],
   );
 
   const importToBoard = useCallback(async () => {
@@ -1330,6 +1861,17 @@ function CanvasView({
       clearDragState();
       if (!activeCanvas) return;
 
+      const itemPayload = event.dataTransfer.getData(ITEM_DRAG_MIME);
+      if (itemPayload) {
+        try {
+          const itemIds = JSON.parse(itemPayload) as string[];
+          addDroppedItems(itemIds, canvasPointFromEvent(event));
+        } catch (error) {
+          console.error(error);
+        }
+        return;
+      }
+
       const filePaths = Array.from(event.dataTransfer.files)
         .map((file) => window.folio.getPathForFile(file))
         .filter(Boolean);
@@ -1359,7 +1901,7 @@ function CanvasView({
         console.error(error);
       }
     },
-    [activeCanvas, canvasPointFromEvent, clearDragState, commitData],
+    [activeCanvas, addDroppedItems, canvasPointFromEvent, clearDragState, commitData],
   );
 
   const handleReferenceDragOver = useCallback((event: React.DragEvent) => {
@@ -1414,6 +1956,22 @@ function CanvasView({
     [activeCanvas, updateCanvas],
   );
 
+  const toggleCanvasExpanded = useCallback((canvasId: string) => {
+    setExpandedCanvasIds((current) =>
+      current.includes(canvasId)
+        ? current.filter((expandedId) => expandedId !== canvasId)
+        : [...current, canvasId],
+    );
+  }, []);
+
+  const openCanvas = useCallback(
+    (canvasId: string) => {
+      setActiveCanvasId(canvasId);
+      window.location.hash = "/canvas";
+    },
+    [setActiveCanvasId],
+  );
+
   if (!activeCanvas) {
     return (
       <section className="view-scroller canvas-empty">
@@ -1440,18 +1998,75 @@ function CanvasView({
           New board
         </button>
         <div className="canvas-list">
-          {data.canvases.map((canvas) => (
-            <button
-              className={canvas.id === activeCanvas.id ? "active" : ""}
-              key={canvas.id}
-              type="button"
-              onClick={() => setActiveCanvasId(canvas.id)}
-            >
-              <span style={{ background: canvas.color }} />
-              <strong>{canvas.title}</strong>
-              <small>{formatCount(canvas.itemIds.length, "item")}</small>
-            </button>
-          ))}
+          {data.canvases.map((canvas) => {
+            const expanded = expandedCanvasIds.includes(canvas.id);
+            const memberItems = canvas.itemIds
+              .map((itemId) => data.items.find((item) => item.id === itemId))
+              .filter(Boolean) as FolioItem[];
+            return (
+              <article
+                className={`canvas-list-item ${
+                  canvas.id === activeCanvas.id ? "active" : ""
+                }`}
+                key={canvas.id}
+              >
+                <button
+                  className="canvas-row"
+                  type="button"
+                  onClick={() => openCanvas(canvas.id)}
+                >
+                  <span
+                    className="canvas-row-dot"
+                    style={{ background: canvas.color }}
+                  />
+                  <span className="canvas-row-copy">
+                    <strong>{canvas.title}</strong>
+                    <small>{formatCount(canvas.itemIds.length, "item")}</small>
+                  </span>
+                  <span className="canvas-row-badges" aria-label="Board contents">
+                    <span>{formatCount(canvas.notes.length, "note")}</span>
+                    <span>{formatCount(canvas.references.length, "ref")}</span>
+                    <span>{formatCount(canvas.edges.length, "link")}</span>
+                  </span>
+                </button>
+                <button
+                  className="canvas-expand-button"
+                  type="button"
+                  onClick={() => toggleCanvasExpanded(canvas.id)}
+                >
+                  {expanded ? "Hide" : "Details"}
+                </button>
+
+                {expanded ? (
+                  <div className="canvas-list-details">
+                    <p>{canvas.description?.trim() || "No opening note"}</p>
+                    <div className="canvas-member-grid">
+                      {memberItems.length ? (
+                        memberItems.slice(0, 8).map((item) => (
+                          <span className="mini-thumb" key={item.id}>
+                            <LazyThumbnail
+                              item={item}
+                              thumbUrls={thumbUrls}
+                              setThumbUrls={setThumbUrls}
+                            />
+                          </span>
+                        ))
+                      ) : (
+                        <span className="muted">No items</span>
+                      )}
+                    </div>
+                    <button
+                      className="canvas-open-button"
+                      type="button"
+                      onClick={() => openCanvas(canvas.id)}
+                    >
+                      Open board
+                    </button>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
       </aside>
 
@@ -1481,6 +2096,7 @@ function CanvasView({
         <ArchiveRail
           items={data.items}
           activeItemIds={activeItemIds}
+          selectedItemIds={selectedItemIds}
           thumbUrls={thumbUrls}
           setThumbUrls={setThumbUrls}
           onAddItem={addItem}
@@ -1543,27 +2159,40 @@ function CanvasView({
 function ArchiveRail({
   items,
   activeItemIds,
+  selectedItemIds,
   thumbUrls,
   setThumbUrls,
   onAddItem,
 }: {
   items: FolioItem[];
   activeItemIds: Set<string>;
+  selectedItemIds: string[];
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   onAddItem: (itemId: string) => void;
 }) {
+  const selectedSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
+
   return (
     <div className="archive-rail">
       <span>Archive</span>
       {items.length ? (
         items.map((item) => {
           const isOnBoard = activeItemIds.has(item.id);
+          const isSelected = selectedSet.has(item.id);
           return (
           <button
-            className={isOnBoard ? "on-board" : ""}
+            className={`${isOnBoard ? "on-board" : ""} ${
+              isSelected ? "selected" : ""
+            }`}
+            draggable={!item.missing}
             key={item.id}
             type="button"
+            onDragStart={(event) => {
+              const itemIds = isSelected ? selectedItemIds : [item.id];
+              event.dataTransfer.setData(ITEM_DRAG_MIME, JSON.stringify(itemIds));
+              event.dataTransfer.effectAllowed = "copy";
+            }}
             onClick={() => {
               if (!isOnBoard) onAddItem(item.id);
             }}

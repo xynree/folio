@@ -161,20 +161,20 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [x] Tag input in drawer: type name + Enter to add, x to remove
 - [x] Store tag IDs in `item.tagIds[]`, deduplicate global records in `tags.json`
 - [x] Show tag chips on grid cards and in detail drawer
-- [ ] Sidebar TAGS section: list all tags with item count, expand to see thumbnail strip
-- [ ] Clicking a tag in sidebar filters the active view to items with that tag
+- [x] Sidebar TAGS section: list all tags with item count, expand to see thumbnail strip
+- [x] Clicking a tag in sidebar filters the active view to items with that tag
 
 ### 2.3 Multi-select
 
-- [ ] ⌘+click (macOS) / Ctrl+click to toggle selection
-- [ ] Shift+click for range select in grid view
-- [ ] Amber border on selected items
-- [ ] Selection hint bar: "N selected — drag onto a canvas or open on new canvas →"
-- [ ] Escape or click background to clear selection
+- [x] ⌘+click (macOS) / Ctrl+click to toggle selection
+- [x] Shift+click for range select in grid view
+- [x] Amber border on selected items
+- [x] Selection hint bar: "N selected — drag onto a canvas or open on new canvas →"
+- [x] Escape or click background to clear selection
 
 ### 2.4 Open items on a canvas
 
-- [ ] With items selected in strip/grid, user can drag them directly onto an open canvas, or use "open on new canvas" to create a blank canvas pre-populated with the selection
+- [x] With items selected in strip/grid, user can drag them directly onto an open canvas, or use "open on new canvas" to create a blank canvas pre-populated with the selection
 - [x] Detail drawer can add the current item to the active canvas, creating a new board if needed
 - [x] Canvas toolbar can import new archive items directly onto the active board
 - [x] New canvas: auto-assign color from warm palette, save to `folio.json`
@@ -183,10 +183,10 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 ### 2.5 Canvas sidebar list
 
 - [x] Each canvas row: colored dot, name, item count
-- [ ] Expand canvas: italic opening note, member thumbnail grid (max 8), "open canvas" button
+- [x] Expand canvas: italic opening note, member thumbnail grid (max 8), "open canvas" button
 - [x] "Open canvas" navigates to the canvas view with that canvas loaded
-- [ ] Canvas dots shown under strip thumbnails (one colored dot per canvas membership)
-- [ ] Canvas chips shown in detail drawer
+- [x] Canvas dots shown under strip thumbnails (one colored dot per canvas membership)
+- [x] Canvas chips shown in detail drawer
 
 ---
 
