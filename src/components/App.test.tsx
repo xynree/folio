@@ -5,6 +5,7 @@ import type { FolioData, FolioItem, ReconciliationResult } from "../types";
 import {
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,
+  CANVAS_WORLD_ORIGIN,
   ITEM_DRAG_MIME,
 } from "./folio/constants";
 import { AppShell } from "./App";
@@ -487,20 +488,32 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
   it("supports range multi-select and opening that selection on a new board", async () => {
     const app = setupFolio();
+    const user = userEvent.setup();
 
     await waitForArchive();
-    await userEvent.click(itemButton(/alpha/i));
+    await user.click(itemButton(/alpha/i));
     fireEvent.click(itemButton(/charlie/i), {
       shiftKey: true,
     });
 
     expect(screen.getByText("3 items selected")).not.toBeNull();
     expect(screen.getByText("Drag onto a board")).not.toBeNull();
+    const selectionPopup = screen
+      .getByText("3 items selected")
+      .closest(".selection-bar");
+    expect(selectionPopup).not.toBeNull();
+    expect(selectionPopup?.classList.contains("selection-bar-archive-top")).toBe(
+      true,
+    );
+    expect(archiveRoute().contains(selectionPopup)).toBe(true);
+    expect(selectionPopup?.parentElement?.classList.contains("app-shell")).toBe(
+      false,
+    );
     expect(
       screen.queryByRole("button", { name: /add to active board/i }),
     ).toBeNull();
     expect(screen.queryByText("+2")).toBeNull();
-    await userEvent.click(
+    await user.click(
       screen.getByRole("button", { name: /create new board with selection/i }),
     );
 
@@ -508,6 +521,16 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.canvases).toHaveLength(2);
     });
     expect(app.data.canvases[0].itemIds).toEqual(["alpha", "bravo", "charlie"]);
+    expect(screen.getByText("3 items · 0 notes · 0 references")).not.toBeNull();
+
+    await waitFor(() => {
+      expect(document.querySelectorAll(".canvas-card")).toHaveLength(3);
+    });
+    const canvasScroll = document.querySelector(".canvas-scroll") as HTMLElement;
+    await waitFor(() => {
+      expect(canvasScroll.scrollLeft).toBe(CANVAS_WORLD_ORIGIN - 80);
+      expect(canvasScroll.scrollTop).toBe(CANVAS_WORLD_ORIGIN - 80);
+    });
   });
 
   it("range selects across strip day sections in visual order", async () => {
@@ -902,10 +925,35 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await waitForArchive();
     await openBoardPanel(user);
     await user.click(screen.getByRole("button", { name: /^boards$/i }));
-    const boardButtons = screen.getAllByRole("button", { name: /board [12]/i });
+    const boardButtons = screen.getAllByRole("button", {
+      name: /^open board [12],/i,
+    });
     expect(boardButtons).toHaveLength(2);
+    expect(boardButtons[0].classList.contains("canvas-board-open-button")).toBe(
+      true,
+    );
+    expect(boardButtons[0].closest(".canvas-board-tile")).not.toBeNull();
+    expect(boardButtons[0].querySelector(".canvas-board-cover")).toBe(
+      boardButtons[0].firstElementChild,
+    );
+    expect(
+      boardButtons[0]
+        .querySelector(".canvas-board-cover")
+        ?.classList.contains("canvas-board-cover-1"),
+    ).toBe(true);
+    expect(
+      boardButtons[1]
+        .querySelector(".canvas-board-cover")
+        ?.classList.contains("canvas-board-cover-2"),
+    ).toBe(true);
+    expect(boardButtons[1].querySelectorAll(".canvas-board-cover-slot")).toHaveLength(
+      2,
+    );
     expect(boardButtons[0].querySelectorAll(".thumb-shell")).toHaveLength(1);
     expect(boardButtons[1].querySelectorAll(".thumb-shell")).toHaveLength(2);
+    expect(
+      boardButtons[1].querySelector(".canvas-board-tile-meta strong")?.textContent,
+    ).toBe("Board 2");
 
     await user.click(boardButtons[1]);
 
@@ -915,6 +963,76 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(document.querySelector(".canvas-board-copy strong")?.textContent).toBe(
       "Board 2",
     );
+  });
+
+  it("opens board edit and delete actions from the board grid menu", async () => {
+    const app = setupFolio({
+      data: makeData({
+        canvases: [
+          {
+            ...makeData().canvases[0],
+            id: "board-1",
+            title: "Board 1",
+            itemIds: ["alpha"],
+            positions: { alpha: { x: 80, y: 90 } },
+          },
+          {
+            ...makeData().canvases[0],
+            id: "board-2",
+            title: "Board 2",
+            color: "#385d56",
+            itemIds: ["bravo"],
+            positions: { bravo: { x: 80, y: 90 } },
+          },
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openBoardPanel(user);
+    await user.click(screen.getByRole("button", { name: /^boards$/i }));
+
+    await user.click(
+      screen.getByRole("button", { name: /more actions for board 2/i }),
+    );
+    const board2Menu = screen.getByRole("menu", {
+      name: /actions for board 2/i,
+    });
+    expect(within(board2Menu).getByRole("menuitem", { name: /edit/i })).not.toBeNull();
+    expect(
+      within(board2Menu).getByRole("menuitem", { name: /delete/i }),
+    ).not.toBeNull();
+
+    await user.click(within(board2Menu).getByRole("menuitem", { name: /edit/i }));
+    const boardDialog = await screen.findByRole("dialog", { name: /edit board/i });
+    expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
+    expect(document.querySelector(".canvas-board-copy")).toBeNull();
+    expect(boardDialog.classList.contains("board-edit-browser-dialog")).toBe(true);
+
+    const boardName = within(boardDialog).getByLabelText("Board name");
+    await user.clear(boardName);
+    await user.type(boardName, "Board Two");
+    await user.click(within(boardDialog).getByRole("button", { name: /save board/i }));
+    await waitFor(() => {
+      expect(app.data.canvases[1].title).toBe("Board Two");
+    });
+    expect(
+      screen.getByRole("button", { name: /^open board two,/i }),
+    ).not.toBeNull();
+
+    await user.click(within(boardDialog).getByLabelText(/close board tools/i));
+    await user.click(
+      screen.getByRole("button", { name: /more actions for board 1/i }),
+    );
+    const board1Menu = screen.getByRole("menu", {
+      name: /actions for board 1/i,
+    });
+    await user.click(within(board1Menu).getByRole("menuitem", { name: /delete/i }));
+
+    await waitFor(() => {
+      expect(app.data.canvases.map((canvas) => canvas.id)).toEqual(["board-2"]);
+    });
   });
 
   it("drops selected archive items directly onto the canvas", async () => {

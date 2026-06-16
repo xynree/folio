@@ -95,7 +95,10 @@ export function ItemCard({
           </span>
         ) : null}
       </button>
-      <div className="item-more" ref={menuRef}>
+      <div
+        className={`item-more ${menuOpen ? "item-more-open" : ""}`}
+        ref={menuRef}
+      >
         <button
           className="item-more-button icon-button"
           type="button"

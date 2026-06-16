@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeft,
   Edit3,
+  Ellipsis,
   ImagePlus,
   Minimize2,
   Plus,
@@ -40,6 +41,7 @@ import { CanvasViewport } from "./CanvasViewport";
 
 type CanvasDragKind = "item" | "reference" | "note";
 const CANVAS_OBJECT_DRAG_THRESHOLD = 4;
+const BOARD_BROWSER_PREVIEW_LIMIT = 3;
 
 export function CanvasView({
   data,
@@ -79,6 +81,10 @@ export function CanvasView({
   } | null>(null);
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
   const [boardBrowserOpen, setBoardBrowserOpen] = useState(false);
+  const [boardMenuCanvasId, setBoardMenuCanvasId] = useState<string | null>(null);
+  const [browserEditCanvasId, setBrowserEditCanvasId] = useState<string | null>(
+    null,
+  );
   const [boardTitleDraft, setBoardTitleDraft] = useState("");
   const [boardColorDraft, setBoardColorDraft] = useState(CANVAS_COLORS[0]);
   const [canvasZoom, setCanvasZoom] = useState(1);
@@ -86,6 +92,14 @@ export function CanvasView({
   const draggedObjectRef = useRef<{ kind: CanvasDragKind; id: string } | null>(
     null,
   );
+
+  const focusCanvasOrigin = useCallback(() => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const zoom = canvasZoomRef.current;
+    scroll.scrollLeft = CANVAS_WORLD_ORIGIN * zoom - 80 * zoom;
+    scroll.scrollTop = CANVAS_WORLD_ORIGIN * zoom - 80 * zoom;
+  }, []);
 
   useEffect(() => {
     if (!activeCanvas && data.canvases[0]) {
@@ -104,17 +118,40 @@ export function CanvasView({
   }, [activeCanvas?.id]);
 
   useEffect(() => {
+    if (!boardMenuCanvasId) return undefined;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".canvas-board-menu")) return;
+      setBoardMenuCanvasId(null);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [boardMenuCanvasId]);
+
+  useEffect(() => {
     if (!activeCanvas) return undefined;
-    const frame = window.requestAnimationFrame(() => {
-      const scroll = scrollRef.current;
-      if (!scroll) return;
-      const zoom = canvasZoomRef.current;
-      scroll.scrollLeft = CANVAS_WORLD_ORIGIN * zoom - 80 * zoom;
-      scroll.scrollTop = CANVAS_WORLD_ORIGIN * zoom - 80 * zoom;
+    const frames: number[] = [];
+    const timeouts: number[] = [];
+
+    focusCanvasOrigin();
+    frames.push(window.requestAnimationFrame(focusCanvasOrigin));
+    frames.push(
+      window.requestAnimationFrame(() => {
+        frames.push(window.requestAnimationFrame(focusCanvasOrigin));
+      }),
+    );
+    [120, 280].forEach((delay) => {
+      timeouts.push(window.setTimeout(focusCanvasOrigin, delay));
     });
 
-    return () => window.cancelAnimationFrame(frame);
-  }, [activeCanvas?.id]);
+    return () => {
+      frames.forEach((frame) => window.cancelAnimationFrame(frame));
+      timeouts.forEach((timeout) => window.clearTimeout(timeout));
+    };
+  }, [activeCanvas?.id, focusCanvasOrigin]);
 
   const itemsById = useMemo(
     () => new Map(data.items.map((item) => [item.id, item])),
@@ -131,12 +168,17 @@ export function CanvasView({
     [activeCanvas, itemsById],
   );
 
+  const browserEditCanvas =
+    data.canvases.find((canvas) => canvas.id === browserEditCanvasId) ?? null;
+
   const boardPreviewItemIds = useMemo(
     () =>
       boardBrowserOpen
         ? Array.from(
             new Set(
-              data.canvases.flatMap((canvas) => canvas.itemIds.slice(0, 8)),
+              data.canvases.flatMap((canvas) =>
+                canvas.itemIds.slice(0, BOARD_BROWSER_PREVIEW_LIMIT),
+              ),
             ),
           )
         : [],
@@ -241,39 +283,54 @@ export function CanvasView({
     [activeCanvas, updateCanvas],
   );
 
+  const deleteBoardById = useCallback(
+    (canvasId: string) => {
+      const canvasToDelete = data.canvases.find((canvas) => canvas.id === canvasId);
+      if (!canvasToDelete) return;
+
+      const confirmed = window.confirm(`Delete board "${canvasToDelete.title}"?`);
+      if (!confirmed) return;
+
+      let nextActiveCanvasId: string | null = null;
+      commitData(
+        (current) => {
+          const boardIndex = current.canvases.findIndex(
+            (canvas) => canvas.id === canvasId,
+          );
+          if (boardIndex === -1) return current;
+
+          const nextCanvases = current.canvases.filter(
+            (canvas) => canvas.id !== canvasId,
+          );
+          nextActiveCanvasId = nextCanvases.some(
+            (canvas) => canvas.id === activeCanvasId,
+          )
+            ? activeCanvasId
+            : nextCanvases[Math.min(boardIndex, nextCanvases.length - 1)]?.id ??
+              null;
+
+          return {
+            ...current,
+            canvases: nextCanvases,
+          };
+        },
+        "Board deleted",
+      );
+
+      setActiveCanvasId(nextActiveCanvasId);
+      setBoardToolsOpen(false);
+      setBoardMenuCanvasId(null);
+      if (!nextActiveCanvasId) {
+        setBoardBrowserOpen(true);
+      }
+    },
+    [activeCanvasId, commitData, data.canvases, setActiveCanvasId],
+  );
+
   const deleteBoard = useCallback(() => {
     if (!activeCanvas) return;
-    const confirmed = window.confirm(`Delete board "${activeCanvas.title}"?`);
-    if (!confirmed) return;
-
-    let nextActiveCanvasId: string | null = null;
-    commitData(
-      (current) => {
-        const boardIndex = current.canvases.findIndex(
-          (canvas) => canvas.id === activeCanvas.id,
-        );
-        if (boardIndex === -1) return current;
-
-        const nextCanvases = current.canvases.filter(
-          (canvas) => canvas.id !== activeCanvas.id,
-        );
-        nextActiveCanvasId =
-          nextCanvases[Math.min(boardIndex, nextCanvases.length - 1)]?.id ?? null;
-
-        return {
-          ...current,
-          canvases: nextCanvases,
-        };
-      },
-      "Board deleted",
-    );
-
-    setActiveCanvasId(nextActiveCanvasId);
-    setBoardToolsOpen(false);
-    if (!nextActiveCanvasId) {
-      setBoardBrowserOpen(true);
-    }
-  }, [activeCanvas, commitData, setActiveCanvasId]);
+    deleteBoardById(activeCanvas.id);
+  }, [activeCanvas, deleteBoardById]);
 
   const addNote = useCallback(() => {
     if (!activeCanvas) return;
@@ -549,20 +606,21 @@ export function CanvasView({
     [activeCanvas, updateCanvas],
   );
 
-  const saveBoardSettings = useCallback(() => {
-    if (!activeCanvas) return;
+  const saveBoardSettingsForCanvas = useCallback((canvasToSave: Canvas | null) => {
+    if (!canvasToSave) return;
     const trimmed = boardTitleDraft.trim();
-    const nextTitle = trimmed || activeCanvas.title;
-    const nextColor = boardColorDraft || activeCanvas.color || CANVAS_COLORS[0];
-    const currentColor = activeCanvas.color ?? CANVAS_COLORS[0];
+    const nextTitle = trimmed || canvasToSave.title;
+    const nextColor =
+      boardColorDraft || canvasToSave.color || CANVAS_COLORS[0];
+    const currentColor = canvasToSave.color ?? CANVAS_COLORS[0];
 
     setBoardTitleDraft(nextTitle);
     setBoardColorDraft(nextColor);
 
-    if (nextTitle === activeCanvas.title && nextColor === currentColor) return;
+    if (nextTitle === canvasToSave.title && nextColor === currentColor) return;
 
     updateCanvas(
-      activeCanvas.id,
+      canvasToSave.id,
       (canvas) => ({
         ...canvas,
         title: nextTitle,
@@ -570,7 +628,7 @@ export function CanvasView({
       }),
       "Board updated",
     );
-  }, [activeCanvas, boardColorDraft, boardTitleDraft, updateCanvas]);
+  }, [boardColorDraft, boardTitleDraft, updateCanvas]);
 
   const openCanvas = useCallback(
     (canvasId: string) => {
@@ -580,10 +638,103 @@ export function CanvasView({
     [setActiveCanvasId],
   );
 
+  const editCanvasFromBrowser = useCallback(
+    (canvasId: string) => {
+      const canvasToEdit = data.canvases.find((canvas) => canvas.id === canvasId);
+      if (!canvasToEdit) return;
+
+      setBoardMenuCanvasId(null);
+      setBoardTitleDraft(canvasToEdit.title);
+      setBoardColorDraft(canvasToEdit.color ?? CANVAS_COLORS[0]);
+      setBrowserEditCanvasId(canvasId);
+    },
+    [data.canvases],
+  );
+
   const createBoardFromBrowser = useCallback(() => {
     onCreateBoard();
     setBoardBrowserOpen(false);
   }, [onCreateBoard]);
+
+  const renderBoardEditDialog = (
+    canvasToEdit: Canvas,
+    {
+      className = "",
+      onClose,
+      onDelete,
+    }: {
+      className?: string;
+      onClose: () => void;
+      onDelete: () => void;
+    },
+  ) => (
+    <div
+      className={`board-edit-popover ${className}`.trim()}
+      role="dialog"
+      aria-label="Edit board"
+    >
+      <div className="board-edit-popover-header">
+        <strong>Edit board</strong>
+        <button
+          className="icon-button board-edit-close"
+          type="button"
+          onClick={onClose}
+          aria-label="Close board tools"
+          title="Close board tools"
+        >
+          <ButtonIcon icon={X} />
+        </button>
+      </div>
+      <label>
+        <span>Board name</span>
+        <input
+          value={boardTitleDraft}
+          onChange={(event) => setBoardTitleDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              saveBoardSettingsForCanvas(canvasToEdit);
+            }
+          }}
+        />
+      </label>
+      <label className="board-color-field">
+        <span>Board color</span>
+        <span className="board-color-control">
+          <input
+            type="color"
+            aria-label="Board color"
+            value={boardColorDraft}
+            onChange={(event) => setBoardColorDraft(event.target.value)}
+          />
+          <small>{boardColorDraft}</small>
+        </span>
+      </label>
+      <div
+        className="board-edit-action-bar"
+        role="toolbar"
+        aria-label="Board actions"
+      >
+        <button
+          className="board-edit-save"
+          type="button"
+          onClick={() => saveBoardSettingsForCanvas(canvasToEdit)}
+        >
+          <ButtonIcon icon={Save} />
+          Save board
+        </button>
+        <button
+          className="board-edit-action board-edit-delete"
+          type="button"
+          onClick={onDelete}
+          aria-label="Delete board"
+          title="Delete board"
+        >
+          <ButtonIcon icon={Trash2} />
+        </button>
+      </div>
+    </div>
+  );
 
   const renderBoardBrowser = () => (
     <section className="canvas-workspace canvas-board-browser">
@@ -619,42 +770,119 @@ export function CanvasView({
             const memberItems = canvas.itemIds
               .map((itemId) => itemsById.get(itemId))
               .filter(Boolean) as FolioItem[];
+            const previewItems = memberItems.slice(0, BOARD_BROWSER_PREVIEW_LIMIT);
+            const previewCount = Math.min(
+              previewItems.length,
+              BOARD_BROWSER_PREVIEW_LIMIT,
+            );
             return (
-              <button
-                className={`canvas-list-item ${
+              <article
+                className={`canvas-board-tile ${
                   canvas.id === activeCanvas?.id ? "active" : ""
                 }`}
                 key={canvas.id}
-                type="button"
-                onClick={() => openCanvas(canvas.id)}
               >
-                <span className="canvas-row">
+                <button
+                  className="canvas-board-open-button"
+                  type="button"
+                  aria-label={`Open ${canvas.title}, ${formatCount(
+                    canvas.itemIds.length,
+                    "item",
+                  )}`}
+                  onClick={() => openCanvas(canvas.id)}
+                >
                   <span
-                    className="canvas-row-dot"
-                    style={{ background: canvas.color }}
-                  />
-                  <span className="canvas-row-copy">
-                    <strong>{canvas.title}</strong>
-                    <small>{formatCount(canvas.itemIds.length, "item")}</small>
-                  </span>
-                </span>
-                <span className="canvas-member-grid">
-                  {memberItems.length ? (
-                    memberItems.slice(0, 8).map((item) => (
-                      <span className="mini-thumb" key={item.id}>
-                        <LazyThumbnail
-                          item={item}
-                          thumbUrls={thumbUrls}
-                          setThumbUrls={setThumbUrls}
-                          requestThumbnail={false}
+                    className={`canvas-board-cover canvas-board-cover-${previewCount}`}
+                  >
+                    {previewItems.length ? (
+                      previewItems.map((item, index) => (
+                        <span
+                          className={`canvas-board-cover-slot canvas-board-cover-slot-${
+                            index + 1
+                          }`}
+                          key={item.id}
+                        >
+                          <LazyThumbnail
+                            item={item}
+                            thumbUrls={thumbUrls}
+                            setThumbUrls={setThumbUrls}
+                            requestThumbnail={false}
+                          />
+                        </span>
+                      ))
+                    ) : (
+                      <span className="canvas-board-cover-empty">
+                        <span
+                          className="canvas-board-cover-dot"
+                          style={{ background: canvas.color }}
                         />
                       </span>
-                    ))
-                  ) : (
-                    <span className="muted">No items</span>
-                  )}
+                    )}
+                  </span>
+                  <span className="canvas-board-tile-meta">
+                    <span className="canvas-board-tile-title">
+                      <span
+                        className="canvas-board-tile-dot"
+                        style={{ background: canvas.color }}
+                      />
+                      <strong title={canvas.title}>{canvas.title}</strong>
+                    </span>
+                    <small>{formatCount(canvas.itemIds.length, "item")}</small>
+                  </span>
+                </button>
+                <span
+                  className={`canvas-board-menu ${
+                    boardMenuCanvasId === canvas.id ? "canvas-board-menu-open" : ""
+                  }`}
+                >
+                  <button
+                    className="icon-button canvas-board-menu-button"
+                    type="button"
+                    aria-label={`More actions for ${canvas.title}`}
+                    aria-haspopup="menu"
+                    aria-expanded={boardMenuCanvasId === canvas.id}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setBoardMenuCanvasId((current) =>
+                        current === canvas.id ? null : canvas.id,
+                      );
+                    }}
+                  >
+                    <ButtonIcon icon={Ellipsis} />
+                  </button>
+                  {boardMenuCanvasId === canvas.id ? (
+                    <span
+                      className="canvas-board-menu-popover"
+                      role="menu"
+                      aria-label={`Actions for ${canvas.title}`}
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          editCanvasFromBrowser(canvas.id);
+                        }}
+                      >
+                        <ButtonIcon icon={Edit3} />
+                        Edit
+                      </button>
+                      <button
+                        className="danger-menu-item"
+                        type="button"
+                        role="menuitem"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          deleteBoardById(canvas.id);
+                        }}
+                      >
+                        <ButtonIcon icon={Trash2} />
+                        Delete
+                      </button>
+                    </span>
+                  ) : null}
                 </span>
-              </button>
+              </article>
             );
           })}
         </div>
@@ -671,6 +899,17 @@ export function CanvasView({
           </div>
         </div>
       )}
+
+      {browserEditCanvas
+        ? renderBoardEditDialog(browserEditCanvas, {
+            className: "board-edit-browser-dialog",
+            onClose: () => setBrowserEditCanvasId(null),
+            onDelete: () => {
+              deleteBoardById(browserEditCanvas.id);
+              setBrowserEditCanvasId(null);
+            },
+          })
+        : null}
     </section>
   );
 
@@ -741,70 +980,12 @@ export function CanvasView({
             </button>
           </div>
 
-          {boardToolsOpen ? (
-            <div className="board-edit-popover" role="dialog" aria-label="Edit board">
-              <div className="board-edit-popover-header">
-                <strong>Edit board</strong>
-                <button
-                  className="icon-button board-edit-close"
-                  type="button"
-                  onClick={() => setBoardToolsOpen(false)}
-                  aria-label="Close board tools"
-                  title="Close board tools"
-                >
-                  <ButtonIcon icon={X} />
-                </button>
-              </div>
-              <label>
-                <span>Board name</span>
-                <input
-                  value={boardTitleDraft}
-                  onChange={(event) => setBoardTitleDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      saveBoardSettings();
-                    }
-                  }}
-                />
-              </label>
-              <label className="board-color-field">
-                <span>Board color</span>
-                <span className="board-color-control">
-                  <input
-                    type="color"
-                    aria-label="Board color"
-                    value={boardColorDraft}
-                    onChange={(event) => setBoardColorDraft(event.target.value)}
-                  />
-                  <small>{boardColorDraft}</small>
-                </span>
-              </label>
-              <div
-                className="board-edit-action-bar"
-                role="toolbar"
-                aria-label="Board actions"
-              >
-                <button
-                  className="board-edit-save"
-                  type="button"
-                  onClick={saveBoardSettings}
-                >
-                  <ButtonIcon icon={Save} />
-                  Save board
-                </button>
-                <button
-                  className="board-edit-action board-edit-delete"
-                  type="button"
-                  onClick={deleteBoard}
-                  aria-label="Delete board"
-                  title="Delete board"
-                >
-                  <ButtonIcon icon={Trash2} />
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {boardToolsOpen && activeCanvas
+            ? renderBoardEditDialog(activeCanvas, {
+                onClose: () => setBoardToolsOpen(false),
+                onDelete: deleteBoard,
+              })
+            : null}
         </header>
 
         <CanvasViewport

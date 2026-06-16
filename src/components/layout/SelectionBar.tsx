@@ -14,8 +14,10 @@ export function SelectionBar({
   if (!count) return null;
 
   return (
-    <section className="selection-bar" aria-live="polite">
-      <div className="selection-bar-spacer" aria-hidden="true" />
+    <section
+      className="selection-bar selection-bar-archive-top"
+      aria-live="polite"
+    >
       <div className="selection-message">
         <strong>{formatCount(count, "item")} selected</strong>
         <span>Drag onto a board</span>

@@ -713,12 +713,6 @@ export function AppShell() {
         onDismiss={() => setReconciliationDismissed(true)}
       />
 
-      <SelectionBar
-        count={selectedItemIds.length}
-        onClear={clearSelection}
-        onOpenNewBoard={openSelectedOnNewCanvas}
-      />
-
       <main className="app-main">
         <section
           ref={studioWorkspaceRef}
@@ -752,6 +746,11 @@ export function AppShell() {
                 />
               }
             >
+              <SelectionBar
+                count={selectedItemIds.length}
+                onClear={clearSelection}
+                onOpenNewBoard={openSelectedOnNewCanvas}
+              />
               <div className="archive-floating-actions">
                 <label className="archive-scale-control">
                   <span>Size</span>
