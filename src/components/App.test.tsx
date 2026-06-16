@@ -1039,6 +1039,62 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
+  it("drops archive cards onto board grid tiles without opening the board", async () => {
+    const app = setupFolio({
+      data: makeData({
+        canvases: [
+          {
+            ...makeData().canvases[0],
+            id: "board-1",
+            title: "Board 1",
+            itemIds: [],
+            positions: {},
+          },
+          {
+            ...makeData().canvases[0],
+            id: "board-2",
+            title: "Board 2",
+            color: "#385d56",
+            itemIds: [],
+            positions: {},
+          },
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openBoardPanel(user);
+    await user.click(screen.getByRole("button", { name: /^boards$/i }));
+
+    const board2Tile = screen
+      .getByRole("button", { name: /^open board 2,/i })
+      .closest(".canvas-board-tile") as HTMLElement;
+    expect(board2Tile).not.toBeNull();
+
+    const dataTransfer = {
+      dropEffect: "move",
+      types: [ITEM_DRAG_MIME],
+      getData: (type: string) =>
+        type === ITEM_DRAG_MIME ? JSON.stringify(["alpha"]) : "",
+    };
+
+    fireEvent.dragOver(board2Tile, { dataTransfer });
+    expect(board2Tile.classList.contains("canvas-board-tile-drop-target")).toBe(
+      true,
+    );
+    fireEvent.drop(board2Tile, { dataTransfer });
+
+    await waitFor(() => {
+      expect(app.data.canvases[1].itemIds).toEqual(["alpha"]);
+    });
+    expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
+    expect(document.querySelector(".canvas-board-copy")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /^open board 2, 1 item/i }),
+    ).not.toBeNull();
+  });
+
   it("drops selected archive items directly onto the canvas", async () => {
     const app = setupFolio();
     const user = userEvent.setup();

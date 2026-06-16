@@ -2034,6 +2034,13 @@ button svg {
     0 12px 26px rgba(91, 61, 35, 0.16);
 }
 
+.canvas-board-tile-drop-target .canvas-board-cover {
+  border-color: #385d56;
+  box-shadow:
+    0 0 0 3px rgba(56, 93, 86, 0.22),
+    0 14px 30px rgba(56, 93, 86, 0.18);
+}
+
 .canvas-board-cover {
   position: relative;
   display: grid;

@@ -85,6 +85,7 @@ export function CanvasView({
   const [browserEditCanvasId, setBrowserEditCanvasId] = useState<string | null>(
     null,
   );
+  const [boardDropCanvasId, setBoardDropCanvasId] = useState<string | null>(null);
   const [boardTitleDraft, setBoardTitleDraft] = useState("");
   const [boardColorDraft, setBoardColorDraft] = useState(CANVAS_COLORS[0]);
   const [canvasZoom, setCanvasZoom] = useState(1);
@@ -656,6 +657,66 @@ export function CanvasView({
     setBoardBrowserOpen(false);
   }, [onCreateBoard]);
 
+  const hasDraggedItems = useCallback((event: React.DragEvent) => {
+    return Array.from(event.dataTransfer.types).includes(ITEM_DRAG_MIME);
+  }, []);
+
+  const addDraggedItemsToBoard = useCallback(
+    (event: React.DragEvent<HTMLElement>, canvasId: string) => {
+      const itemPayload = event.dataTransfer.getData(ITEM_DRAG_MIME);
+      if (!itemPayload) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      setBoardDropCanvasId(null);
+      clearDragState();
+
+      try {
+        const itemIds = JSON.parse(itemPayload) as string[];
+        const knownItemIds = new Set(data.items.map((item) => item.id));
+        const validItemIds = itemIds.filter((itemId) => knownItemIds.has(itemId));
+        if (!validItemIds.length) return;
+
+        commitData(
+          (current) => ({
+            ...current,
+            canvases: current.canvases.map((canvas) =>
+              canvas.id === canvasId
+                ? addItemsToCanvas(canvas, validItemIds)
+                : canvas,
+            ),
+          }),
+          `${formatCount(validItemIds.length, "item")} added to board`,
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [clearDragState, commitData, data.items],
+  );
+
+  const handleBoardTileDragOver = useCallback(
+    (event: React.DragEvent<HTMLElement>, canvasId: string) => {
+      if (!hasDraggedItems(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      setBoardDropCanvasId(canvasId);
+    },
+    [hasDraggedItems],
+  );
+
+  const handleBoardTileDragLeave = useCallback(
+    (event: React.DragEvent<HTMLElement>, canvasId: string) => {
+      const relatedTarget = event.relatedTarget;
+      if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) {
+        return;
+      }
+      setBoardDropCanvasId((current) => (current === canvasId ? null : current));
+    },
+    [],
+  );
+
   const renderBoardEditDialog = (
     canvasToEdit: Canvas,
     {
@@ -779,8 +840,13 @@ export function CanvasView({
               <article
                 className={`canvas-board-tile ${
                   canvas.id === activeCanvas?.id ? "active" : ""
+                } ${
+                  boardDropCanvasId === canvas.id ? "canvas-board-tile-drop-target" : ""
                 }`}
                 key={canvas.id}
+                onDragOver={(event) => handleBoardTileDragOver(event, canvas.id)}
+                onDragLeave={(event) => handleBoardTileDragLeave(event, canvas.id)}
+                onDrop={(event) => addDraggedItemsToBoard(event, canvas.id)}
               >
                 <button
                   className="canvas-board-open-button"
