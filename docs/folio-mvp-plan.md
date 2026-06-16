@@ -22,10 +22,10 @@
 
 ### 1.2 Define folder structure and JSON schema
 
-- [x] Create `~/Documents/Folio/items/` and year/month folder structure on first import (e.g. `~/Documents/Folio/items/2026/02-february/`)
+- [x] Create `~/Documents/Folio/items/` and year/month folder structure on first import (e.g. `~/Documents/Folio/items/2026/02_february/`)
 - [x] Create `~/Documents/Folio/references/`, `~/Documents/Folio/.folio/thumbs/` on first launch if they don't exist
 - [x] Define and document the split JSON schema (folio.json, tags.json, canvases.json)
-- [x] Write TypeScript types for the full schema (`src/shared/types.ts`, imported by both main and renderer)
+- [x] Write TypeScript types for the full schema (`src/types/`, imported by both main and renderer)
 
 ```
 ~/Documents/Folio/
@@ -48,7 +48,7 @@
     folio.json          ← items metadata and schema version
     tags.json           ← global tags list
     canvases.json       ← canvas structures and positions
-    thumbs/             ← generated thumbnails (400px JPEGs, regenerable)
+    thumbs/             ← generated small thumbnails and placeholders, regenerable
 ```
 
 Folder names: year as `YYYY`, month as `MM_monthname` (e.g. `02_february`) inside the `items/` directory. Images sit loose in the month folder — no day subfolders. Folder path always determined by **import date**, never file creation date.
@@ -56,8 +56,8 @@ Folder names: year as `YYYY`, month as `MM_monthname` (e.g. `02_february`) insid
 ### 1.3 IPC bridge (preload layer)
 
 - [x] Set `contextIsolation: true`, `nodeIntegration: false` on `BrowserWindow`
-- [x] Write `preload/index.ts` — expose `window.folio.*` API via `contextBridge`
-- [x] Wire each method to an `ipcMain.handle()` in `main/index.ts`
+- [x] Write `src/preload.ts` — expose `window.folio.*` API via `contextBridge`
+- [x] Wire each method to an `ipcMain.handle()` in `src/main/base.manager.ts`
 - [x] Add TypeScript declaration file so the renderer gets full type checking on `window.folio`
 
 ```typescript
@@ -65,13 +65,16 @@ Folder names: year as `YYYY`, month as `MM_monthname` (e.g. `02_february`) insid
 window.folio.getFolioData();
 window.folio.saveFolioData(data);
 window.folio.copyToFolio(filePaths);
+window.folio.importToFolio();
 window.folio.copyReference(canvasId, filePaths);
 window.folio.deleteItems(itemIds);
 window.folio.openFileDialog();
 window.folio.ensureThumbnails(itemIds);
+window.folio.ensureReferenceThumbnail(referenceId, filePath);
 window.folio.getFileDataUrl(filePath);
 window.folio.getReconciliationResult(); // called once on launch by renderer
-window.folio.openInFinder(filename);
+window.folio.openInFinder(filePath);
+window.folio.getPathForFile(file);
 
 // Events (main → renderer)
 window.folio.onFilesAdded(callback);
@@ -79,13 +82,13 @@ window.folio.onFilesAdded(callback);
 
 ### 1.4 File watcher
 
-- [x] Install `chokidar`, start watching `~/Documents/Folio/` recursively (excluding `.folio/` and `references/`) from main process on app launch
+- [x] Install `chokidar`, start watching `~/Documents/Folio/items/` recursively from main process on app launch
 - [x] On new file detected: check hash against all known `item.hash` values — if it matches an existing item, update `item.path` and clear any `missing` flag rather than creating a duplicate entry
-- [x] On new file with no matching hash: date is always the current import date (`new Date()`), infer type from extension (`jpg/png/webp/heic` → sketch, `mp3/wav/aiff` → music, `mp4/mov/gif` → animation), generate ID with `nanoid`, append to `folio.json`, emit `files-added` IPC event
+- [x] On new file with no matching hash: date is always the current import date (`new Date()`), infer type from extension (`jpg/png/webp/heic` → sketch, `mp3/wav/aiff` → music, `mp4/mov/gif` → animation, `txt/md/rtf/docx` → text), generate ID with `nanoid`, append to `folio.json`, emit `files-added` IPC event
 - [x] Debounce watcher at 300ms to batch rapid drops
 - [x] On file deleted: mark item `missing: true` in `folio.json` rather than removing the entry — metadata, tags, and canvas membership are preserved
 
-### 1.5 Filesystem operations (`main/fs.ts`)
+### 1.5 Filesystem operations (`src/main/*`)
 
 - [x] `saveFolioData()`: atomic writes — split data and write to respective `.json.tmp` files, then rename over target files; the OS-level rename is the crash guard
 - [x] `copyToFolio()`: resolve destination as `~/Documents/Folio/items/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix
@@ -107,11 +110,14 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 1.7 Thumbnail generation
 
-- [x] Use `nativeImage.createThumbnailFromPath(path, { width: 400, height: 400 })` — built into Electron, no extra dependency
-- [x] Write generated thumbnail to `~/Folio/.folio/thumbs/<id>.jpg` via `thumb.toJPEG(80)`
-- [x] `ensureThumbnails(ids[])`: skip already-cached items, process missing ones sequentially
-- [x] For audio files: create a static SVG waveform placeholder in the thumbs cache under that item's ID
+- [x] Use `nativeImage.createThumbnailFromPath(path, { width: 320, height: 320 })` — built into Electron, no extra dependency
+- [x] Write generated archive thumbnails to `~/Documents/Folio/.folio/thumbs/<id>-small.jpg` via `thumb.toJPEG(72)`
+- [x] Write generated reference thumbnails to `~/Documents/Folio/.folio/thumbs/reference-<reference-id>-small.jpg`
+- [x] `ensureThumbnails(ids[])`: skip already-cached items, process missing ones sequentially, and repair missing flags when files have reappeared
+- [x] `ensureReferenceThumbnail(referenceId, path)`: generate a small cache image for canvas-only reference files
+- [x] For audio, text, unsupported media, and missing files: create static SVG placeholders in the thumbs cache
 - [x] Renderer loads thumbnails from the main-process `folio://thumb/...` protocol so dev-server origins do not block local media
+- [x] Renderer batches visible thumbnail requests in `LazyThumbnail` so many cards entering the viewport do not fan out into one IPC call per card
 
 ### 1.8 Drop files into the app
 
@@ -123,25 +129,37 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 1.9 Import button
 
-- [x] Import button next to the Strip/Grid selector calls `window.folio.openFileDialog()` → main calls `dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })`
-- [x] Same `copyToFolio` path as drag-and-drop
+- [x] Floating Import button next to the size control and Strip/Grid selector calls `window.folio.importToFolio()`
+- [x] Main process prompts for either local files or, on macOS, the Photos picker helper
+- [x] Local file imports use the same `copyToFolio` path as drag-and-drop
+- [x] Photos imports export selected Photos library assets to a temporary folder, copy them into Folio, and clean up the temporary export folder
 
 ### 1.10 Daily strip view
 
 - [x] Render all dates from earliest item to today, most recent at top
-- [x] Empty date rows: faint dash line (gaps are part of the record, not hidden)
+- [x] Empty date rows: faint dash line when no tag filter is active (gaps are part of the record, not hidden)
+- [x] Hide empty date rows when a tag filter is active so selected tags do not render unrelated day headers
 - [x] Thumbnails lazy-loaded with `IntersectionObserver`
 - [x] Scroll position persisted in `sessionStorage`
 
 ### 1.11 Grid view
 
 - [x] CSS grid: `auto-fill, minmax(148px, 1fr)`
+- [x] Sort most recent first automatically
 - [x] Grid filter pills show `All` plus only user-created tags from `tags.json`
 - [x] Same lazy thumbnail loading as strip
 
 ### 1.12 Status bar
 
 - [x] Display: N items · N canvases · N tags · N gaps · `~/Documents/Folio/`
+
+### 1.13 Archive controls and heatmap
+
+- [x] Floating archive action bar includes Size, Strip/Grid icon-only toggle, and Import controls
+- [x] Size scale ranges from 50% to 200% and scales thumbnails, card text, spacing, and board dots
+- [x] Bottom heatmap is always part of the archive layout rather than a separate mode
+- [x] Heatmap uses green intensity with a max bucket of 8 uploads per day
+- [x] Heatmap can minimize/restore with a transition and scroll horizontally when it overflows
 
 ---
 
@@ -153,7 +171,7 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [x] Details open in a centered modal with a light blurred overlay so the rest of the UI is not interactive
 - [x] Show: thumbnail preview, title, notes/description, file type, and board membership chips
 - [x] Title/notes edits stay local until the user clicks `Save`, then persist with `saveFolioData`
-- [x] "Show in Finder" button: `window.folio.openInFinder(filename)`
+- [x] "Show in Finder" button: `window.folio.openInFinder(filePath)`
 - [x] Delete button moves the file to Trash, removes metadata, and clears canvas memberships
 - [x] Click outside or press Escape to close
 
@@ -172,26 +190,28 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [x] ⌘+click (macOS) / Ctrl+click to toggle selection
 - [x] Shift+click for range select in strip and grid views
 - [x] Amber border on selected items
-- [x] Selection hint bar: "N selected — drag onto a board or open on new board →"
+- [x] Selection hint bar: "N items selected" and "Drag onto a board", centered in the top bar
+- [x] Selection action: create a new board from the current selection
 - [x] Escape or click background to clear selection
 
 ### 2.4 Open items on a board
 
 - [x] Canvas is now a persistent right-side board panel next to the Strip/Grid archive area rather than a separate archive view tab
-- [x] With items selected in strip/grid, user can drag them directly onto the open board, or use "open on new board" to create a blank board pre-populated with the selection
+- [x] With items selected in strip/grid, user can drag them directly onto the open board, or use "create new board with selection" to create a board pre-populated with the selection
 - [x] Detail modal can add the current item to the active board, creating a new board if needed
-- [x] Board edit menu can import new archive items directly onto the active board
-- [x] New board: auto-assign color from warm palette, save to `folio.json`
+- [x] Focused board header can import new archive items directly onto the active board
+- [x] New board: auto-assign color from warm palette, save to `canvases.json`
 - [x] Items can appear on multiple boards simultaneously — board membership reflects what's been added to each board
 
 ### 2.5 Board list and edit menu
 
-- [x] Board list is horizontal at the top of the board panel, not a left sidebar
-- [x] Each board card: colored dot, name, item count, and always-visible member thumbnail preview grid (max 8)
-- [x] Clicking a board card opens that board directly; the old "Open board" button was removed
+- [x] Board panel opens to either a board browser grid or a focused active board
+- [x] Board browser cards show colored dot, board name, item count, and member thumbnail preview grid (max 8)
+- [x] Board browser contains the New board action; focused boards have a back button that returns to the browser
 - [x] Board panel can be minimized/restored and resized by dragging its divider
-- [x] Board edit menu supports rename, add note, import to board, and delete board
-- [x] Canvas dots shown under strip/grid thumbnails (one colored dot per board membership)
+- [x] Focused board header shows Add note, Import images, Edit, and minimize actions in one row
+- [x] Board edit popover supports rename, color picker, save, and delete board
+- [x] Canvas dots shown under strip/grid thumbnails (one smaller colored dot per board membership)
 - [x] Board chips shown in detail modal
 
 ---
@@ -200,37 +220,41 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 3.1 Canvas view entry
 
-- [x] Canvas tab shows list of existing canvases + "new canvas" button when no canvas is open
-- [x] Opening a canvas from the sidebar loads its items, positions, notes, and references exactly as left
-- [x] Toolbar shows: colored dot + canvas name (editable) + "N items · N notes · N references"
-- [x] Switching canvas loads persisted state from `folio.json`
+- [x] Canvas boards live in a persistent right-side dock next to the archive, not a separate archive mode
+- [x] The dock is minimized by default and can be opened/restored from an icon rail
+- [x] Board browser shows all boards and creates new boards
+- [x] Opening a board loads its items, positions, notes, and references exactly as left
+- [x] Header shows board name, colored dot, item/note/reference counts, and board actions
+- [x] Switching boards loads persisted state from `canvases.json`
 
 ### 3.2 Draggable item cards and drag-in from strip/grid
 
 - [x] Items positioned absolutely on a large scrollable canvas surface (2400×1800px to give room to spread)
-- [x] Drag: pointer down → track pointer move delta → pointer up saves position to `folio.json`
-- [x] Positions stored per canvas in `folio.json` under `canvas.positions`
+- [x] Drag: pointer down → track pointer move delta → pointer up saves position to `canvases.json`
+- [x] Positions stored per canvas in `canvases.json` under `canvas.positions`
 - [x] Items can be dragged directly from the strip or grid view onto an open canvas — they appear at the drop position
 - [x] Canvas archive rail was removed; archive-to-board placement now happens by direct drag/drop, selection actions, details modal, or board import
 - [x] First-time layout: auto-arrange in a loose grid if no saved positions
-- [x] Dotted grid background: 24px radial-gradient pattern
+- [x] Dotted grid background rendered by an HTML `<canvas>` backing layer, with zoom-aware drawing
+- [x] Wheel zoom clamps to the configured min/max range and prevents the surrounding app from page-scrolling when the range limit is reached
 
 ### 3.3 Canvas notes
 
-- [x] "+ note" in toolbar: create note card on the canvas surface
+- [x] Add note button in the focused board header creates a note card on the canvas surface
 - [x] Note card: amber header strip, editable textarea, delete action
 - [x] Click note body to edit, blur to save and exit
 - [x] Empty note on blur: auto-delete
-- [x] Notes saved to `canvas.notes[]` in `folio.json`
+- [x] Notes saved to `canvas.notes[]` in `canvases.json`
 
 ### 3.4 References on the canvas
 
 Reference images belong to a canvas, not to items. They are first-class positionable objects on the canvas surface — drag them around alongside items and notes.
 
 - [x] Drop image files directly onto the canvas to add a reference at the drop position
-- [ ] Browse button in toolbar: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)` — drops new reference at a default position near the centre of the current viewport
-- [x] References file to `~/Folio/references/<canvasId>/` on disk, never into the main archive
-- [x] Reference card on canvas: thumbnail, drag handle, remove button (removes from `folio.json`)
+- [x] Import images button in the focused board header imports archive items directly onto the active board
+- [ ] Browse reference button: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)` — drops new reference at a default position near the centre of the current viewport
+- [x] References copy to `~/Documents/Folio/references/<board-id>/` on disk, never into the main archive
+- [x] Reference card on canvas: generated small thumbnail, pinned remove button, and drag-anywhere behavior
 - [x] Reference cards can be moved freely like item cards — position saved to `canvas.references[].x/y`
 - [ ] Edges can connect reference cards to item cards (same `CanvasEdge` mechanism — `fromId`/`toId` can point to either)
 
@@ -258,7 +282,7 @@ Reference images belong to a canvas, not to items. They are first-class position
 
 ### Data integrity
 
-- [x] All `folio.json` writes atomic: write `.folio/folio.json.tmp` → rename over `.folio/folio.json` (OS rename is crash-safe; no `.bak` file)
+- [x] All split JSON writes atomic: write `.tmp` beside the target file, then rename over the real file (OS rename is crash-safe; no `.bak` file)
 - [x] Schema validation on load: check `version` field and required keys; surface a clear error to the user if invalid (no `.bak` fallback)
 - [x] React state is live working copy; meaningful edits persist through `saveFolioData`
 - [x] Every item carries a `hash` (first-64KB SHA-256, truncated to 8 hex chars) used to re-locate files that were renamed or moved outside the app
@@ -275,7 +299,11 @@ Reference images belong to a canvas, not to items. They are first-class position
 
 - [x] Thumbnails generated sequentially by `ensureThumbnails`, never blocking the main process event loop
 - [x] Strip and grid use `IntersectionObserver` for lazy loading
-- [x] `folio.json` read once at startup, kept in memory, written only on change
+- [x] Strip, grid, board previews, and canvas image cards use generated small thumbnails instead of loading full source files
+- [x] Visible thumbnail requests are batched in the renderer before crossing IPC
+- [x] Board browser prefetches preview thumbnails in one batch and disables duplicate per-card requests for those previews
+- [x] Canvas references use `ensureReferenceThumbnail` instead of loading original reference images for every render
+- [x] Split JSON state read once at startup, kept in memory, written only on change
 - [x] `recentlyCopied` is an in-memory `Set<string>` on the main process; entries are added by `copyToFolio()` and auto-deleted after 2 seconds via `setTimeout`
 - [x] File watcher debounced at 300ms
 
@@ -293,7 +321,8 @@ Reference images belong to a canvas, not to items. They are first-class position
 - [x] Images: `jpg`, `jpeg`, `png`, `gif`, `webp`, `heic`
 - [x] Audio: `mp3`, `wav`, `aiff`, `m4a`
 - [x] Video: `mp4`, `mov`
-- [ ] Reject anything else with a toast message, copy nothing
+- [x] Text and documents: `txt`, `md`, `rtf`, `docx`
+- [x] Other files can be copied and tracked as generic `other` items with placeholders
 
 ### Packaging
 
@@ -305,7 +334,6 @@ Reference images belong to a canvas, not to items. They are first-class position
 ## Out of scope for MVP
 
 - Social / sharing / circle
-- Velocity heatmap
 - Juxtapose view
 - Rediscovery nudge
 - Cloud sync

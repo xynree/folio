@@ -1,264 +1,245 @@
-# Folio — Architecture
+# Folio Architecture
 
-## The big picture
+## Current Shape
 
-Electron gives you two JavaScript environments running simultaneously and talking to each other. Understanding that split is the whole architecture.
+Folio is an offline-first Electron app. The main process acts like a local backend with filesystem access. The renderer is a React app with no direct Node access. The preload script is the typed security boundary between them.
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                      Electron App                        │
-│                                                          │
-│  ┌───────────────────┐        ┌────────────────────────┐ │
-│  │   Main Process    │        │   Renderer Process     │ │
-│  │   (Node.js)       │◄──IPC──►   (Chromium + React)  │ │
-│  │                   │        │                        │ │
-│  │  - File system    │        │  - All UI              │ │
-│  │  - File watcher   │        │  - Strip / grid views  │ │
-│  │  - Thumbnails     │        │  - Canvas view      │ │
-│  │  - folio.json     │        │  - Long view           │ │
-│  │  - Reconciliation │        │  - Sidebar             │ │
-│  └───────────────────┘        └────────────────────────┘ │
-│            │                            │                 │
-│     ~/Folio/ on disk              React state             │
-└──────────────────────────────────────────────────────────┘
-```
+```text
+Electron app
+  Main process (Node)
+    - ~/Documents/Folio initialization
+    - import, copy, delete, and Finder reconciliation
+    - file watcher
+    - thumbnail and reference thumbnail generation
+    - custom folio:// protocol
+    - Photos picker helper launch on macOS
 
-The main process is like a small backend. The renderer is like a browser tab. They never share memory — they pass messages through IPC. A crash or bug in the UI can't affect the filesystem code, and vice versa.
+  Preload bridge
+    - exposes window.folio
+    - forwards typed IPC calls
+    - keeps contextIsolation on and nodeIntegration off
 
-## The three-layer structure
-
-### Layer 1: Main process
-
-Node.js with full filesystem access. Runs in the background for the lifetime of the app. Everything that touches disk happens here and only here: reading and writing the split JSON database (`folio.json`, `tags.json`, `canvases.json`), watching the archive folder, copying imported files, generating thumbnails, and running launch reconciliation. It never touches the UI directly.
-
-### Layer 2: Preload script
-
-A thin typed bridge between main and renderer. Uses Electron's `contextBridge` API to expose a clean `window.folio.*` interface to the UI — without giving the UI any direct access to Node.
-
-```typescript
-contextBridge.exposeInMainWorld("folio", {
-  getFolioData: () => ipcRenderer.invoke("get-folio-data"),
-  saveFolioData: (data) => ipcRenderer.invoke("save-folio-data", data),
-  copyToFolio: (paths) => ipcRenderer.invoke("copy-to-folio", paths),
-  onFilesAdded: (cb) => ipcRenderer.on("files-added", cb),
-});
+  Renderer process (React)
+    - archive strip and grid views
+    - tags sidebar
+    - heatmap footer
+    - selection bar and import controls
+    - board browser and canvas boards
+    - item details modal
 ```
 
-With `contextIsolation: true` and `nodeIntegration: false`, the renderer can only call what is explicitly listed here. It cannot accidentally call `fs.unlink()` or access any other Node API. The preload script is the security boundary.
+There is no backend service. The app is designed to keep working in a studio, on a plane, or anywhere else the network is irrelevant.
 
-### Layer 3: Renderer
+## Process Boundaries
 
-A normal React app running inside Chromium. It has no idea it's inside Electron — it calls `window.folio.getFolioData()` the same way a web app calls `fetch('/api/data')`. All UI logic, state, and view rendering lives here.
+### Main Process
 
----
+The main process owns all disk access. `src/main/base.manager.ts` registers IPC handlers, manages app launch preparation, watches the archive, handles import dialogs, and coordinates saves. `src/main/archive.manager.ts` handles lower-level archive operations: copying files, computing hashes, deduplicating imports, copying canvas references, and generating thumbnails. `src/main/storage.manager.ts` owns split JSON reads and atomic writes.
 
-## Why split flat files instead of a database
+The main process also registers the `folio://` protocol:
 
-The right storage format is the one that matches the shape of the problem. Folio's data is small, single-user, and needs to be portable.
+- `folio://thumb/<filename>` serves files from `.folio/thumbs/`.
+- `folio://file/<relative-path>` serves a file inside the Folio root when a full original is explicitly needed.
 
-**The data is small but modular.** Each item is around 200 bytes of metadata. A serious artist making work every day for five years accumulates around 1,800 items. That's under 400KB of JSON. By splitting the data into `folio.json` (items), `tags.json`, and `canvases.json`, we ensure that adding a tag or moving a note on a canvas doesn't require rewriting the entire archive metadata. This keeps save operations fast and reduces the risk of file corruption.
+### Preload Script
 
-**It should be readable without the app.** If Folio stops working, the user can open `folio.json` in any text editor and see exactly what's in it. A database requires tooling to inspect. For an archive of someone's creative work — something that should outlast any particular piece of software — human-readability matters.
+`src/preload.ts` exposes the renderer API:
 
-**It's portable.** The entire state of the app is a set of files alongside the images. Put it in iCloud, email it, copy it to a new machine. No migration scripts, no connection strings, no schema versions to manage beyond a single `version` field.
-
-**It's simpler to implement correctly.** The only tricky part is atomic writes: write new content to `.folio/folio.json.tmp`, then rename it over `.folio/folio.json`. The OS-level rename is atomic — if the process dies mid-write, the original file is untouched. That's about five lines of Node.js. Setting up a database with proper concurrency handling and migrations in Electron is significantly more work for no benefit at this scale.
-
-The one real limitation is concurrent writes. But Folio has one user and one window, so this isn't a real concern.
-
----
-
-## Why no backend
-
-A backend implies a server, which implies the app requires a network connection to function. Folio should work completely offline — you're in your studio, the internet is irrelevant. A backend also introduces deployment, authentication, API versioning, and infrastructure cost. None of that is justified for a single-user local tool.
-
-The main process already fills the role a backend would play: handling data access, enforcing business logic, managing files. The separation of concerns is preserved — it's just all happening locally on the user's machine.
-
-The only scenario where a backend would make sense is multi-device sync: two machines writing to the same archive simultaneously. That's a genuinely different problem requiring conflict resolution and a sync protocol. It's out of scope for the MVP and would represent a fundamental architecture change when it eventually arrives.
-
----
-
-## The IPC pattern
-
-Every operation the UI needs follows the same request-response flow:
-
-```
-User does something in React
-  → calls window.folio.someCommand(args)
-    → ipcRenderer.invoke('some-command', args)   [preload]
-      → ipcMain.handle('some-command', handler)  [main]
-        → does filesystem work
-          → returns result
-    → Promise resolves with result
-  → React updates state
+```ts
+window.folio.getFolioData();
+window.folio.saveFolioData(data);
+window.folio.copyToFolio(filePaths);
+window.folio.importToFolio();
+window.folio.copyReference(canvasId, filePaths);
+window.folio.deleteItems(itemIds);
+window.folio.openFileDialog();
+window.folio.ensureThumbnails(itemIds);
+window.folio.ensureReferenceThumbnail(referenceId, filePath);
+window.folio.getFileDataUrl(filePath);
+window.folio.getReconciliationResult();
+window.folio.openInFinder(filePath);
+window.folio.getPathForFile(file);
+window.folio.onFilesAdded(callback);
 ```
 
-This deliberately mirrors how a web app calls an API. The main process is the server; the renderer is the client. Any developer familiar with web development already understands the pattern.
+The renderer cannot import `fs`, call Electron APIs directly, or walk arbitrary files. Anything that touches disk must go through this bridge.
 
-For events the main process initiates — the file watcher detecting a new file, reconciliation finding a moved one — the flow reverses:
+### Renderer
 
-```
-File watcher detects new file in ~/Folio/
-  → main adds item to folio.json
-  → mainWindow.webContents.send('files-added', newItem)
-    → ipcRenderer.on('files-added', cb)  [preload forwards to renderer]
-      → React adds item to state, UI updates
-```
+The renderer is a React app under `src/components/`. It treats `window.folio` like a local API. App state is loaded once at startup, then kept as a working copy in React. Meaningful user edits call `saveFolioData`, which writes the split JSON files through the main process.
 
----
+## Local Storage
 
-## The `.folio/` hidden directory
+Folio creates and manages `~/Documents/Folio`:
 
-All app-managed state lives in a single hidden directory at `~/Folio/.folio/`. This is deliberately analogous to `.git/` — it's a clear separation between the user's files and the app's bookkeeping.
-
-```
-~/Folio/
-  2026/
-    02-february/
-      figure-study.jpg        ← user's files
-  references/
-    <canvas-id>/              ← canvas reference images
-  .folio/                     ← app state (hidden in Finder by default)
-    folio.json                ← items and schema version
-    tags.json                 ← global tags list
-    canvases.json             ← canvas structures and positions
-    *.json.tmp                ← in-flight atomic writes (transient)
-    thumbs/                   ← generated thumbnail cache
-```
-
-The user's root folder — year folders and `references/` — is completely clean. Finder hides `.folio/` by default on macOS. If the user wants to inspect or back up their data, they can `ls -a ~/Folio/` and open `.folio/folio.json` in any text editor.
-
-The thumbnail cache in `.folio/thumbs/` is fully regenerable from the archive. If a user deletes `.folio/` entirely, Folio recreates it on next launch and rebuilds thumbnails in the background.
-
----
-
-## File organisation
-
-Folio organises imported files into a year/month folder structure automatically:
-
-```
-~/Folio/
+```text
+~/Documents/Folio/
   items/
     2026/
-      01_january/
-        new-year-figure.jpg
-      02_february/
-        figure-study.jpg
-        hand-gestures.png
+      06_june/
+        imported-image.png
   references/
-    <canvas-id>/
+    <board-id>/
+      reference-image.png
   .folio/
     folio.json
+    tags.json
+    canvases.json
     thumbs/
+      <item-id>-small.jpg
+      <item-id>-small.svg
+      reference-<reference-id>-small.jpg
+      reference-<reference-id>-small.svg
 ```
 
-The destination is always computed from the **import date** — when the file was dragged into Folio — not the file's creation date or any embedded metadata. This makes the folder structure a record of your working sessions, which is more meaningful than a record of when files were created elsewhere.
+The visible folders are normal user files. `.folio/` is the app's bookkeeping directory. The thumbnail cache is fully regenerable.
 
-Each item in `folio.json` stores both a bare `filename` and a `path` relative to `~/Documents/Folio/`. The relative path (e.g. `items/2026/02_february/figure-study.jpg`) is what the app uses to locate files and reconstruct thumbnails. The folder structure is fully legible in Finder without the app open.
+## Data Model
 
-Canvases are stored as a top-level array in `folio.json`. Each canvas is a self-contained thinking surface:
+The shared schema lives in `src/types/`.
 
-```json
-{
-  "canvases": [
-    {
-      "id": 1,
-      "name": "figure studies",
-      "color": "#a06830",
-      "note": "something about the weight of them",
-      "itemIds": [1, 2, 4, 8],
-      "positions": { "1": { "x": 60, "y": 80 } },
-      "notes": [
-        { "id": "n1", "x": 340, "y": 185, "text": "not the face — the torso" }
-      ],
-      "edges": [
-        { "id": "e1", "fromId": 1, "toId": 4, "label": "same stance?" }
-      ],
-      "references": [
-        {
-          "id": "r1",
-          "filename": "vermeer-window.jpg",
-          "path": "items/2026/02_february/figure-study.jpg",
-          "x": 820,
-          "y": 120
-        }
-      ]
-    }
-  ]
+`folio.json` stores version and archive items:
+
+```ts
+interface FolioItem {
+  id: string;
+  path: string;
+  hash: string;
+  type: "sketch" | "ref" | "music" | "anim" | "text" | "other";
+  date: string;
+  title: string;
+  description: string;
+  tagIds: string[];
+  missing?: boolean;
 }
 ```
 
-Items can appear on multiple canvases simultaneously. Canvas membership is a reflection of what items have been dragged onto that canvas — not a separately managed list.
+`tags.json` stores user-defined labels:
 
----
-
-## Hash tracking and reconciliation
-
-Because the archive is a real folder on disk, a user can rename, move, or delete files in Finder without Folio knowing. Rather than preventing this, Folio handles it gracefully through two mechanisms.
-
-**Every item carries a hash** — a short fingerprint computed from the first 64KB of the file's contents on import. This is enough to identify a file even after it has been renamed or moved to a different folder. Only hashing the first 64KB keeps it fast; the file header and early content is unique enough for real image files.
-
-**On every launch, Folio reconciles** the contents of `~/Folio/` against `folio.json`:
-
-1. Walk all files in the archive (excluding `.folio/` and `references/`)
-2. Compute each file's hash
-3. For any `folio.json` entry whose path no longer exists: check if any on-disk file matches the stored hash — if yes, update the path silently and carry on. This handles renames and Finder moves with no user interaction
-4. Items still missing after the hash check are flagged `missing: true` — metadata, tags, and canvas membership are fully preserved
-5. Files on disk with no matching `folio.json` entry surface as untracked
-
-Silent auto-recovery (step 3) handles the common case. Only genuinely missing or untracked files surface to the user as a non-blocking notice that doesn't interrupt the app. Folio never moves, renames, or deletes files on its own — the user stays in control of the folder.
-
----
-
-## Data flow: key user actions
-
-### Drop a file into the app
-
-```
-1. Renderer: onDrop fires, extracts file paths
-2. Renderer: calls window.folio.copyToFolio(paths)
-3. Main: resolves destination (~/Folio/YYYY/MM-monthname/), creates folders if needed
-4. Main: copies file, computes hash, builds item object
-5. Main: appends item to folio.json (atomic write)
-6. Main: queues thumbnail generation in background (non-blocking)
-7. Main: sends 'files-added' event to renderer with new item data
-8. Renderer: adds item to React state → UI updates immediately
-   (file watcher also fires but sees path in `recentlyCopied` set → skips without hashing)
+```ts
+interface Tag {
+  id: string;
+  text: string;
+}
 ```
 
-### Click an item to open the detail drawer
+`canvases.json` stores boards, spatial positions, notes, references, and future edge data:
 
-```
-1. Renderer: onClick sets detailItem in React state
-2. React renders DetailDrawer with data already in memory
-3. No IPC needed — all metadata was loaded at startup
-4. Thumbnail loads via file:// protocol directly from `.folio/thumbs/`
-```
-
-### Save a tag change
-
-```
-1. Renderer: user adds a tag
-2. Renderer: updates React state immediately (UI feels instant)
-3. Renderer: debounces saveFolioData call by 500ms
-4. Main: split incoming data and write new content to respective `.json.tmp` files
-5. Main: renames `.json.tmp` → `.json` (atomic)
+```ts
+interface Canvas {
+  id: string;
+  title: string;
+  description?: string;
+  color?: string;
+  itemIds: string[];
+  positions: Record<string, CanvasPosition>;
+  notes: CanvasNote[];
+  edges: CanvasEdge[];
+  references: CanvasReference[];
+}
 ```
 
----
+Board membership is derived from `canvas.itemIds`. Items can appear on multiple boards.
 
-## Key decisions
+## Import Flow
 
-| Decision                             | Why                                                                                                                                                                                      |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Electron over Tauri                  | One language (JS/TS) throughout; faster iteration on a solo build                                                                                                                        |
-| `folio.json` over a database         | Data is small; human-readable, portable, inspectable without tooling                                                                                                                     |
-| No backend                           | Single-user, offline-first; main process covers what a backend would do                                                                                                                  |
-| Typed preload / contextBridge        | Explicit security boundary; renderer has no direct filesystem access                                                                                                                     |
-| Atomic JSON writes                   | Write to `.folio/folio.json.tmp`, rename over `.folio/folio.json` — OS rename is the crash guard, no `.bak` needed                                                                       |
-| Debounced saves (500ms)              | UI stays responsive; writes batch naturally                                                                                                                                              |
-| Import date governs folder placement | Archive reflects working sessions, not file provenance                                                                                                                                   |
-| Hash-based file tracking             | Survives renames and Finder moves without locking the folder                                                                                                                             |
-| `recentlyCopied` set                 | When `copyToFolio()` runs, the destination path is added to a short-lived set (2s TTL); the file watcher checks this set first and skips without hashing — fast path for the common case |
-| Non-destructive reconciliation       | Folio never moves or deletes files automatically; user stays in control                                                                                                                  |
-| Electron Forge                       | Maintained by the Electron team; handles build, packaging, and signing together                                                                                                          |
+The app has three current import paths:
+
+1. Drag files into the app. The renderer uses `webUtils.getPathForFile` through preload and calls `copyToFolio`.
+2. Press Import and choose files. The renderer calls `importToFolio`, and the main process opens a native file picker.
+3. On macOS, press Import and choose Photos. The main process launches the Swift `FolioPhotosPicker` helper, exports selected Photos items to a temporary folder, imports those files into Folio, then cleans up the temporary folder.
+
+Imported archive files are copied to:
+
+```text
+~/Documents/Folio/items/YYYY/MM_monthname/
+```
+
+The folder is based on import date. Filenames are sanitized and collision-safe. Existing files inside `items/` can be registered in place during reconciliation.
+
+Canvas references use a separate path:
+
+```text
+~/Documents/Folio/references/<board-id>/
+```
+
+References belong to one board and do not become archive items.
+
+## Thumbnail Pipeline
+
+Cards and board previews should not load full source images. The renderer requests small thumbnails through `LazyThumbnail`, which batches visible thumbnail requests over a short frame window before calling `ensureThumbnails`.
+
+The main process generates:
+
+- 320px JPEG thumbnails for image-like archive items.
+- SVG placeholders for missing files, unsupported media, audio, text, or failed thumbnail generation.
+- 320px JPEG reference thumbnails through `ensureReferenceThumbnail`.
+
+Generated files use `-small` suffixes and are served through `folio://thumb/...`. Board browser previews batch their thumbnail request at the board level and then render `LazyThumbnail` with automatic per-card requests disabled.
+
+## Archive UI
+
+The archive area is the left side of the app:
+
+- A resizable tags sidebar starts open and can collapse to an icon rail.
+- Strip view groups items by day and hides empty date groups when a tag filter is active.
+- Grid view shows filtered items in a dense card grid.
+- Both views sort most recent first and share the same card component.
+- The floating action bar contains the size scale, strip/grid icon toggle, and Import button.
+- The bottom heatmap is open by default, can be minimized, and scrolls horizontally when needed.
+- The status bar shows item, board, tag, gap, and root-folder counts.
+
+The archive area keeps scrollbars visually quiet and only shows the main archive scrollbar on hover.
+
+## Selection Flow
+
+Archive cards support:
+
+- click to select
+- Cmd/Ctrl-click to toggle
+- Shift-click for range selection across day boundaries
+- drag selected items onto an open board
+- create a new board from the current selection
+
+When items are selected, the top selection bar remains draggable as part of the window chrome except for its actual buttons.
+
+## Board And Canvas UI
+
+The right dock is minimized by default. When open, it can show either:
+
+- the board browser, a grid of all boards with member previews and a New board action
+- a focused board with its name, counts, Add note, Import images, Edit, and minimize controls
+
+Board settings support title and color editing. The selected board color appears as dots on archive cards that belong to that board.
+
+Canvas boards use `CanvasViewport`, which renders the dotted background with an actual HTML `<canvas>`. The scrollable surface contains cards, notes, and references as absolutely positioned React elements. Wheel input zooms around the pointer, clamps between the configured min and max zoom, and prevents the page-style scroll effect once the zoom limit is reached.
+
+Canvas cards, references, and notes are draggable from any non-control area. Pointer movement beyond the small drag threshold becomes a drag; otherwise the action remains a click.
+
+## File Reconciliation
+
+Every item stores a short hash derived from the first 64KB of the file. At launch, Folio scans `items/`, compares paths and hashes, then:
+
+- clears `missing` when a known file exists again
+- silently updates paths for renamed or moved files with matching hashes
+- marks genuinely missing files as `missing`
+- reports untracked files through the reconciliation notice
+
+The app never deletes user files during reconciliation.
+
+## Reliability Decisions
+
+- Split JSON keeps small updates isolated: item changes do not rewrite tags and boards unless needed.
+- Saves write temporary JSON files and atomically rename them over the real files.
+- File watcher events are debounced.
+- `recentlyCopied` avoids double-registering files the app just imported.
+- The renderer uses generated thumbnails for normal cards and previews.
+- Original files are served only when a feature explicitly needs them.
+- The UI remains local and single-user; cloud sync would require a separate conflict-resolution design.
+
+## Still Planned
+
+- Canvas edge drawing between items, notes, and references.
+- Freehand canvas strokes.
+- Stronger IPC argument validation in main process handlers.
+- Packaging polish beyond the current Electron Forge setup.
