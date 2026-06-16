@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
-  ChevronDown,
   ChevronRight,
   Edit3,
   Ellipsis,
@@ -127,55 +126,58 @@ export function ItemCard({
               <ButtonIcon icon={Edit3} />
               Edit
             </button>
-            <button
-              className="item-submenu-toggle"
-              type="button"
-              role="menuitem"
-              aria-expanded={tagsMenuOpen}
-              onClick={() => {
-                setTagsMenuOpen((current) => !current);
-              }}
-            >
-              <ButtonIcon icon={TagIcon} />
-              <span>Add tags</span>
-              <ButtonIcon icon={tagsMenuOpen ? ChevronDown : ChevronRight} size={14} />
-            </button>
-            {tagsMenuOpen ? (
-              <div
-                className="item-tag-submenu"
-                role="group"
-                aria-label="Add or remove tags"
+            <div className="item-submenu">
+              <button
+                className="item-submenu-toggle"
+                type="button"
+                role="menuitem"
+                aria-haspopup="menu"
+                aria-expanded={tagsMenuOpen}
+                onClick={() => {
+                  setTagsMenuOpen((current) => !current);
+                }}
               >
-                {tags.length ? (
-                  tags.map((tag) => {
-                    const selected = assignedTagIds.has(tag.id);
-                    return (
-                      <button
-                        className={`item-tag-option ${
-                          selected ? "item-tag-option-selected" : ""
-                        }`}
-                        key={tag.id}
-                        type="button"
-                        role="menuitemcheckbox"
-                        aria-checked={selected}
-                        onClick={() => {
-                          if (selected) {
-                            onRemoveTag(item.id, tag.text);
-                          } else {
-                            onAddTag(item.id, tag.text);
-                          }
-                        }}
-                      >
-                        <span>{tag.text}</span>
-                        {selected ? <ButtonIcon icon={Check} size={14} /> : null}
-                      </button>
-                    );
-                  })
-                ) : (
-                  <span className="item-tag-empty">No tags yet</span>
-                )}
-              </div>
-            ) : null}
+                <ButtonIcon icon={TagIcon} />
+                <span>Add tags</span>
+                <ButtonIcon icon={ChevronRight} size={14} />
+              </button>
+              {tagsMenuOpen ? (
+                <div
+                  className="item-tag-submenu"
+                  role="menu"
+                  aria-label="Add or remove tags"
+                >
+                  {tags.length ? (
+                    tags.map((tag) => {
+                      const selected = assignedTagIds.has(tag.id);
+                      return (
+                        <button
+                          className={`item-tag-option ${
+                            selected ? "item-tag-option-selected" : ""
+                          }`}
+                          key={tag.id}
+                          type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={selected}
+                          onClick={() => {
+                            if (selected) {
+                              onRemoveTag(item.id, tag.text);
+                            } else {
+                              onAddTag(item.id, tag.text);
+                            }
+                          }}
+                        >
+                          <span>{tag.text}</span>
+                          {selected ? <ButtonIcon icon={Check} size={14} /> : null}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <span className="item-tag-empty">No tags yet</span>
+                  )}
+                </div>
+              ) : null}
+            </div>
             <button
               className="danger-menu-item"
               type="button"

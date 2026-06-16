@@ -594,6 +594,10 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await waitForArchive();
     await user.click(screen.getByLabelText(/more actions for bravo/i));
     await user.click(screen.getByRole("menuitem", { name: /add tags/i }));
+    const tagSubmenu = screen.getByRole("menu", {
+      name: /add or remove tags/i,
+    });
+    expect(tagSubmenu.closest(".item-submenu")).not.toBeNull();
     await user.click(screen.getByRole("menuitemcheckbox", { name: /sketchbook/i }));
     await user.click(screen.getByRole("menuitemcheckbox", { name: /warmup/i }));
 
