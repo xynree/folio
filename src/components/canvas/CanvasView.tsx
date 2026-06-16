@@ -3,7 +3,7 @@ import {
   ArrowLeft,
   Edit3,
   ImagePlus,
-  PanelRightClose,
+  Minimize2,
   Plus,
   Save,
   StickyNote,
@@ -20,6 +20,7 @@ import type {
   ThumbnailUrls,
 } from "../../types";
 import {
+  CANVAS_COLORS,
   CANVAS_WORLD_ORIGIN,
   ITEM_DRAG_MIME,
 } from "../folio/constants";
@@ -79,6 +80,7 @@ export function CanvasView({
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
   const [boardBrowserOpen, setBoardBrowserOpen] = useState(false);
   const [boardTitleDraft, setBoardTitleDraft] = useState("");
+  const [boardColorDraft, setBoardColorDraft] = useState(CANVAS_COLORS[0]);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const canvasZoomRef = useRef(1);
   const draggedObjectRef = useRef<{ kind: CanvasDragKind; id: string } | null>(
@@ -93,8 +95,9 @@ export function CanvasView({
 
   useEffect(() => {
     setBoardTitleDraft(activeCanvas?.title ?? "");
+    setBoardColorDraft(activeCanvas?.color ?? CANVAS_COLORS[0]);
     setBoardToolsOpen(false);
-  }, [activeCanvas?.id, activeCanvas?.title]);
+  }, [activeCanvas?.color, activeCanvas?.id, activeCanvas?.title]);
 
   useEffect(() => {
     setBoardBrowserOpen(false);
@@ -509,26 +512,28 @@ export function CanvasView({
     [activeCanvas, updateCanvas],
   );
 
-  const renameCanvas = useCallback(
-    (title: string) => {
-      if (!activeCanvas) return;
-      const trimmed = title.trim();
-      if (!trimmed || trimmed === activeCanvas.title) return;
-      updateCanvas(activeCanvas.id, (canvas) => ({ ...canvas, title: trimmed }));
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const saveBoardTitle = useCallback(() => {
+  const saveBoardSettings = useCallback(() => {
     if (!activeCanvas) return;
     const trimmed = boardTitleDraft.trim();
-    if (!trimmed) {
-      setBoardTitleDraft(activeCanvas.title);
-      return;
-    }
-    renameCanvas(trimmed);
-    setBoardTitleDraft(trimmed);
-  }, [activeCanvas, boardTitleDraft, renameCanvas]);
+    const nextTitle = trimmed || activeCanvas.title;
+    const nextColor = boardColorDraft || activeCanvas.color || CANVAS_COLORS[0];
+    const currentColor = activeCanvas.color ?? CANVAS_COLORS[0];
+
+    setBoardTitleDraft(nextTitle);
+    setBoardColorDraft(nextColor);
+
+    if (nextTitle === activeCanvas.title && nextColor === currentColor) return;
+
+    updateCanvas(
+      activeCanvas.id,
+      (canvas) => ({
+        ...canvas,
+        title: nextTitle,
+        color: nextColor,
+      }),
+      "Board updated",
+    );
+  }, [activeCanvas, boardColorDraft, boardTitleDraft, updateCanvas]);
 
   const openCanvas = useCallback(
     (canvasId: string) => {
@@ -566,7 +571,7 @@ export function CanvasView({
             title="Minimize board panel"
             onClick={onMinimize}
           >
-            <ButtonIcon icon={PanelRightClose} />
+            <ButtonIcon icon={Minimize2} />
           </button>
         </div>
       </header>
@@ -694,7 +699,7 @@ export function CanvasView({
               title="Minimize board panel"
               onClick={onMinimize}
             >
-              <ButtonIcon icon={PanelRightClose} />
+              <ButtonIcon icon={Minimize2} />
             </button>
           </div>
 
@@ -720,10 +725,22 @@ export function CanvasView({
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
-                      saveBoardTitle();
+                      saveBoardSettings();
                     }
                   }}
                 />
+              </label>
+              <label className="board-color-field">
+                <span>Board color</span>
+                <span className="board-color-control">
+                  <input
+                    type="color"
+                    aria-label="Board color"
+                    value={boardColorDraft}
+                    onChange={(event) => setBoardColorDraft(event.target.value)}
+                  />
+                  <small>{boardColorDraft}</small>
+                </span>
               </label>
               <div
                 className="board-edit-action-bar"
@@ -733,10 +750,10 @@ export function CanvasView({
                 <button
                   className="board-edit-save"
                   type="button"
-                  onClick={saveBoardTitle}
+                  onClick={saveBoardSettings}
                 >
                   <ButtonIcon icon={Save} />
-                  Save name
+                  Save board
                 </button>
                 <button
                   className="board-edit-action board-edit-delete"

@@ -396,10 +396,19 @@ button svg {
   top: 8px;
   right: 12px;
   z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
   border: 1px solid #d7c9b4;
   border-radius: 7px;
   background: #fff8eb;
   cursor: pointer;
+  line-height: 0;
   transition:
     top var(--motion-slow) var(--motion-ease),
     transform var(--motion-fast) var(--motion-ease),
@@ -409,7 +418,8 @@ button svg {
 }
 
 .archive-heatmap-footer-minimized .archive-heatmap-toggle {
-  top: 5px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .archive-heatmap-toggle,
@@ -659,12 +669,14 @@ button svg {
   --archive-card-gap: 12px;
   --archive-card-inner-gap: 8px;
   --archive-card-padding: 10px;
+  --archive-board-dot-gap: 3px;
+  --archive-board-dot-size: 5px;
   --archive-day-min-height: 132px;
   --archive-grid-card-min: 148px;
   --archive-grid-gap: 14px;
   --archive-item-meta-size: 12px;
   --archive-item-tag-size: 11px;
-  --archive-item-title-size: 13px;
+  --archive-item-title-size: 12px;
   --archive-strip-card-max: 156px;
   --archive-strip-card-min: 132px;
   --archive-thumb-radius: 7px;
@@ -965,7 +977,6 @@ button svg {
 }
 
 .day-meta span,
-.item-subtitle,
 .status-bar,
 .empty-state {
   color: #7f7165;
@@ -1285,7 +1296,6 @@ button svg {
 .item-card {
   position: relative;
   display: grid;
-  grid-template-rows: auto auto auto auto;
   gap: var(--archive-card-inner-gap);
   min-width: 0;
   width: 100%;
@@ -1307,7 +1317,6 @@ button svg {
 
 .item-card-main {
   display: grid;
-  grid-template-rows: auto auto auto auto;
   grid-row: 1 / -1;
   gap: inherit;
   width: 100%;
@@ -1484,8 +1493,8 @@ button svg {
 .canvas-membership-dots {
   display: flex;
   align-items: center;
-  gap: 4px;
-  min-height: 8px;
+  gap: var(--archive-board-dot-gap);
+  min-height: var(--archive-board-dot-size);
 }
 
 .canvas-membership-dots.empty {
@@ -1493,8 +1502,8 @@ button svg {
 }
 
 .canvas-membership-dots span {
-  width: 7px;
-  height: 7px;
+  width: var(--archive-board-dot-size);
+  height: var(--archive-board-dot-size);
   border: 1px solid rgba(45, 35, 25, 0.16);
   border-radius: 999px;
 }
@@ -1505,14 +1514,6 @@ button svg {
   color: #29231d;
   font-size: var(--archive-item-title-size);
   font-weight: 720;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.item-subtitle {
-  min-width: 0;
-  overflow: hidden;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2216,10 +2217,35 @@ button svg {
   gap: 6px;
 }
 
-.board-edit-popover label span {
+.board-edit-popover label > span {
   color: #7c6f61;
   font-size: 12px;
   font-weight: 760;
+}
+
+.board-color-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.board-edit-popover .board-color-control input {
+  width: 38px;
+  min-width: 38px;
+  height: 34px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.board-color-control small {
+  min-width: 0;
+  overflow: hidden;
+  color: #7c6f61;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .board-edit-action-bar {

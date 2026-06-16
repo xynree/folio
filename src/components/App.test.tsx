@@ -203,7 +203,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       "185px",
     );
     expect(archiveRoute().style.getPropertyValue("--archive-item-title-size")).toBe(
-      "16.3px",
+      "15.0px",
     );
     expect(archiveRoute().style.getPropertyValue("--archive-day-meta-width")).toBe(
       "",
@@ -346,7 +346,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(sortSelect.value).toBe("recent");
     expect(gridTitles()).toEqual(["Apple", "Zulu", "Mango"]);
     expect(within(archiveRoute()).queryByText("Sketch · alpha.png")).toBeNull();
-    expect(within(archiveRoute()).getByText("alpha.png")).not.toBeNull();
+    expect(within(archiveRoute()).queryByText("alpha.png")).toBeNull();
 
     await user.selectOptions(sortSelect, "oldest");
     expect(gridTitles()).toEqual(["Mango", "Zulu", "Apple"]);
@@ -780,7 +780,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
     expect(closeButton.closest(".board-edit-popover-header")).not.toBeNull();
     expect(
-      within(actionBar).getByRole("button", { name: /save name/i }),
+      within(actionBar).getByRole("button", { name: /save board/i }),
     ).not.toBeNull();
     expect(within(actionBar).queryByRole("button", { name: /add note/i })).toBeNull();
     expect(
@@ -795,15 +795,23 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     ).not.toBeNull();
 
     const boardName = within(boardDialog).getByLabelText("Board name");
+    const boardColor = within(boardDialog).getByLabelText(
+      "Board color",
+    ) as HTMLInputElement;
     await user.clear(boardName);
     await user.type(boardName, "Story Board");
-    await user.click(within(boardDialog).getByRole("button", { name: /save name/i }));
+    fireEvent.change(boardColor, { target: { value: "#546f9a" } });
+    await user.click(within(boardDialog).getByRole("button", { name: /save board/i }));
 
     await waitFor(() => {
       expect(app.data.canvases[0].title).toBe("Story Board");
+      expect(app.data.canvases[0].color).toBe("#546f9a");
     });
 
-    await user.click(closeButton);
+    const currentCloseButton = screen.queryByLabelText(/close board tools/i);
+    if (currentCloseButton) {
+      await user.click(currentCloseButton);
+    }
 
     await user.click(screen.getByRole("button", { name: /add note/i }));
     await waitFor(() => {

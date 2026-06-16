@@ -85,7 +85,6 @@ export function ItemCard({
         />
         <CanvasDots colors={canvasColors} />
         <span className="item-title">{item.title || basename(item.path)}</span>
-        <span className="item-subtitle">{basename(item.path)}</span>
         {itemTags.length ? (
           <span className="card-tags">
             {itemTags.slice(0, compact ? 2 : 3).map((tag) => (

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import {
   ChevronDown,
   ChevronUp,
-  PanelLeftClose,
+  Minimize2,
   Tag as TagIcon,
 } from "lucide-react";
 import type { Canvas, FolioItem, Tag, ThumbnailUrls } from "../../types";
@@ -90,7 +90,7 @@ export function TagsSidebar({
             aria-label="Hide tags"
             title="Hide tags"
           >
-            <ButtonIcon icon={PanelLeftClose} />
+            <ButtonIcon icon={Minimize2} />
           </button>
         </div>
 
