@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Trash2, X } from "lucide-react";
+import { GripVertical, Trash2, X } from "lucide-react";
 import type {
   CanvasNote,
   CanvasPosition,
@@ -20,6 +20,7 @@ export function CanvasItemCard({
   onOpen,
   onRemove,
   onPointerDown,
+  onClickCapture,
 }: {
   item: FolioItem;
   position: CanvasPosition;
@@ -28,6 +29,7 @@ export function CanvasItemCard({
   onOpen: (itemId: string) => void;
   onRemove: (itemId: string) => void;
   onPointerDown: (event: React.PointerEvent) => void;
+  onClickCapture: (event: React.MouseEvent) => void;
 }) {
   return (
     <div
@@ -37,21 +39,21 @@ export function CanvasItemCard({
           position.y + CANVAS_WORLD_ORIGIN
         }px)`,
       }}
+      onPointerDown={onPointerDown}
+      onClickCapture={onClickCapture}
       onClick={() => onOpen(item.id)}
     >
-      <div
-        className="canvas-card-handle"
-        onPointerDown={onPointerDown}
-        onClick={(event) => event.stopPropagation()}
-      >
+      <div className="canvas-card-handle">
         <span>{TYPE_LABELS[item.type]}</span>
         <button
           className="icon-button"
           type="button"
-          onPointerDown={(event) => event.stopPropagation()}
           aria-label={`Remove ${item.title || basename(item.path)} from board`}
           title="Remove from board"
-          onClick={() => onRemove(item.id)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove(item.id);
+          }}
         >
           <ButtonIcon icon={X} />
         </button>
@@ -71,11 +73,13 @@ export function ReferenceCard({
   position,
   onRemove,
   onPointerDown,
+  onClickCapture,
 }: {
   reference: CanvasReference;
   position: CanvasPosition;
   onRemove: (referenceId: string) => void;
   onPointerDown: (event: React.PointerEvent) => void;
+  onClickCapture: (event: React.MouseEvent) => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
 
@@ -101,22 +105,30 @@ export function ReferenceCard({
           position.y + CANVAS_WORLD_ORIGIN
         }px)`,
       }}
+      onPointerDown={onPointerDown}
+      onClickCapture={onClickCapture}
     >
-      <div className="canvas-card-handle" onPointerDown={onPointerDown}>
+      <div className="canvas-card-handle">
         <span>Reference</span>
         <button
           className="icon-button"
           type="button"
-          onPointerDown={(event) => event.stopPropagation()}
           aria-label={`Remove ${reference.filename}`}
           title="Remove reference"
-          onClick={() => onRemove(reference.id)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove(reference.id);
+          }}
         >
           <ButtonIcon icon={X} />
         </button>
       </div>
       <span className="thumb-shell">
-        {src ? <img src={src} alt="" /> : <span className="thumb-placeholder">Ref</span>}
+        {src ? (
+          <img src={src} alt="" draggable={false} />
+        ) : (
+          <span className="thumb-placeholder">Ref</span>
+        )}
       </span>
       <strong>{reference.filename}</strong>
     </div>
@@ -127,10 +139,14 @@ export function CanvasNoteCard({
   note,
   onChange,
   onDelete,
+  onPointerDown,
+  onClickCapture,
 }: {
   note: CanvasNote;
   onChange: (noteId: string, text: string) => void;
   onDelete: (noteId: string) => void;
+  onPointerDown: (event: React.PointerEvent) => void;
+  onClickCapture: (event: React.MouseEvent) => void;
 }) {
   const [draft, setDraft] = useState(note.text);
 
@@ -146,7 +162,27 @@ export function CanvasNoteCard({
           note.y + CANVAS_WORLD_ORIGIN
         }px)`,
       }}
+      onPointerDown={onPointerDown}
+      onClickCapture={onClickCapture}
     >
+      <div className="canvas-note-handle">
+        <span>
+          <ButtonIcon icon={GripVertical} size={14} />
+          Note
+        </span>
+        <button
+          className="icon-button"
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete(note.id);
+          }}
+          aria-label="Delete note"
+          title="Delete note"
+        >
+          <ButtonIcon icon={Trash2} />
+        </button>
+      </div>
       <textarea
         placeholder="Note"
         value={draft}
@@ -159,14 +195,6 @@ export function CanvasNoteCard({
         }}
         onChange={(event) => setDraft(event.target.value)}
       />
-      <button
-        type="button"
-        onClick={() => onDelete(note.id)}
-        aria-label="Delete note"
-      >
-        <ButtonIcon icon={Trash2} />
-        Delete
-      </button>
     </div>
   );
 }

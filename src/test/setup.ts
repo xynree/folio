@@ -47,6 +47,21 @@ Object.defineProperty(globalThis.crypto, "randomUUID", {
   value: vi.fn(() => `test-${Math.random().toString(16).slice(2)}`),
 });
 
+const canvasContextMock = {
+  setTransform: vi.fn(),
+  clearRect: vi.fn(),
+  fillRect: vi.fn(),
+  beginPath: vi.fn(),
+  arc: vi.fn(),
+  fill: vi.fn(),
+  fillStyle: "",
+} as unknown as CanvasRenderingContext2D;
+
+Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+  configurable: true,
+  value: vi.fn(() => canvasContextMock),
+});
+
 window.confirm = vi.fn(() => true);
 
 const folioMock: FolioApi = {

@@ -80,7 +80,9 @@ export function DailyStripView({
           >
             <div className="day-meta">
               <strong>{formatDateLabel(date)}</strong>
-              <span>{dayItems.length ? formatCount(dayItems.length, "item") : ""}</span>
+              {dayItems.length ? (
+                <span>{formatCount(dayItems.length, "item")}</span>
+              ) : null}
             </div>
 
             {dayItems.length ? (

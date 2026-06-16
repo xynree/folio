@@ -3,7 +3,6 @@ import {
   ChevronDown,
   ChevronUp,
   PanelLeftClose,
-  PanelLeftOpen,
   Tag as TagIcon,
 } from "lucide-react";
 import type { Canvas, FolioItem, Tag, ThumbnailUrls } from "../../types";
@@ -59,108 +58,112 @@ export function TagsSidebar({
   if (collapsed) {
     return (
       <aside className="tags-sidebar tags-sidebar-collapsed" aria-label="Tags">
-        <button
-          className="tags-collapse-toggle collapsed"
-          type="button"
-          onClick={onToggleCollapsed}
-          aria-label="Show tags"
-          title="Show tags"
-        >
-          <ButtonIcon icon={PanelLeftOpen} />
-          <span>Tags</span>
-          <small>{tags.length}</small>
-        </button>
+        <div className="tags-sidebar-window-controls" aria-hidden="true" />
+        <div className="tags-sidebar-content tags-sidebar-content-collapsed">
+          <button
+            className="tags-collapse-toggle collapsed"
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label="Show tags"
+            title="Show tags"
+          >
+            <ButtonIcon icon={TagIcon} />
+          </button>
+        </div>
       </aside>
     );
   }
 
   return (
     <aside className="tags-sidebar" aria-label="Tags">
-      <div className="sidebar-heading">
-        <div>
-          <strong>Tags</strong>
-          <span>{formatCount(tags.length, "tag")}</span>
+      <div className="tags-sidebar-window-controls" aria-hidden="true" />
+      <div className="tags-sidebar-content">
+        <div className="sidebar-heading">
+          <div>
+            <strong>Tags</strong>
+            <span>{formatCount(tags.length, "tag")}</span>
+          </div>
+          <button
+            className="tags-collapse-toggle"
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label="Hide tags"
+            title="Hide tags"
+          >
+            <ButtonIcon icon={PanelLeftClose} />
+          </button>
         </div>
+
         <button
-          className="tags-collapse-toggle"
+          className={`tag-sidebar-row ${tagFilter === "all" ? "active" : ""}`}
           type="button"
-          onClick={onToggleCollapsed}
-          aria-label="Hide tags"
-          title="Hide tags"
+          onClick={() => setTagFilter("all")}
         >
-          <ButtonIcon icon={PanelLeftClose} />
+          <ButtonIcon icon={TagIcon} />
+          <span>All</span>
+          <small>{items.length}</small>
         </button>
-      </div>
 
-      <button
-        className={`tag-sidebar-row ${tagFilter === "all" ? "active" : ""}`}
-        type="button"
-        onClick={() => setTagFilter("all")}
-      >
-        <ButtonIcon icon={TagIcon} />
-        <span>All</span>
-        <small>{items.length}</small>
-      </button>
-
-      {tags.length ? (
-        tags.map((tag) => {
-          const tagItems = items.filter((item) => item.tagIds.includes(tag.id));
-          const expanded = expandedTagIds.includes(tag.id);
-          return (
-            <article className="tag-sidebar-item" key={tag.id}>
-              <div className="tag-sidebar-controls">
-                <button
-                  className={`tag-sidebar-row ${
-                    tag.id === tagFilter ? "active" : ""
-                  }`}
-                  type="button"
-                  onClick={() => setTagFilter(tag.id)}
-                >
-                  <ButtonIcon icon={TagIcon} />
-                  <span>{tag.text}</span>
-                  <small>{itemCounts.get(tag.id) ?? 0}</small>
-                </button>
-                <button
-                  className="tag-expand-button"
-                  type="button"
-                  onClick={() => toggleExpanded(tag.id)}
-                  aria-label={`${expanded ? "Collapse" : "Expand"} ${tag.text}`}
-                  title={`${expanded ? "Collapse" : "Expand"} ${tag.text}`}
-                >
-                  <ButtonIcon icon={expanded ? ChevronUp : ChevronDown} />
-                </button>
-              </div>
-
-              {expanded ? (
-                <div className="tag-thumbnail-strip">
-                  {tagItems.length ? (
-                    tagItems.slice(0, 8).map((item) => (
-                      <button
-                        className="mini-thumb mini-thumb-button"
-                        key={item.id}
-                        title={item.title}
-                        type="button"
-                        onClick={() => onOpenItem(item.id)}
-                      >
-                        <LazyThumbnail
-                          item={item}
-                          thumbUrls={thumbUrls}
-                          setThumbUrls={setThumbUrls}
-                        />
-                        <CanvasDots colors={canvasColorsForItem(item.id, canvases)} />
-                      </button>
-                    ))
-                  ) : (
-                    <span className="muted">No items</span>
-                  )}
+        {tags.length ? (
+          tags.map((tag) => {
+            const tagItems = items.filter((item) => item.tagIds.includes(tag.id));
+            const expanded = expandedTagIds.includes(tag.id);
+            return (
+              <article className="tag-sidebar-item" key={tag.id}>
+                <div className="tag-sidebar-controls">
+                  <button
+                    className={`tag-sidebar-row ${
+                      tag.id === tagFilter ? "active" : ""
+                    }`}
+                    type="button"
+                    onClick={() => setTagFilter(tag.id)}
+                  >
+                    <ButtonIcon icon={TagIcon} />
+                    <span>{tag.text}</span>
+                    <small>{itemCounts.get(tag.id) ?? 0}</small>
+                  </button>
+                  <button
+                    className="tag-expand-button"
+                    type="button"
+                    onClick={() => toggleExpanded(tag.id)}
+                    aria-label={`${expanded ? "Collapse" : "Expand"} ${tag.text}`}
+                    title={`${expanded ? "Collapse" : "Expand"} ${tag.text}`}
+                  >
+                    <ButtonIcon icon={expanded ? ChevronUp : ChevronDown} />
+                  </button>
                 </div>
-              ) : null}
-            </article>
-          );
-        })
-      ) : (
-        <p className="sidebar-empty">No user tags yet</p>
-      )}
+
+                {expanded ? (
+                  <div className="tag-thumbnail-strip">
+                    {tagItems.length ? (
+                      tagItems.slice(0, 8).map((item) => (
+                        <button
+                          className="mini-thumb mini-thumb-button"
+                          key={item.id}
+                          title={item.title}
+                          type="button"
+                          onClick={() => onOpenItem(item.id)}
+                        >
+                          <LazyThumbnail
+                            item={item}
+                            thumbUrls={thumbUrls}
+                            setThumbUrls={setThumbUrls}
+                          />
+                          <CanvasDots colors={canvasColorsForItem(item.id, canvases)} />
+                        </button>
+                      ))
+                    ) : (
+                      <span className="muted">No items</span>
+                    )}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })
+        ) : (
+          <p className="sidebar-empty">No user tags yet</p>
+        )}
+      </div>
     </aside>
   );
 }

@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { Edit3, ImagePlus, Save, StickyNote, Trash2, X } from "lucide-react";
 import type {
   Canvas,
@@ -11,18 +10,13 @@ import type {
   ThumbnailUrls,
 } from "../../types";
 import {
-  CANVAS_MIN_ZOOM,
-  CANVAS_MAX_ZOOM,
-  CANVAS_WORLD_HEIGHT,
   CANVAS_WORLD_ORIGIN,
-  CANVAS_WORLD_WIDTH,
   ITEM_DRAG_MIME,
 } from "../folio/constants";
 import type { DataUpdater, ItemDetailsOpenHandler } from "../folio/types";
 import {
   addItemToCanvas,
   addItemsToCanvas,
-  clampNumber,
   createId,
   formatCount,
   mergeItems,
@@ -30,6 +24,10 @@ import {
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
 import { CanvasItemCard, CanvasNoteCard, ReferenceCard } from "./CanvasCards";
+import { CanvasViewport } from "./CanvasViewport";
+
+type CanvasDragKind = "item" | "reference" | "note";
+const CANVAS_OBJECT_DRAG_THRESHOLD = 4;
 
 export function CanvasView({
   data,
@@ -59,17 +57,18 @@ export function CanvasView({
   const boardStripRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
-  const zoomAnchorRef = useRef<{ x: number; y: number } | null>(null);
   const [dragPreview, setDragPreview] = useState<{
     id: string;
-    kind: "item" | "reference";
+    kind: CanvasDragKind;
     position: CanvasPosition;
   } | null>(null);
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
   const [boardTitleDraft, setBoardTitleDraft] = useState("");
   const [canvasZoom, setCanvasZoom] = useState(1);
   const canvasZoomRef = useRef(1);
-  const [isCanvasPanning, setIsCanvasPanning] = useState(false);
+  const draggedObjectRef = useRef<{ kind: CanvasDragKind; id: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!activeCanvas && data.canvases[0]) {
@@ -87,8 +86,9 @@ export function CanvasView({
     const frame = window.requestAnimationFrame(() => {
       const scroll = scrollRef.current;
       if (!scroll) return;
-      scroll.scrollLeft = CANVAS_WORLD_ORIGIN * canvasZoom - 80 * canvasZoom;
-      scroll.scrollTop = CANVAS_WORLD_ORIGIN * canvasZoom - 80 * canvasZoom;
+      const zoom = canvasZoomRef.current;
+      scroll.scrollLeft = CANVAS_WORLD_ORIGIN * zoom - 80 * zoom;
+      scroll.scrollTop = CANVAS_WORLD_ORIGIN * zoom - 80 * zoom;
     });
 
     return () => window.cancelAnimationFrame(frame);
@@ -253,37 +253,37 @@ export function CanvasView({
     [dragPreview],
   );
 
+  const positionForNote = useCallback(
+    (note: CanvasNote): CanvasPosition => {
+      if (dragPreview?.kind === "note" && dragPreview.id === note.id) {
+        return dragPreview.position;
+      }
+      return { x: note.x, y: note.y };
+    },
+    [dragPreview],
+  );
+
   const startDrag = useCallback(
     (
       event: React.PointerEvent,
-      kind: "item" | "reference",
+      kind: CanvasDragKind,
       objectId: string,
       startPosition: CanvasPosition,
     ) => {
       if (!activeCanvas) return;
-      event.preventDefault();
+      if (event.button !== 0) return;
+
       const startPointer = { x: event.clientX, y: event.clientY };
+      const previousCursor = document.body.style.cursor;
+      const previousUserSelect = document.body.style.userSelect;
+      let isDragging = false;
 
-      const onPointerMove = (moveEvent: PointerEvent) => {
-        setDragPreview({
-          id: objectId,
-          kind,
-          position: {
-            x: startPosition.x + (moveEvent.clientX - startPointer.x) / canvasZoom,
-            y: startPosition.y + (moveEvent.clientY - startPointer.y) / canvasZoom,
-          },
-        });
-      };
+      const positionFromPointer = (clientX: number, clientY: number) => ({
+        x: startPosition.x + (clientX - startPointer.x) / canvasZoom,
+        y: startPosition.y + (clientY - startPointer.y) / canvasZoom,
+      });
 
-      const onPointerUp = (upEvent: PointerEvent) => {
-        const finalPosition = {
-          x: startPosition.x + (upEvent.clientX - startPointer.x) / canvasZoom,
-          y: startPosition.y + (upEvent.clientY - startPointer.y) / canvasZoom,
-        };
-        setDragPreview(null);
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-
+      const commitPosition = (finalPosition: CanvasPosition) => {
         const nextData = {
           ...data,
           canvases: data.canvases.map((canvas) => {
@@ -297,12 +297,20 @@ export function CanvasView({
                 },
               };
             }
+            if (kind === "reference") {
+              return {
+                ...canvas,
+                references: canvas.references.map((reference) =>
+                  reference.id === objectId
+                    ? { ...reference, ...finalPosition }
+                    : reference,
+                ),
+              };
+            }
             return {
               ...canvas,
-              references: canvas.references.map((reference) =>
-                reference.id === objectId
-                  ? { ...reference, ...finalPosition }
-                  : reference,
+              notes: canvas.notes.map((note) =>
+                note.id === objectId ? { ...note, ...finalPosition } : note,
               ),
             };
           }),
@@ -311,10 +319,72 @@ export function CanvasView({
         saveData(nextData, "Position saved");
       };
 
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        const deltaX = moveEvent.clientX - startPointer.x;
+        const deltaY = moveEvent.clientY - startPointer.y;
+        if (!isDragging) {
+          const distance = Math.hypot(deltaX, deltaY);
+          if (distance < CANVAS_OBJECT_DRAG_THRESHOLD) return;
+
+          isDragging = true;
+          draggedObjectRef.current = { kind, id: objectId };
+          document.body.style.cursor = "grabbing";
+          document.body.style.userSelect = "none";
+        }
+
+        moveEvent.preventDefault();
+        setDragPreview({
+          id: objectId,
+          kind,
+          position: positionFromPointer(moveEvent.clientX, moveEvent.clientY),
+        });
+      };
+
+      const onPointerUp = (upEvent: PointerEvent) => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+
+        if (!isDragging) return;
+
+        upEvent.preventDefault();
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousUserSelect;
+        setDragPreview(null);
+        commitPosition(positionFromPointer(upEvent.clientX, upEvent.clientY));
+        window.setTimeout(() => {
+          if (
+            draggedObjectRef.current?.kind === kind
+            && draggedObjectRef.current.id === objectId
+          ) {
+            draggedObjectRef.current = null;
+          }
+        }, 0);
+      };
+
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
     },
     [activeCanvas, canvasZoom, data, saveData],
+  );
+
+  const suppressClickAfterDrag = useCallback(
+    (
+      event: React.MouseEvent,
+      kind: CanvasDragKind,
+      objectId: string,
+    ) => {
+      if (
+        draggedObjectRef.current?.kind !== kind
+        || draggedObjectRef.current.id !== objectId
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      draggedObjectRef.current = null;
+    },
+    [],
   );
 
   const canvasPointFromEvent = useCallback((event: React.DragEvent) => {
@@ -326,118 +396,6 @@ export function CanvasView({
       y: (event.clientY - rect.top) / canvasZoom - CANVAS_WORLD_ORIGIN,
     };
   }, [canvasZoom]);
-
-  const startCanvasPan = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) return;
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (
-        target.closest(
-          ".canvas-card, .canvas-note, button, input, textarea, select, [data-no-canvas-pan]",
-        )
-      ) {
-        return;
-      }
-
-      const scroll = scrollRef.current;
-      if (!scroll) return;
-
-      event.preventDefault();
-      const startPointer = { x: event.clientX, y: event.clientY };
-      const startScroll = {
-        left: scroll.scrollLeft,
-        top: scroll.scrollTop,
-      };
-      const previousCursor = document.body.style.cursor;
-      const previousUserSelect = document.body.style.userSelect;
-      document.body.style.cursor = "grabbing";
-      document.body.style.userSelect = "none";
-      setIsCanvasPanning(true);
-
-      const onPointerMove = (moveEvent: PointerEvent) => {
-        scroll.scrollLeft = startScroll.left - (moveEvent.clientX - startPointer.x);
-        scroll.scrollTop = startScroll.top - (moveEvent.clientY - startPointer.y);
-      };
-
-      const onPointerUp = () => {
-        document.body.style.cursor = previousCursor;
-        document.body.style.userSelect = previousUserSelect;
-        setIsCanvasPanning(false);
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-      };
-
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
-    },
-    [],
-  );
-
-  const rememberZoomAnchor = useCallback((clientX: number, clientY: number) => {
-    const scroll = scrollRef.current;
-    if (!scroll) return;
-
-    const rect = scroll.getBoundingClientRect();
-    zoomAnchorRef.current = {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
-    };
-  }, []);
-
-  const handleCanvasWheel = useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-
-      const wheelDelta = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
-      if (wheelDelta === 0) return;
-
-      const scroll = scrollRef.current;
-      if (!scroll) return;
-
-      const currentZoom = canvasZoomRef.current;
-      const rect = scroll.getBoundingClientRect();
-      const eventAnchor = {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
-      };
-      const eventIsInsideCanvas =
-        event.clientX >= rect.left
-        && event.clientX <= rect.right
-        && event.clientY >= rect.top
-        && event.clientY <= rect.bottom;
-      const anchor = eventIsInsideCanvas
-        ? eventAnchor
-        : zoomAnchorRef.current ?? {
-            x: rect.width / 2,
-            y: rect.height / 2,
-          };
-
-      const pointerX = clampNumber(anchor.x, 0, rect.width);
-      const pointerY = clampNumber(anchor.y, 0, rect.height);
-      zoomAnchorRef.current = { x: pointerX, y: pointerY };
-
-      const logicalX = (scroll.scrollLeft + pointerX) / currentZoom;
-      const logicalY = (scroll.scrollTop + pointerY) / currentZoom;
-      const zoomMultiplier = Math.exp(-wheelDelta * 0.0016);
-      const nextZoom = clampNumber(
-        currentZoom * zoomMultiplier,
-        CANVAS_MIN_ZOOM,
-        CANVAS_MAX_ZOOM,
-      );
-
-      if (nextZoom === currentZoom) return;
-
-      canvasZoomRef.current = nextZoom;
-      flushSync(() => {
-        setCanvasZoom(nextZoom);
-      });
-      scroll.scrollLeft = logicalX * nextZoom - pointerX;
-      scroll.scrollTop = logicalY * nextZoom - pointerY;
-    },
-    [],
-  );
 
   const handleReferenceDrop = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
@@ -669,6 +627,18 @@ export function CanvasView({
 
           {boardToolsOpen ? (
             <div className="board-edit-popover" role="dialog" aria-label="Edit board">
+              <div className="board-edit-popover-header">
+                <strong>Edit board</strong>
+                <button
+                  className="icon-button board-edit-close"
+                  type="button"
+                  onClick={() => setBoardToolsOpen(false)}
+                  aria-label="Close board tools"
+                  title="Close board tools"
+                >
+                  <ButtonIcon icon={X} />
+                </button>
+              </div>
               <label>
                 <span>Board name</span>
                 <input
@@ -682,7 +652,11 @@ export function CanvasView({
                   }}
                 />
               </label>
-              <div className="board-edit-popover-actions">
+              <div
+                className="board-edit-action-bar"
+                role="toolbar"
+                aria-label="Board actions"
+              >
                 <button
                   className="board-edit-save"
                   type="button"
@@ -691,105 +665,101 @@ export function CanvasView({
                   <ButtonIcon icon={Save} />
                   Save name
                 </button>
-                <button type="button" onClick={addNote}>
+                <button
+                  className="board-edit-action"
+                  type="button"
+                  onClick={addNote}
+                  aria-label="Add note"
+                  title="Add note"
+                >
                   <ButtonIcon icon={StickyNote} />
-                  Add note
-                </button>
-                <button type="button" onClick={importToBoard}>
-                  <ButtonIcon icon={ImagePlus} />
-                  Import to board
                 </button>
                 <button
-                  className="board-edit-delete"
+                  className="board-edit-action"
+                  type="button"
+                  onClick={importToBoard}
+                  aria-label="Import to board"
+                  title="Import to board"
+                >
+                  <ButtonIcon icon={ImagePlus} />
+                </button>
+                <button
+                  className="board-edit-action board-edit-delete"
                   type="button"
                   onClick={deleteBoard}
+                  aria-label="Delete board"
+                  title="Delete board"
                 >
                   <ButtonIcon icon={Trash2} />
-                  Delete board
-                </button>
-                <button
-                  className="icon-button board-edit-close"
-                  type="button"
-                  onClick={() => setBoardToolsOpen(false)}
-                  aria-label="Close board tools"
-                  title="Close board tools"
-                >
-                  <ButtonIcon icon={X} />
                 </button>
               </div>
             </div>
           ) : null}
         </header>
 
-        <div
-          className={`canvas-scroll ${isCanvasPanning ? "canvas-panning" : ""}`}
-          ref={scrollRef}
-          onPointerDown={startCanvasPan}
-          onPointerMove={(event) => rememberZoomAnchor(event.clientX, event.clientY)}
-          onWheelCapture={handleCanvasWheel}
+        <CanvasViewport
+          zoom={canvasZoom}
+          zoomRef={canvasZoomRef}
+          onZoomChange={setCanvasZoom}
+          scrollRef={scrollRef}
+          surfaceRef={surfaceRef}
+          onDrop={handleReferenceDrop}
+          onDragOver={handleReferenceDragOver}
         >
-          <div
-            className="canvas-zoom-layer"
-            style={{
-              width: CANVAS_WORLD_WIDTH * canvasZoom,
-              height: CANVAS_WORLD_HEIGHT * canvasZoom,
-            }}
-          >
-            <div
-              className="canvas-surface"
-              ref={surfaceRef}
-              style={{
-                width: CANVAS_WORLD_WIDTH,
-                height: CANVAS_WORLD_HEIGHT,
-                transform: `scale(${canvasZoom})`,
-              }}
-              onDrop={handleReferenceDrop}
-              onDragOver={handleReferenceDragOver}
-            >
-              {activeItems.map((item, index) => {
-                const position = positionForItem(item, index);
-                return (
-                  <CanvasItemCard
-                    item={item}
-                    key={item.id}
-                    position={position}
-                    thumbUrls={thumbUrls}
-                    setThumbUrls={setThumbUrls}
-                    onOpen={onOpenItem}
-                    onRemove={removeItem}
-                    onPointerDown={(event) =>
-                      startDrag(event, "item", item.id, position)
-                    }
-                  />
-                );
-              })}
+          {activeItems.map((item, index) => {
+            const position = positionForItem(item, index);
+            return (
+              <CanvasItemCard
+                item={item}
+                key={item.id}
+                position={position}
+                thumbUrls={thumbUrls}
+                setThumbUrls={setThumbUrls}
+                onOpen={onOpenItem}
+                onRemove={removeItem}
+                onPointerDown={(event) =>
+                  startDrag(event, "item", item.id, position)
+                }
+                onClickCapture={(event) =>
+                  suppressClickAfterDrag(event, "item", item.id)
+                }
+              />
+            );
+          })}
 
-              {activeCanvas.references.map((reference) => {
-                const position = positionForReference(reference);
-                return (
-                  <ReferenceCard
-                    key={reference.id}
-                    reference={reference}
-                    position={position}
-                    onRemove={removeReference}
-                    onPointerDown={(event) =>
-                      startDrag(event, "reference", reference.id, position)
-                    }
-                  />
-                );
-              })}
+          {activeCanvas.references.map((reference) => {
+            const position = positionForReference(reference);
+            return (
+              <ReferenceCard
+                key={reference.id}
+                reference={reference}
+                position={position}
+                onRemove={removeReference}
+                onPointerDown={(event) =>
+                  startDrag(event, "reference", reference.id, position)
+                }
+                onClickCapture={(event) =>
+                  suppressClickAfterDrag(event, "reference", reference.id)
+                }
+              />
+            );
+          })}
 
-              {activeCanvas.notes.map((note) => (
-                <CanvasNoteCard
-                  key={note.id}
-                  note={note}
-                  onChange={updateNote}
-                  onDelete={deleteNote}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
+          {activeCanvas.notes.map((note) => (
+            <CanvasNoteCard
+              key={note.id}
+              note={{ ...note, ...positionForNote(note) }}
+              onChange={updateNote}
+              onDelete={deleteNote}
+              onPointerDown={(event) =>
+                startDrag(event, "note", note.id, positionForNote(note))
+              }
+              onClickCapture={(event) =>
+                suppressClickAfterDrag(event, "note", note.id)
+              }
+            />
+          ))}
+        </CanvasViewport>
       </div>
     </section>
   );

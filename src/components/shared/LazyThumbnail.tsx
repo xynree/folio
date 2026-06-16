@@ -82,6 +82,7 @@ export function LazyThumbnail({
           loading="lazy"
           src={src}
           alt=""
+          draggable={false}
           onError={() => {
             if (directSrc) setDirectSrc(null);
           }}

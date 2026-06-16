@@ -2,7 +2,11 @@ import React from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { FolioData, FolioItem, ReconciliationResult } from "../types";
-import { ITEM_DRAG_MIME } from "./folio/constants";
+import {
+  CANVAS_MAX_ZOOM,
+  CANVAS_MIN_ZOOM,
+  ITEM_DRAG_MIME,
+} from "./folio/constants";
 import { AppShell } from "./App";
 import {
   cloneData,
@@ -77,7 +81,7 @@ function setupFolio({
 }
 
 async function waitForArchive() {
-  await screen.findByText("Archive");
+  await screen.findByRole("button", { name: /strip/i });
   await screen.findAllByText("Alpha");
 }
 
@@ -85,6 +89,22 @@ function archiveRoute() {
   const route = document.querySelector(".archive-route");
   if (!route) throw new Error("Archive route was not rendered");
   return route as HTMLElement;
+}
+
+async function openBoardPanel(user: ReturnType<typeof userEvent.setup>) {
+  const openButton = screen.queryByRole("button", { name: /open board panel/i });
+  if (openButton) {
+    await user.click(openButton);
+  }
+  await screen.findByText("Open board");
+}
+
+async function showHeatmap(user: ReturnType<typeof userEvent.setup>) {
+  const showButton = screen.queryByLabelText(/show heatmap/i);
+  if (showButton) {
+    await user.click(showButton);
+  }
+  await screen.findByLabelText("Upload heatmap");
 }
 
 function itemButton(name: RegExp) {
@@ -95,6 +115,19 @@ function itemButton(name: RegExp) {
   return button;
 }
 
+function dispatchWheel(
+  target: HTMLElement,
+  options: Pick<WheelEventInit, "clientX" | "clientY" | "deltaY">,
+) {
+  const event = new WheelEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    ...options,
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
 describe("AppShell Phase 1 and Phase 2 workflows", () => {
   beforeEach(() => {
     vi.mocked(window.confirm).mockReturnValue(true);
@@ -102,16 +135,110 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
   it("loads archive data, thumbnails, status counts, and the docked board panel", async () => {
     setupFolio();
+    const user = userEvent.setup();
 
     await waitForArchive();
 
     expect(screen.getByRole("button", { name: /strip/i })).not.toBeNull();
     expect(screen.getByRole("button", { name: /grid/i })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /^heatmap$/i })).toBeNull();
+    expect(
+      document
+        .querySelector(".archive-heatmap-footer")
+        ?.classList.contains("archive-heatmap-footer-minimized"),
+    ).toBe(false);
+    expect(screen.queryByText("Heatmap")).toBeNull();
+    expect(
+      screen.getByLabelText("Upload heatmap").closest(".archive-heatmap-footer"),
+    ).not.toBeNull();
+    expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
+    expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
+    expect(screen.getByRole("separator", { name: /resize tags panel/i })).not.toBeNull();
+    expect(screen.getAllByLabelText(/open board panel/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^Board$/)).toBeNull();
+    expect(screen.queryByText(/^Open board$/)).toBeNull();
+
     expect(screen.getByRole("button", { name: /import/i })).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: /strip/i }).closest(".archive-floating-actions"),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: /import/i }).closest(".archive-floating-actions"),
+    ).not.toBeNull();
+    const archiveSizeSlider = screen.getByRole("slider", {
+      name: /archive item size/i,
+    }) as HTMLInputElement;
+    const archiveActions = archiveSizeSlider.closest(".archive-floating-actions");
+    expect(archiveActions).not.toBeNull();
+    expect(archiveRoute().firstElementChild).toBe(archiveActions);
+    expect(archiveActions?.firstElementChild).toBe(
+      archiveSizeSlider.closest(".archive-scale-control"),
+    );
+    expect(archiveSizeSlider.min).toBe("50");
+    expect(archiveSizeSlider.max).toBe("200");
+    expect(archiveSizeSlider.value).toBe("100");
+    fireEvent.change(archiveSizeSlider, { target: { value: "125" } });
+    expect(screen.getByText("125%")).not.toBeNull();
+    expect(archiveRoute().style.getPropertyValue("--archive-grid-card-min")).toBe(
+      "185px",
+    );
+    expect(archiveRoute().style.getPropertyValue("--archive-item-title-size")).toBe(
+      "16.3px",
+    );
+    expect(archiveRoute().style.getPropertyValue("--archive-day-meta-width")).toBe(
+      "",
+    );
+    expect(screen.queryByText(/^Archive$/)).toBeNull();
+    expect(screen.queryByText(/visible item/i)).toBeNull();
     expect(screen.getAllByText("3 items").length).toBeGreaterThan(0);
     expect(screen.getAllByText("1 canvas").length).toBeGreaterThan(0);
     expect(screen.getAllByText("2 tags").length).toBeGreaterThan(0);
-    expect(screen.getByText("Open board")).not.toBeNull();
+
+    const workspace = document.querySelector(".studio-workspace") as HTMLElement;
+    workspace.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 900,
+        bottom: 600,
+        width: 900,
+        height: 600,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    fireEvent.pointerDown(screen.getByRole("separator", { name: /resize tags panel/i }), {
+      clientX: 176,
+    });
+    fireEvent.pointerMove(window, { clientX: 260 });
+    fireEvent.pointerUp(window, { clientX: 260 });
+    await waitFor(() => {
+      expect(
+        (document.querySelector(".archive-workspace") as HTMLElement).style
+          .getPropertyValue("--archive-sidebar-width"),
+      ).toBe("260px");
+    });
+
+    await user.click(screen.getByLabelText(/minimize heatmap/i));
+    expect(
+      document
+        .querySelector(".archive-heatmap-footer")
+        ?.classList.contains("archive-heatmap-footer-minimized"),
+    ).toBe(true);
+    expect(document.querySelector(".archive-heatmap")).not.toBeNull();
+    expect(
+      document.querySelector(".archive-heatmap")?.getAttribute("aria-hidden"),
+    ).toBe("true");
+    expect(screen.queryByLabelText("Upload heatmap")).toBeNull();
+    expect(screen.getByLabelText(/show heatmap/i)).not.toBeNull();
+
+    await user.click(screen.getByLabelText(/show heatmap/i));
+    expect(
+      document
+        .querySelector(".archive-heatmap-footer")
+        ?.classList.contains("archive-heatmap-footer-minimized"),
+    ).toBe(false);
+    expect(screen.getByLabelText("Upload heatmap")).not.toBeNull();
 
     await waitFor(() => {
       expect(window.folio.getFileDataUrl).toHaveBeenCalledWith(
@@ -169,6 +296,68 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(within(archiveRoute()).getByText("Alpha")).not.toBeNull();
     expect(within(archiveRoute()).queryByText("Bravo")).toBeNull();
     expect(within(archiveRoute()).queryByText("Charlie")).toBeNull();
+  });
+
+  it("shows persistent upload density in the bottom bar with an 8 upload cap", async () => {
+    setupFolio({
+      data: makeData({
+        items: [
+          makeItem("alpha", {
+            title: "Alpha",
+            date: "2026-06-15T18:00:00.000Z",
+          }),
+          ...Array.from({ length: 9 }, (_, index) =>
+            makeItem(`heavy-${index}`, {
+              date: `2026-06-15T18:${String(index).padStart(2, "0")}:00.000Z`,
+              title: `Heavy ${index}`,
+            }),
+          ),
+          ...Array.from({ length: 3 }, (_, index) =>
+            makeItem(`medium-${index}`, {
+              date: `2026-06-14T18:${String(index).padStart(2, "0")}:00.000Z`,
+              title: `Medium ${index}`,
+            }),
+          ),
+        ],
+      }),
+    });
+    await waitForArchive();
+    const user = userEvent.setup();
+    await showHeatmap(user);
+    const heatmap = screen.getByLabelText("Upload heatmap");
+    expect(
+      heatmap.querySelector(".archive-heatmap-months")?.textContent,
+    ).toContain("Jun");
+    expect(
+      heatmap.querySelector(".archive-heatmap-content")?.lastElementChild,
+    ).toBe(heatmap.querySelector(".archive-heatmap-legend"));
+
+    const heavyDay = heatmap.querySelector(
+      '[data-date="2026-06-15"]',
+    ) as HTMLElement;
+    const mediumDay = heatmap.querySelector(
+      '[data-date="2026-06-14"]',
+    ) as HTMLElement;
+
+    expect(heavyDay.dataset.count).toBe("10");
+    expect(heavyDay.dataset.level).toBe("8");
+    expect(mediumDay.dataset.count).toBe("3");
+    expect(mediumDay.dataset.level).toBe("3");
+
+    const scroller = heatmap.querySelector(
+      ".archive-heatmap-scroll",
+    ) as HTMLElement;
+    Object.defineProperty(scroller, "scrollWidth", {
+      configurable: true,
+      value: 1200,
+    });
+    Object.defineProperty(scroller, "clientWidth", {
+      configurable: true,
+      value: 320,
+    });
+
+    fireEvent.wheel(scroller, { deltaY: 96 });
+    expect(scroller.scrollLeft).toBe(96);
   });
 
   it("supports range multi-select and opening that selection on a new board", async () => {
@@ -398,9 +587,32 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
+    await openBoardPanel(user);
     await user.click(screen.getByRole("button", { name: /edit/i }));
 
     const boardDialog = await screen.findByRole("dialog", { name: /edit board/i });
+    const closeButton = within(boardDialog).getByLabelText(/close board tools/i);
+    const actionBar = within(boardDialog).getByRole("toolbar", {
+      name: /board actions/i,
+    });
+    expect(closeButton.closest(".board-edit-popover-header")).not.toBeNull();
+    expect(
+      within(actionBar).getByRole("button", { name: /save name/i }),
+    ).not.toBeNull();
+    expect(
+      within(actionBar).getByRole("button", { name: /add note/i }),
+    ).not.toBeNull();
+    expect(
+      within(actionBar).getByRole("button", {
+        name: /import to board/i,
+      }),
+    ).not.toBeNull();
+    expect(
+      within(actionBar).getByRole("button", {
+        name: /delete board/i,
+      }),
+    ).not.toBeNull();
+
     const boardName = within(boardDialog).getByLabelText("Board name");
     await user.clear(boardName);
     await user.type(boardName, "Story Board");
@@ -420,6 +632,19 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     );
     await waitFor(() => {
       expect(app.data.canvases[0].notes).toHaveLength(1);
+    });
+
+    const noteTextarea = document.querySelector(".canvas-note textarea") as HTMLElement;
+    expect(noteTextarea).not.toBeNull();
+    fireEvent.pointerDown(noteTextarea, { clientX: 200, clientY: 200 });
+    fireEvent.pointerMove(window, { clientX: 260, clientY: 230 });
+    fireEvent.pointerUp(window, { clientX: 260, clientY: 230 });
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].notes[0]).toMatchObject({
+        x: 200,
+        y: 150,
+      });
     });
 
     await user.click(
@@ -444,6 +669,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
+    await openBoardPanel(user);
     await user.click(screen.getByRole("button", { name: /new board/i }));
 
     await waitFor(() => {
@@ -480,6 +706,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
+    await openBoardPanel(user);
     const boardButtons = screen.getAllByRole("button", { name: /board [12]/i });
     expect(boardButtons).toHaveLength(2);
     expect(boardButtons[0].querySelectorAll(".thumb-shell")).toHaveLength(1);
@@ -497,8 +724,10 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
   it("drops selected archive items directly onto the canvas", async () => {
     const app = setupFolio();
+    const user = userEvent.setup();
 
     await waitForArchive();
+    await openBoardPanel(user);
     const surface = document.querySelector(".canvas-surface");
     expect(surface).not.toBeNull();
 
@@ -518,10 +747,48 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("zooms the canvas in and out around the current pointer position", async () => {
-    setupFolio();
+  it("drags canvas cards from their image content without turning drags into clicks", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
 
     await waitForArchive();
+    await openBoardPanel(user);
+    const image = await waitFor(() => {
+      const thumbnail = document.querySelector(
+        ".canvas-card .thumb-shell img",
+      ) as HTMLElement | null;
+      expect(thumbnail).not.toBeNull();
+      return thumbnail as HTMLElement;
+    });
+
+    fireEvent.pointerDown(image, { clientX: 200, clientY: 200 });
+    fireEvent.pointerMove(window, { clientX: 260, clientY: 230 });
+    fireEvent.pointerUp(window, { clientX: 260, clientY: 230 });
+    fireEvent.click(image);
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].positions.alpha).toEqual({ x: 140, y: 120 });
+    });
+    expect(screen.queryByRole("dialog", { name: /item details/i })).toBeNull();
+
+    const movedImage = document.querySelector(
+      ".canvas-card .thumb-shell img",
+    ) as HTMLElement;
+    fireEvent.click(movedImage);
+
+    expect(await screen.findByRole("dialog", { name: /item details/i })).not.toBeNull();
+  });
+
+  it("zooms the canvas in and out around the current pointer position", async () => {
+    setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openBoardPanel(user);
+    expect(document.querySelector(".canvas-backing")).toBeInstanceOf(
+      HTMLCanvasElement,
+    );
+
     const scroll = document.querySelector(".canvas-scroll") as HTMLElement;
     expect(scroll).not.toBeNull();
 
@@ -541,16 +808,57 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     scroll.scrollTop = 800;
 
     fireEvent.pointerMove(scroll, { clientX: 250, clientY: 150 });
-    fireEvent.wheel(scroll, { deltaY: -120, clientX: 0, clientY: 0 });
+    const zoomInEvent = dispatchWheel(scroll, {
+      deltaY: -120,
+      clientX: 0,
+      clientY: 0,
+    });
 
     const zoom = Math.exp(120 * 0.0016);
+    expect(zoomInEvent.defaultPrevented).toBe(true);
     expect(scroll.scrollLeft).toBeCloseTo((1000 + 150) * zoom - 150, 3);
     expect(scroll.scrollTop).toBeCloseTo((800 + 100) * zoom - 100, 3);
 
-    fireEvent.wheel(scroll, { deltaY: 120, clientX: 0, clientY: 0 });
+    dispatchWheel(scroll, { deltaY: 120, clientX: 0, clientY: 0 });
 
     expect(scroll.scrollLeft).toBeCloseTo(1000, 3);
     expect(scroll.scrollTop).toBeCloseTo(800, 3);
+
+    Array.from({ length: 20 }).forEach(() => {
+      dispatchWheel(scroll, { deltaY: -120, clientX: 250, clientY: 150 });
+    });
+
+    const maxZoomLeft = scroll.scrollLeft;
+    const maxZoomTop = scroll.scrollTop;
+    const blockedZoomInEvent = dispatchWheel(scroll, {
+      deltaY: -120,
+      clientX: 250,
+      clientY: 150,
+    });
+
+    expect(blockedZoomInEvent.defaultPrevented).toBe(true);
+    expect((document.querySelector(".canvas-surface") as HTMLElement).style.transform)
+      .toBe(`scale(${CANVAS_MAX_ZOOM})`);
+    expect(scroll.scrollLeft).toBeCloseTo(maxZoomLeft, 3);
+    expect(scroll.scrollTop).toBeCloseTo(maxZoomTop, 3);
+
+    Array.from({ length: 30 }).forEach(() => {
+      dispatchWheel(scroll, { deltaY: 120, clientX: 250, clientY: 150 });
+    });
+
+    const minZoomLeft = scroll.scrollLeft;
+    const minZoomTop = scroll.scrollTop;
+    const blockedZoomOutEvent = dispatchWheel(scroll, {
+      deltaY: 120,
+      clientX: 250,
+      clientY: 150,
+    });
+
+    expect(blockedZoomOutEvent.defaultPrevented).toBe(true);
+    expect((document.querySelector(".canvas-surface") as HTMLElement).style.transform)
+      .toBe(`scale(${CANVAS_MIN_ZOOM})`);
+    expect(scroll.scrollLeft).toBeCloseTo(minZoomLeft, 3);
+    expect(scroll.scrollTop).toBeCloseTo(minZoomTop, 3);
   });
 
   it("collapses the tags area and minimizes the board panel", async () => {
@@ -558,10 +866,28 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
+    expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
+    expect(
+      screen
+        .getByLabelText("Tags")
+        .firstElementChild?.classList.contains("tags-sidebar-window-controls"),
+    ).toBe(true);
+    expect(screen.getAllByLabelText(/open board panel/i).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
+    expect(screen.queryByText("Heatmap")).toBeNull();
+
     await user.click(screen.getByLabelText(/hide tags/i));
     expect(screen.getByLabelText(/show tags/i)).not.toBeNull();
+    expect(
+      screen
+        .getByLabelText("Tags")
+        .firstElementChild?.classList.contains("tags-sidebar-window-controls"),
+    ).toBe(true);
 
+    await openBoardPanel(user);
+    expect(screen.getByText("Open board")).not.toBeNull();
     await user.click(screen.getByLabelText(/minimize board panel/i));
     expect(screen.getAllByLabelText(/open board panel/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^Board$/)).toBeNull();
   });
 });
