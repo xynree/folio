@@ -1061,6 +1061,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await user.click(screen.getByLabelText(/hide tags/i));
     expect(screen.getByLabelText(/show tags/i)).not.toBeNull();
+    expect(archiveRoute().style.gridColumn).toBe("3");
     expect(
       screen
         .getByLabelText("Tags")

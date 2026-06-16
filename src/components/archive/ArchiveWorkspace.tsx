@@ -39,7 +39,10 @@ export function ArchiveWorkspace({
           onStartSidebarResize(event);
         }}
       />
-      <div className="archive-route" style={routeStyle}>
+      <div
+        className="archive-route"
+        style={{ gridColumn: "3", ...routeStyle }}
+      >
         <div className="archive-titlebar-drag-area" aria-hidden="true" />
         {children}
       </div>

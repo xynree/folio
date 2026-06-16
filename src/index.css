@@ -608,6 +608,7 @@ button svg {
 
 .archive-sidebar-resize-handle {
   position: relative;
+  grid-column: 2;
   min-width: 0;
   border-left: 1px solid #ded4c6;
   border-right: 1px solid #ded4c6;
@@ -647,6 +648,7 @@ button svg {
 
 .archive-route {
   position: relative;
+  grid-column: 3;
   display: grid;
   grid-template-rows: 52px minmax(0, 1fr);
   min-width: 0;
@@ -677,6 +679,7 @@ button svg {
 
 .tags-sidebar {
   display: grid;
+  grid-column: 1;
   grid-template-rows: 52px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
