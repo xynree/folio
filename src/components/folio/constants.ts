@@ -29,7 +29,7 @@ export const IMAGE_FILE_PATTERN = /\.(avif|gif|heic|jpeg|jpg|png|svg|webp)$/i;
 
 export const ARCHIVE_PANEL_MIN_WIDTH = 390;
 export const CANVAS_DOCK_MIN_WIDTH = 420;
-export const CANVAS_DOCK_DEFAULT_WIDTH = 560;
+export const CANVAS_DOCK_DEFAULT_WIDTH = 420;
 export const CANVAS_SPLITTER_WIDTH = 8;
 
 export const CANVAS_SURFACE_WIDTH = 2400;

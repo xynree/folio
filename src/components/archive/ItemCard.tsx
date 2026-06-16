@@ -118,6 +118,7 @@ export function ItemCard({
             <button
               type="button"
               role="menuitem"
+              onMouseEnter={() => setTagsMenuOpen(false)}
               onClick={() => {
                 setMenuOpen(false);
                 onEdit(item.id);
@@ -126,7 +127,11 @@ export function ItemCard({
               <ButtonIcon icon={Edit3} />
               Edit
             </button>
-            <div className="item-submenu">
+            <div
+              className="item-submenu"
+              onFocusCapture={() => setTagsMenuOpen(true)}
+              onMouseEnter={() => setTagsMenuOpen(true)}
+            >
               <button
                 className="item-submenu-toggle"
                 type="button"
@@ -134,7 +139,7 @@ export function ItemCard({
                 aria-haspopup="menu"
                 aria-expanded={tagsMenuOpen}
                 onClick={() => {
-                  setTagsMenuOpen((current) => !current);
+                  setTagsMenuOpen(true);
                 }}
               >
                 <ButtonIcon icon={TagIcon} />
@@ -182,6 +187,7 @@ export function ItemCard({
               className="danger-menu-item"
               type="button"
               role="menuitem"
+              onMouseEnter={() => setTagsMenuOpen(false)}
               onClick={() => {
                 setMenuOpen(false);
                 onDelete(item.id);

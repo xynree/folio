@@ -83,7 +83,7 @@ export function AppShell() {
     TAGS_SIDEBAR_DEFAULT_WIDTH,
   );
   const [tagsSidebarResizing, setTagsSidebarResizing] = useState(false);
-  const [canvasMinimized, setCanvasMinimized] = useState(true);
+  const [canvasMinimized, setCanvasMinimized] = useState(false);
   const [canvasDockWidth, setCanvasDockWidth] = useState(CANVAS_DOCK_DEFAULT_WIDTH);
   const [canvasDockResizing, setCanvasDockResizing] = useState(false);
   const [gridTagFilter, setGridTagFilter] = useState<GridTagFilter>("all");
@@ -91,8 +91,13 @@ export function AppShell() {
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
   const [detailMode, setDetailMode] = useState<ItemDetailsMode>("details");
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
+  const [selectionBoardDialogOpen, setSelectionBoardDialogOpen] = useState(false);
+  const [selectionBoardTitleDraft, setSelectionBoardTitleDraft] = useState("");
+  const [selectionTagDialogOpen, setSelectionTagDialogOpen] = useState(false);
+  const [selectionTagDraft, setSelectionTagDraft] = useState("");
   const [lastSelectedItemId, setLastSelectedItemId] = useState<string | null>(null);
   const [activeCanvasId, setActiveCanvasId] = useState<string | null>(null);
+  const [canvasDetailRequestId, setCanvasDetailRequestId] = useState(0);
   const [reconciliation, setReconciliation] =
     useState<ReconciliationResult | null>(null);
   const [reconciliationDismissed, setReconciliationDismissed] = useState(false);
@@ -362,6 +367,10 @@ export function AppShell() {
   const clearSelection = useCallback(() => {
     setSelectedItemIds([]);
     setLastSelectedItemId(null);
+    setSelectionBoardDialogOpen(false);
+    setSelectionBoardTitleDraft("");
+    setSelectionTagDialogOpen(false);
+    setSelectionTagDraft("");
   }, []);
 
   useEffect(() => {
@@ -549,6 +558,51 @@ export function AppShell() {
     [commitData],
   );
 
+  const addTagToSelection = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      let taggedCount = 0;
+      commitData((current) => {
+        const selectedSet = new Set(selectedItemIds);
+        const validSelectedIds = new Set(
+          current.items
+            .filter((item) => selectedSet.has(item.id))
+            .map((item) => item.id),
+        );
+        taggedCount = validSelectedIds.size;
+        if (!taggedCount) return current;
+
+        const existingTag = current.tags.find(
+          (tag) => tag.text.toLowerCase() === trimmed.toLowerCase(),
+        );
+        const tag = existingTag ?? { id: createId("tag"), text: trimmed };
+
+        return {
+          ...current,
+          tags: existingTag ? current.tags : [...current.tags, tag],
+          items: current.items.map((item) =>
+            validSelectedIds.has(item.id)
+              ? {
+                  ...item,
+                  tagIds: item.tagIds.includes(tag.id)
+                    ? item.tagIds
+                    : [...item.tagIds, tag.id],
+                }
+              : item,
+          ),
+        };
+      }, `${formatCount(taggedCount || selectedItemIds.length, "item")} tagged`);
+
+      if (taggedCount) {
+        setSelectionTagDialogOpen(false);
+        setSelectionTagDraft("");
+      }
+    },
+    [commitData, selectedItemIds],
+  );
+
   const removeTagFromItem = useCallback(
     (itemId: string, tagText: string) => {
       commitData(
@@ -602,6 +656,7 @@ export function AppShell() {
       if (targetCanvasId) {
         setActiveCanvasId(targetCanvasId);
         setCanvasMinimized(false);
+        setCanvasDetailRequestId((current) => current + 1);
       }
     },
     [activeCanvasId, commitData],
@@ -625,10 +680,11 @@ export function AppShell() {
     if (boardId) {
       setActiveCanvasId(boardId);
       setCanvasMinimized(false);
+      setCanvasDetailRequestId((current) => current + 1);
     }
   }, [commitData]);
 
-  const openSelectedOnNewCanvas = useCallback(() => {
+  const openSelectedOnNewCanvas = useCallback((title?: string) => {
     const itemIds = [...selectedItemIds];
     if (!itemIds.length) return;
 
@@ -640,7 +696,7 @@ export function AppShell() {
         if (!validItemIds.length) return current;
 
         const board = addItemsToCanvas(
-          createCanvas(current.canvases.length),
+          createCanvas(current.canvases.length, title),
           validItemIds,
         );
         boardId = board.id;
@@ -656,11 +712,45 @@ export function AppShell() {
     if (boardId) {
       setActiveCanvasId(boardId);
       setCanvasMinimized(false);
+      setCanvasDetailRequestId((current) => current + 1);
       clearSelection();
     } else {
       setToast("No selected items found");
     }
   }, [clearSelection, commitData, selectedItemIds]);
+
+  const deleteSelectedItems = useCallback(async () => {
+    const itemIds = [...selectedItemIds];
+    const currentItemIds = new Set(dataRef.current.items.map((item) => item.id));
+    const validItemIds = itemIds.filter((itemId) => currentItemIds.has(itemId));
+    if (!validItemIds.length) return;
+
+    const confirmed = window.confirm(
+      `Delete ${formatCount(validItemIds.length, "selected item")}?`,
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    try {
+      const nextData = await window.folio.deleteItems(validItemIds);
+      putData(nextData);
+      setDetailItemId(null);
+      clearSelection();
+      setThumbUrls((current) => {
+        const next = { ...current };
+        validItemIds.forEach((itemId) => {
+          delete next[itemId];
+        });
+        return next;
+      });
+      setToast(`${formatCount(validItemIds.length, "item")} moved to Trash`);
+    } catch (error) {
+      console.error(error);
+      setToast("Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [clearSelection, putData, selectedItemIds]);
 
   const deleteItem = useCallback(
     async (itemId: string) => {
@@ -748,8 +838,38 @@ export function AppShell() {
             >
               <SelectionBar
                 count={selectedItemIds.length}
+                newBoardDialogOpen={selectionBoardDialogOpen}
+                newBoardTitle={selectionBoardTitleDraft}
+                tagDialogOpen={selectionTagDialogOpen}
+                tagDraft={selectionTagDraft}
+                onCancelNewBoard={() => {
+                  setSelectionBoardDialogOpen(false);
+                  setSelectionBoardTitleDraft("");
+                }}
+                onCancelTag={() => {
+                  setSelectionTagDialogOpen(false);
+                  setSelectionTagDraft("");
+                }}
+                onApplyTag={() => addTagToSelection(selectionTagDraft)}
                 onClear={clearSelection}
-                onOpenNewBoard={openSelectedOnNewCanvas}
+                onCreateNewBoard={() =>
+                  openSelectedOnNewCanvas(selectionBoardTitleDraft)
+                }
+                onDeleteSelection={deleteSelectedItems}
+                onNewBoardTitleChange={setSelectionBoardTitleDraft}
+                onOpenNewBoard={() => {
+                  setSelectionBoardTitleDraft("");
+                  setSelectionTagDialogOpen(false);
+                  setSelectionTagDraft("");
+                  setSelectionBoardDialogOpen(true);
+                }}
+                onOpenTag={() => {
+                  setSelectionTagDraft("");
+                  setSelectionBoardDialogOpen(false);
+                  setSelectionBoardTitleDraft("");
+                  setSelectionTagDialogOpen(true);
+                }}
+                onTagDraftChange={setSelectionTagDraft}
               />
               <div className="archive-floating-actions">
                 <label className="archive-scale-control">
@@ -900,6 +1020,7 @@ export function AppShell() {
               <CanvasView
                 data={data}
                 activeCanvasId={activeCanvasId}
+                canvasDetailRequestId={canvasDetailRequestId}
                 setActiveCanvasId={setActiveCanvasId}
                 onOpenItem={openItemDetails}
                 onCreateBoard={createBoard}

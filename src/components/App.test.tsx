@@ -101,7 +101,40 @@ async function openBoardPanel(user: ReturnType<typeof userEvent.setup>) {
   if (openButton) {
     await user.click(openButton);
   }
+  await screen.findByText(/^Boards$/i);
+}
+
+async function openBoardBrowser(user: ReturnType<typeof userEvent.setup>) {
+  await openBoardPanel(user);
+  if (!document.querySelector(".canvas-board-browser")) {
+    const boardsButton = screen.queryByRole("button", { name: /^boards$/i });
+    if (boardsButton) {
+      await user.click(boardsButton);
+    }
+  }
+  await waitFor(() => {
+    expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
+  });
+}
+
+async function openActiveBoardCanvas(user: ReturnType<typeof userEvent.setup>) {
+  await openBoardPanel(user);
+  if (document.querySelector(".canvas-board-browser")) {
+    const boardButton = await waitFor(() => {
+      const button = screen
+        .getAllByRole("button", { name: /^open /i })
+        .find((element) =>
+          element.classList.contains("canvas-board-open-button"),
+        );
+      expect(button).toBeTruthy();
+      return button as HTMLElement;
+    });
+    await user.click(boardButton);
+  }
   await screen.findByRole("button", { name: /^boards$/i });
+  await waitFor(() => {
+    expect(document.querySelector(".canvas-surface")).not.toBeNull();
+  });
 }
 
 async function showHeatmap(user: ReturnType<typeof userEvent.setup>) {
@@ -173,7 +206,14 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
     expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
     expect(screen.getByRole("separator", { name: /resize tags panel/i })).not.toBeNull();
-    expect(screen.getAllByLabelText(/open board panel/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
+    expect(document.querySelector(".canvas-dock-minimized")).toBeNull();
+    expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
+    expect(document.querySelector(".canvas-board-grid")).not.toBeNull();
+    expect(
+      (document.querySelector(".studio-workspace") as HTMLElement).style
+        .gridTemplateColumns,
+    ).toContain("420px");
     expect(screen.queryByText(/^Board$/)).toBeNull();
     expect(screen.queryByText(/^Open board$/)).toBeNull();
 
@@ -497,7 +537,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
 
     expect(screen.getByText("3 items selected")).not.toBeNull();
-    expect(screen.getByText("Drag onto a board")).not.toBeNull();
+    expect(screen.queryByText("Drag onto a board")).toBeNull();
     const selectionPopup = screen
       .getByText("3 items selected")
       .closest(".selection-bar");
@@ -513,14 +553,28 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       screen.queryByRole("button", { name: /add to active board/i }),
     ).toBeNull();
     expect(screen.queryByText("+2")).toBeNull();
+    expect(
+      within(selectionPopup as HTMLElement).getByRole("button", {
+        name: /^clear$/i,
+      }).classList.contains("selection-clear-button"),
+    ).toBe(true);
     await user.click(
-      screen.getByRole("button", { name: /create new board with selection/i }),
+      within(selectionPopup as HTMLElement).getByRole("button", {
+        name: /new board/i,
+      }),
     );
+    const newBoardDialog = await screen.findByRole("dialog", {
+      name: /name new board/i,
+    });
+    await user.type(within(newBoardDialog).getByLabelText("Board name"), "Story");
+    await user.click(within(newBoardDialog).getByRole("button", { name: /create/i }));
 
     await waitFor(() => {
       expect(app.data.canvases).toHaveLength(2);
     });
+    expect(app.data.canvases[0].title).toBe("Story");
     expect(app.data.canvases[0].itemIds).toEqual(["alpha", "bravo", "charlie"]);
+    expect(screen.queryByRole("dialog", { name: /name new board/i })).toBeNull();
     expect(screen.getByText("3 items · 0 notes · 0 references")).not.toBeNull();
 
     await waitFor(() => {
@@ -531,6 +585,74 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(canvasScroll.scrollLeft).toBe(CANVAS_WORLD_ORIGIN - 80);
       expect(canvasScroll.scrollTop).toBe(CANVAS_WORLD_ORIGIN - 80);
     });
+  });
+
+  it("tags selected items from the selection action bar", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(itemButton(/alpha/i));
+    fireEvent.click(itemButton(/charlie/i), {
+      shiftKey: true,
+    });
+
+    const selectionPopup = screen
+      .getByText("3 items selected")
+      .closest(".selection-bar") as HTMLElement;
+    await user.click(
+      within(selectionPopup).getByRole("button", {
+        name: /^tag$/i,
+      }),
+    );
+    const tagDialog = await screen.findByRole("dialog", {
+      name: /tag selected items/i,
+    });
+    await user.type(within(tagDialog).getByLabelText("Tag name"), "research");
+    await user.click(within(tagDialog).getByRole("button", { name: /apply/i }));
+
+    await waitFor(() => {
+      const tag = app.data.tags.find((candidate) => candidate.text === "research");
+      expect(tag).toBeTruthy();
+      expect(
+        app.data.items
+          .filter((item) => ["alpha", "bravo", "charlie"].includes(item.id))
+          .every((item) => item.tagIds.includes(tag?.id ?? "")),
+      ).toBe(true);
+    });
+    expect(screen.queryByRole("dialog", { name: /tag selected items/i })).toBeNull();
+    expect(screen.getByText("3 items selected")).not.toBeNull();
+  });
+
+  it("bulk deletes selected items from the selection action bar", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(itemButton(/alpha/i));
+    fireEvent.click(itemButton(/charlie/i), {
+      shiftKey: true,
+    });
+
+    const selectionPopup = screen
+      .getByText("3 items selected")
+      .closest(".selection-bar") as HTMLElement;
+    await user.click(
+      within(selectionPopup).getByRole("button", {
+        name: /^delete$/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(window.folio.deleteItems).toHaveBeenCalledWith([
+        "alpha",
+        "bravo",
+        "charlie",
+      ]);
+      expect(app.data.items).toHaveLength(0);
+      expect(app.data.canvases[0].itemIds).toEqual([]);
+    });
+    expect(screen.queryByText("3 items selected")).toBeNull();
   });
 
   it("range selects across strip day sections in visual order", async () => {
@@ -580,7 +702,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(selectedItemTitles()).not.toContain("Older C");
   });
 
-  it("adds and removes item tags from the More menu submenu", async () => {
+  it("adds and removes item tags from the More menu hover submenu", async () => {
     const app = setupFolio({
       data: makeData({
         items: [
@@ -593,7 +715,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await waitForArchive();
     await user.click(screen.getByLabelText(/more actions for bravo/i));
-    await user.click(screen.getByRole("menuitem", { name: /add tags/i }));
+    await user.hover(screen.getByRole("menuitem", { name: /add tags/i }));
     const tagSubmenu = screen.getByRole("menu", {
       name: /add or remove tags/i,
     });
@@ -793,7 +915,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await openBoardPanel(user);
+    await openActiveBoardCanvas(user);
     expect(
       screen.getByRole("button", { name: /add note/i }).closest(".canvas-board-actions"),
     ).not.toBeNull();
@@ -886,10 +1008,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await openBoardPanel(user);
-    expect(screen.queryByRole("button", { name: /new board/i })).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: /^boards$/i }));
+    await openBoardBrowser(user);
     expect(screen.getByRole("button", { name: /new board/i })).not.toBeNull();
     await user.click(screen.getByRole("button", { name: /new board/i }));
 
@@ -927,8 +1046,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await openBoardPanel(user);
-    await user.click(screen.getByRole("button", { name: /^boards$/i }));
+    await openBoardBrowser(user);
     const boardButtons = screen.getAllByRole("button", {
       name: /^open board [12],/i,
     });
@@ -994,8 +1112,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await openBoardPanel(user);
-    await user.click(screen.getByRole("button", { name: /^boards$/i }));
+    await openBoardBrowser(user);
 
     await user.click(
       screen.getByRole("button", { name: /more actions for board 2/i }),
@@ -1064,8 +1181,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await openBoardPanel(user);
-    await user.click(screen.getByRole("button", { name: /^boards$/i }));
+    await openBoardBrowser(user);
 
     const board2Tile = screen
       .getByRole("button", { name: /^open board 2,/i })
@@ -1100,7 +1216,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await openBoardPanel(user);
+    await openActiveBoardCanvas(user);
     const surface = document.querySelector(".canvas-surface");
     expect(surface).not.toBeNull();
 
@@ -1135,7 +1251,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await openBoardPanel(user);
+    await openActiveBoardCanvas(user);
     const surface = document.querySelector(".canvas-surface");
     expect(surface).not.toBeNull();
 
@@ -1167,7 +1283,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await openBoardPanel(user);
+    await openActiveBoardCanvas(user);
     const image = await waitFor(() => {
       const thumbnail = document.querySelector(
         ".canvas-card .thumb-shell img",
@@ -1199,7 +1315,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await openBoardPanel(user);
+    await openActiveBoardCanvas(user);
     expect(document.querySelector(".canvas-backing")).toBeInstanceOf(
       HTMLCanvasElement,
     );
@@ -1287,7 +1403,8 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
         .getByLabelText("Tags")
         .firstElementChild?.classList.contains("tags-sidebar-window-controls"),
     ).toBe(true);
-    expect(screen.getAllByLabelText(/open board panel/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
+    expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
     expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
     expect(screen.queryByText("Heatmap")).toBeNull();
 
@@ -1301,7 +1418,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     ).toBe(true);
 
     await openBoardPanel(user);
-    expect(screen.getByRole("button", { name: /^boards$/i })).not.toBeNull();
+    expect(screen.getByText(/^Boards$/i)).not.toBeNull();
     await user.click(screen.getByLabelText(/minimize board panel/i));
     expect(screen.getAllByLabelText(/open board panel/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/^Board$/)).toBeNull();

@@ -46,6 +46,7 @@ const BOARD_BROWSER_PREVIEW_LIMIT = 3;
 export function CanvasView({
   data,
   activeCanvasId,
+  canvasDetailRequestId,
   setActiveCanvasId,
   onOpenItem,
   onCreateBoard,
@@ -58,6 +59,7 @@ export function CanvasView({
 }: {
   data: FolioData;
   activeCanvasId: string | null;
+  canvasDetailRequestId: number;
   setActiveCanvasId: React.Dispatch<React.SetStateAction<string | null>>;
   onOpenItem: ItemDetailsOpenHandler;
   onCreateBoard: () => void;
@@ -80,7 +82,7 @@ export function CanvasView({
     position: CanvasPosition;
   } | null>(null);
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
-  const [boardBrowserOpen, setBoardBrowserOpen] = useState(false);
+  const [boardBrowserOpen, setBoardBrowserOpen] = useState(true);
   const [boardMenuCanvasId, setBoardMenuCanvasId] = useState<string | null>(null);
   const [browserEditCanvasId, setBrowserEditCanvasId] = useState<string | null>(
     null,
@@ -90,6 +92,7 @@ export function CanvasView({
   const [boardColorDraft, setBoardColorDraft] = useState(CANVAS_COLORS[0]);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const canvasZoomRef = useRef(1);
+  const lastCanvasDetailRequestIdRef = useRef(canvasDetailRequestId);
   const draggedObjectRef = useRef<{ kind: CanvasDragKind; id: string } | null>(
     null,
   );
@@ -115,8 +118,12 @@ export function CanvasView({
   }, [activeCanvas?.color, activeCanvas?.id, activeCanvas?.title]);
 
   useEffect(() => {
+    if (canvasDetailRequestId === lastCanvasDetailRequestIdRef.current) {
+      return;
+    }
+    lastCanvasDetailRequestIdRef.current = canvasDetailRequestId;
     setBoardBrowserOpen(false);
-  }, [activeCanvas?.id]);
+  }, [canvasDetailRequestId]);
 
   useEffect(() => {
     if (!boardMenuCanvasId) return undefined;
@@ -321,11 +328,11 @@ export function CanvasView({
       setActiveCanvasId(nextActiveCanvasId);
       setBoardToolsOpen(false);
       setBoardMenuCanvasId(null);
-      if (!nextActiveCanvasId) {
+      if (boardBrowserOpen || !nextActiveCanvasId) {
         setBoardBrowserOpen(true);
       }
     },
-    [activeCanvasId, commitData, data.canvases, setActiveCanvasId],
+    [activeCanvasId, boardBrowserOpen, commitData, data.canvases, setActiveCanvasId],
   );
 
   const deleteBoard = useCallback(() => {
