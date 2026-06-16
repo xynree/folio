@@ -84,10 +84,11 @@ export function ReferenceCard({
 
   useEffect(() => {
     let cancelled = false;
+    setSrc(null);
     window.folio
-      .getFileDataUrl(reference.path)
-      .then((dataUrl) => {
-        if (!cancelled) setSrc(dataUrl);
+      .ensureReferenceThumbnail(reference.id, reference.path)
+      .then((url) => {
+        if (!cancelled) setSrc(url);
       })
       .catch((error) => console.error(error));
 
@@ -124,7 +125,7 @@ export function ReferenceCard({
       </div>
       <span className="thumb-shell">
         {src ? (
-          <img src={src} alt="" draggable={false} />
+          <img loading="lazy" src={src} alt="" draggable={false} />
         ) : (
           <span className="thumb-placeholder">Ref</span>
         )}

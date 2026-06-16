@@ -73,6 +73,7 @@ const folioMock: FolioApi = {
   deleteItems: vi.fn(),
   openFileDialog: vi.fn(),
   ensureThumbnails: vi.fn(),
+  ensureReferenceThumbnail: vi.fn(),
   getFileDataUrl: vi.fn(),
   getReconciliationResult: vi.fn(),
   openInFinder: vi.fn(),

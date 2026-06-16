@@ -116,15 +116,52 @@ export function CanvasView({
     return () => window.cancelAnimationFrame(frame);
   }, [activeCanvas?.id]);
 
+  const itemsById = useMemo(
+    () => new Map(data.items.map((item) => [item.id, item])),
+    [data.items],
+  );
+
   const activeItems = useMemo(
     () =>
       activeCanvas
         ? activeCanvas.itemIds
-            .map((itemId) => data.items.find((item) => item.id === itemId))
+            .map((itemId) => itemsById.get(itemId))
             .filter(Boolean) as FolioItem[]
         : [],
-    [activeCanvas, data.items],
+    [activeCanvas, itemsById],
   );
+
+  const boardPreviewItemIds = useMemo(
+    () =>
+      boardBrowserOpen
+        ? Array.from(
+            new Set(
+              data.canvases.flatMap((canvas) => canvas.itemIds.slice(0, 8)),
+            ),
+          )
+        : [],
+    [boardBrowserOpen, data.canvases],
+  );
+
+  useEffect(() => {
+    if (!boardPreviewItemIds.length) return undefined;
+
+    const missingIds = boardPreviewItemIds.filter((itemId) => !thumbUrls[itemId]);
+    if (!missingIds.length) return undefined;
+
+    let cancelled = false;
+    window.folio
+      .ensureThumbnails(missingIds)
+      .then((urls) => {
+        if (cancelled) return;
+        setThumbUrls((current) => ({ ...current, ...urls }));
+      })
+      .catch((error) => console.error(error));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [boardPreviewItemIds, setThumbUrls, thumbUrls]);
 
   const updateCanvas = useCallback(
     (canvasId: string, updater: (canvas: Canvas) => Canvas, message?: string) => {
@@ -580,7 +617,7 @@ export function CanvasView({
         <div className="canvas-board-grid">
           {data.canvases.map((canvas) => {
             const memberItems = canvas.itemIds
-              .map((itemId) => data.items.find((item) => item.id === itemId))
+              .map((itemId) => itemsById.get(itemId))
               .filter(Boolean) as FolioItem[];
             return (
               <button
@@ -609,6 +646,7 @@ export function CanvasView({
                           item={item}
                           thumbUrls={thumbUrls}
                           setThumbUrls={setThumbUrls}
+                          requestThumbnail={false}
                         />
                       </span>
                     ))

@@ -221,8 +221,6 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [x] Note card: amber header strip, editable textarea, delete action
 - [x] Click note body to edit, blur to save and exit
 - [x] Empty note on blur: auto-delete
-- [ ] Escape exits edit mode without deleting
-- [ ] Delete link visible only while editing
 - [x] Notes saved to `canvas.notes[]` in `folio.json`
 
 ### 3.4 References on the canvas
@@ -301,8 +299,6 @@ Reference images belong to a canvas, not to items. They are first-class position
 
 - [ ] `forge.config.ts`: add `@electron-forge/maker-dmg` for macOS `.dmg`
 - [x] Confirm all three Vite targets (main, preload, renderer) build cleanly
-- [ ] Code-sign with Apple Developer certificate for Gatekeeper
-- [ ] Windows later: add `@electron-forge/maker-squirrel`, no other changes needed
 
 ---
 
@@ -315,21 +311,3 @@ Reference images belong to a canvas, not to items. They are first-class position
 - Cloud sync
 - Mobile
 - Windows (macOS first)
-
----
-
-## Schedule
-
-| Phase     | Milestone                                   | Est. effort         |
-| --------- | ------------------------------------------- | ------------------- |
-| 1.1–1.3   | Scaffold + IPC bridge + schema              | 3–4 days            |
-| 1.4–1.5   | File watcher + filesystem ops               | 3–4 days            |
-| 1.6–1.7   | Reconciliation + thumbnails                 | 3–4 days            |
-| 1.8–1.9   | File drop + import button                   | 2–3 days            |
-| 1.10–1.12 | Strip + grid + status bar                   | 4–5 days            |
-| 2.1–2.3   | Detail drawer + tags + multi-select         | 4–5 days            |
-| 2.4–2.5   | Canvases: create, open, sidebar list        | 3–4 days            |
-| 3.1–3.3   | Canvas view + drag-in + notes               | 5–6 days            |
-| 3.4–3.6   | References panel + edges + strokes          | 3–4 days            |
-| Polish    | Empty states, errors, edge cases, packaging | 4–5 days            |
-| **Total** |                                             | **~7–8 weeks solo** |

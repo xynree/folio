@@ -47,6 +47,7 @@ export interface FolioManagerInterface {
     filePaths: string[],
   ): Promise<CanvasReference[]>;
   deleteItems(itemIds: string[]): Promise<FolioData>;
+  ensureReferenceThumbnail(referenceId: string, filePath: string): Promise<string>;
   startWatcher(mainWindow: BrowserWindow): void;
 }
 
@@ -104,6 +105,11 @@ export class FolioManager implements FolioManagerInterface {
     ipcMain.handle("folio:open-file-dialog", () => this.openFileDialog());
     ipcMain.handle("folio:ensure-thumbnails", (_: unknown, itemIds: string[]) =>
       this.ensureThumbnails(itemIds),
+    );
+    ipcMain.handle(
+      "folio:ensure-reference-thumbnail",
+      (_: unknown, referenceId: string, filePath: string) =>
+        this.ensureReferenceThumbnail(referenceId, filePath),
     );
     ipcMain.handle("folio:get-file-data-url", (_: unknown, filePath: string) =>
       this.archiveManager.getFileDataUrl(filePath),
@@ -453,6 +459,13 @@ export class FolioManager implements FolioManagerInterface {
 
   async ensureThumbnails(itemIds: string[]): Promise<ThumbnailUrls> {
     return this.archiveManager.ensureThumbnails(itemIds);
+  }
+
+  async ensureReferenceThumbnail(
+    referenceId: string,
+    filePath: string,
+  ): Promise<string> {
+    return this.archiveManager.ensureReferenceThumbnail(referenceId, filePath);
   }
 
   getReconciliationResult(): ReconciliationResult {

@@ -18,6 +18,7 @@ export interface FolioApi {
   deleteItems: (itemIds: string[]) => Promise<FolioData>;
   openFileDialog: () => Promise<string[]>;
   ensureThumbnails: (itemIds: string[]) => Promise<ThumbnailUrls>;
+  ensureReferenceThumbnail: (referenceId: string, filePath: string) => Promise<string>;
   getFileDataUrl: (filePath: string) => Promise<string>;
   getReconciliationResult: () => Promise<ReconciliationResult>;
   openInFinder: (filePath: string) => Promise<void>;

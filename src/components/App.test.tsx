@@ -65,6 +65,9 @@ function setupFolio({
       itemIds.map((itemId) => [itemId, `folio://thumb/${itemId}.jpg`]),
     ),
   );
+  vi.mocked(window.folio.ensureReferenceThumbnail).mockImplementation(
+    async (referenceId) => `folio://thumb/reference-${referenceId}.jpg`,
+  );
   vi.mocked(window.folio.getFileDataUrl).mockImplementation(async (filePath) =>
     `data:image/png;base64,${btoa(filePath)}`,
   );
@@ -261,10 +264,11 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.getByLabelText("Upload heatmap")).not.toBeNull();
 
     await waitFor(() => {
-      expect(window.folio.getFileDataUrl).toHaveBeenCalledWith(
-        "items/2026/06_june/alpha.png",
+      expect(window.folio.ensureThumbnails).toHaveBeenCalledWith(
+        expect.arrayContaining(["alpha"]),
       );
     });
+    expect(window.folio.getFileDataUrl).not.toHaveBeenCalled();
   });
 
   it("imports files from the import button into the archive", async () => {
@@ -936,6 +940,48 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.canvases[0].itemIds).toEqual(["alpha", "bravo"]);
       expect(app.data.canvases[0].positions.bravo).toBeTruthy();
     });
+  });
+
+  it("drops external image references onto the canvas with thumbnail previews", async () => {
+    const app = setupFolio();
+    vi.mocked(window.folio.getPathForFile).mockReturnValue("/tmp/reference.png");
+    vi.mocked(window.folio.copyReference).mockResolvedValueOnce([
+      {
+        id: "ref-1",
+        filename: "reference.png",
+        path: "references/board-1/reference.png",
+        x: 0,
+        y: 0,
+      },
+    ]);
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openBoardPanel(user);
+    const surface = document.querySelector(".canvas-surface");
+    expect(surface).not.toBeNull();
+
+    fireEvent.drop(surface as HTMLElement, {
+      clientX: 20120,
+      clientY: 20140,
+      dataTransfer: {
+        getData: () => "",
+        files: [new File(["reference"], "reference.png", { type: "image/png" })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].references).toHaveLength(1);
+    });
+    await waitFor(() => {
+      expect(window.folio.ensureReferenceThumbnail).toHaveBeenCalledWith(
+        "ref-1",
+        "references/board-1/reference.png",
+      );
+    });
+    expect(window.folio.getFileDataUrl).not.toHaveBeenCalledWith(
+      "references/board-1/reference.png",
+    );
   });
 
   it("drags canvas cards from their image content without turning drags into clicks", async () => {

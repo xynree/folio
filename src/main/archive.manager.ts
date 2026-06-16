@@ -32,6 +32,8 @@ const PLACEHOLDER_SVG_BY_TYPE: Record<ItemType, string> = {
   text: "Text",
   other: "File",
 };
+const THUMBNAIL_JPEG_QUALITY = 72;
+const THUMBNAIL_SIZE = 320;
 
 /**
  * ArchiveManager handles filesystem-level operations for the media archive:
@@ -194,9 +196,10 @@ export class ArchiveManager {
   public async ensureThumbnails(itemIds: string[]): Promise<ThumbnailUrls> {
     const urls: ThumbnailUrls = {};
     let repairedMissingFlag = false;
+    const itemsById = new Map(this.items.map((item) => [item.id, item]));
 
     for (const itemId of itemIds) {
-      const item = this.items.find((candidate) => candidate.id === itemId);
+      const item = itemsById.get(itemId);
       if (!item) continue;
 
       if (item.missing && (await exists(this.getAbsolutePath(item.path)))) {
@@ -216,6 +219,44 @@ export class ArchiveManager {
     }
 
     return urls;
+  }
+
+  public async ensureReferenceThumbnail(
+    referenceId: string,
+    relativeOrAbsolutePath: string,
+  ): Promise<string> {
+    const thumbPath = this.getReferenceThumbnailPath(referenceId, "jpg");
+    const placeholderPath = this.getReferenceThumbnailPath(referenceId, "svg");
+
+    if (await exists(thumbPath)) return this.getThumbnailUrl(thumbPath);
+
+    const sourcePath = this.getAbsolutePath(relativeOrAbsolutePath);
+    if (!(await exists(sourcePath))) {
+      if (!(await exists(placeholderPath))) {
+        await this.writeReferencePlaceholderThumbnail(placeholderPath);
+      }
+      return this.getThumbnailUrl(placeholderPath);
+    }
+
+    await fs.mkdir(path.dirname(thumbPath), { recursive: true });
+
+    try {
+      const thumb = await nativeImage.createThumbnailFromPath(sourcePath, {
+        width: THUMBNAIL_SIZE,
+        height: THUMBNAIL_SIZE,
+      });
+
+      if (thumb.isEmpty()) {
+        await this.writeReferencePlaceholderThumbnail(placeholderPath);
+        return this.getThumbnailUrl(placeholderPath);
+      }
+
+      await fs.writeFile(thumbPath, thumb.toJPEG(THUMBNAIL_JPEG_QUALITY));
+      return this.getThumbnailUrl(thumbPath);
+    } catch {
+      await this.writeReferencePlaceholderThumbnail(placeholderPath);
+      return this.getThumbnailUrl(placeholderPath);
+    }
   }
 
   public async getFileDataUrl(relativeOrAbsolutePath: string): Promise<string> {
@@ -368,8 +409,8 @@ export class ArchiveManager {
 
     try {
       const thumb = await nativeImage.createThumbnailFromPath(sourcePath, {
-        width: 400,
-        height: 400,
+        width: THUMBNAIL_SIZE,
+        height: THUMBNAIL_SIZE,
       });
 
       if (thumb.isEmpty()) {
@@ -378,7 +419,7 @@ export class ArchiveManager {
         return placeholderPath;
       }
 
-      await fs.writeFile(thumbPath, thumb.toJPEG(80));
+      await fs.writeFile(thumbPath, thumb.toJPEG(THUMBNAIL_JPEG_QUALITY));
       return thumbPath;
     } catch {
       const placeholderPath = this.getPlaceholderPath(item);
@@ -398,16 +439,41 @@ export class ArchiveManager {
     await fs.writeFile(thumbPath, svg, "utf-8");
   }
 
+  private async writeReferencePlaceholderThumbnail(thumbPath: string) {
+    await fs.mkdir(path.dirname(thumbPath), { recursive: true });
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#f3efe7"/>
+  <rect x="42" y="42" width="316" height="316" rx="22" fill="#fffdf8" stroke="#d7c9b4" stroke-width="2"/>
+  <path d="M112 256 L176 192 L218 232 L258 184 L304 256 Z" fill="none" stroke="#9f6b3d" stroke-width="12" stroke-linejoin="round"/>
+  <circle cx="150" cy="146" r="20" fill="#385d56"/>
+  <text x="200" y="316" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="32" fill="#6b5a48">Reference</text>
+</svg>`;
+    await fs.writeFile(thumbPath, svg, "utf-8");
+  }
+
   private getPrimaryThumbnailPath(item: FolioItem): string {
     const thumbsDir = path.join(this.folioRoot, ".folio", "thumbs");
     if (!["sketch", "ref", "anim"].includes(item.type)) {
-      return path.join(thumbsDir, `${item.id}.svg`);
+      return path.join(thumbsDir, `${item.id}-small.svg`);
     }
-    return path.join(thumbsDir, `${item.id}.jpg`);
+    return path.join(thumbsDir, `${item.id}-small.jpg`);
   }
 
   private getPlaceholderPath(item: FolioItem): string {
-    return path.join(this.folioRoot, ".folio", "thumbs", `${item.id}.svg`);
+    return path.join(this.folioRoot, ".folio", "thumbs", `${item.id}-small.svg`);
+  }
+
+  private getReferenceThumbnailPath(
+    referenceId: string,
+    extension: "jpg" | "svg",
+  ) {
+    const safeId = sanitizeFileBaseName(referenceId);
+    return path.join(
+      this.folioRoot,
+      ".folio",
+      "thumbs",
+      `reference-${safeId}-small.${extension}`,
+    );
   }
 
   private getThumbnailUrl(thumbPath: string): string {
