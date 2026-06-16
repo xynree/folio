@@ -9,9 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   Grid3X3,
-  PanelRightClose,
   PanelRightOpen,
-  Plus,
   Rows3,
   Upload,
 } from "lucide-react";
@@ -610,36 +608,6 @@ export function AppShell() {
     }
   }, [commitData]);
 
-  const addSelectedToActiveCanvas = useCallback(() => {
-    if (!selectedItemIds.length) return;
-    let targetCanvasId = activeCanvasId;
-    let createdCanvas: Canvas | null = null;
-
-    commitData((current) => {
-      let canvases = [...current.canvases];
-      if (!targetCanvasId || !canvases.some((canvas) => canvas.id === targetCanvasId)) {
-        createdCanvas = createCanvas(canvases.length);
-        targetCanvasId = createdCanvas.id;
-        canvases = [createdCanvas, ...canvases];
-      }
-
-      return {
-        ...current,
-        canvases: canvases.map((canvas) =>
-          canvas.id === targetCanvasId
-            ? addItemsToCanvas(canvas, selectedItemIds)
-            : canvas,
-        ),
-      };
-    }, createdCanvas ? "Board created" : "Selection added to board");
-
-    if (targetCanvasId) {
-      setActiveCanvasId(targetCanvasId);
-      setCanvasMinimized(false);
-    }
-    clearSelection();
-  }, [activeCanvasId, clearSelection, commitData, selectedItemIds]);
-
   const openSelectedOnNewCanvas = useCallback(() => {
     const itemIds = [...selectedItemIds];
     if (!itemIds.length) return;
@@ -727,7 +695,6 @@ export function AppShell() {
 
       <SelectionBar
         count={selectedItemIds.length}
-        onAddToBoard={addSelectedToActiveCanvas}
         onClear={clearSelection}
         onOpenNewBoard={openSelectedOnNewCanvas}
       />
@@ -786,18 +753,20 @@ export function AppShell() {
                   <button
                     className={archiveView === "strip" ? "active" : ""}
                     type="button"
+                    aria-label="Strip view"
+                    title="Strip view"
                     onClick={() => setArchiveView("strip")}
                   >
                     <ButtonIcon icon={Rows3} />
-                    Strip
                   </button>
                   <button
                     className={archiveView === "grid" ? "active" : ""}
                     type="button"
+                    aria-label="Grid view"
+                    title="Grid view"
                     onClick={() => setArchiveView("grid")}
                   >
                     <ButtonIcon icon={Grid3X3} />
-                    Grid
                   </button>
                 </div>
                 <button className="primary-action" type="button" onClick={handleOpenDialog}>
@@ -813,6 +782,7 @@ export function AppShell() {
                   thumbUrls={thumbUrls}
                   setThumbUrls={setThumbUrls}
                   selectedItemIds={selectedItemIds}
+                  showDateGaps={gridTagFilter === "all"}
                   onBackgroundClick={clearSelection}
                   onDragStart={startArchiveItemDrag}
                   onItemOpen={handleItemOpen}
@@ -892,50 +862,29 @@ export function AppShell() {
           <aside
             className={`canvas-dock ${canvasMinimized ? "canvas-dock-minimized" : ""}`}
           >
-            <header className="canvas-dock-header">
-              <div>
-                {canvasMinimized ? null : (
-                  <>
-                    <strong>Open board</strong>
-                    <span>
-                      {data.canvases.find((canvas) => canvas.id === activeCanvasId)
-                        ?.title ?? data.canvases[0]?.title ?? "No board"}
-                    </span>
-                  </>
-                )}
-              </div>
-              <div className="canvas-dock-header-actions">
-                {canvasMinimized ? null : (
+            {canvasMinimized ? (
+              <header className="canvas-dock-header">
+                <div />
+                <div className="canvas-dock-header-actions">
                   <button
-                    className="secondary-action canvas-dock-new-board-button"
+                    className="icon-button"
                     type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      createBoard();
-                    }}
+                    aria-label="Open board panel"
+                    title="Open board panel"
+                    onClick={() => setCanvasMinimized(false)}
                   >
-                    <ButtonIcon icon={Plus} />
-                    New board
+                    <ButtonIcon icon={PanelRightOpen} />
                   </button>
-                )}
-                <button
-                  className="icon-button"
-                  type="button"
-                  aria-label={canvasMinimized ? "Open board panel" : "Minimize board panel"}
-                  title={canvasMinimized ? "Open board panel" : "Minimize board panel"}
-                  onClick={() => setCanvasMinimized((current) => !current)}
-                >
-                  <ButtonIcon icon={canvasMinimized ? PanelRightOpen : PanelRightClose} />
-                </button>
-              </div>
-            </header>
-
-            {canvasMinimized ? null : (
+                </div>
+              </header>
+            ) : (
               <CanvasView
                 data={data}
                 activeCanvasId={activeCanvasId}
                 setActiveCanvasId={setActiveCanvasId}
                 onOpenItem={openItemDetails}
+                onCreateBoard={createBoard}
+                onMinimize={() => setCanvasMinimized(true)}
                 thumbUrls={thumbUrls}
                 setThumbUrls={setThumbUrls}
                 commitData={commitData}

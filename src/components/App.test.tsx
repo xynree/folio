@@ -96,7 +96,7 @@ async function openBoardPanel(user: ReturnType<typeof userEvent.setup>) {
   if (openButton) {
     await user.click(openButton);
   }
-  await screen.findByText("Open board");
+  await screen.findByRole("button", { name: /^boards$/i });
 }
 
 async function showHeatmap(user: ReturnType<typeof userEvent.setup>) {
@@ -113,6 +113,12 @@ function itemButton(name: RegExp) {
     .find((element) => element.classList.contains("item-card-main"));
   if (!button) throw new Error(`Item button ${name.toString()} was not rendered`);
   return button;
+}
+
+function gridTitles() {
+  return Array.from(archiveRoute().querySelectorAll(".item-grid .item-title")).map(
+    (element) => element.textContent ?? "",
+  );
 }
 
 function dispatchWheel(
@@ -141,6 +147,8 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     expect(screen.getByRole("button", { name: /strip/i })).not.toBeNull();
     expect(screen.getByRole("button", { name: /grid/i })).not.toBeNull();
+    expect(screen.queryByText(/^Strip$/i)).toBeNull();
+    expect(screen.queryByText(/^Grid$/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /^heatmap$/i })).toBeNull();
     expect(
       document
@@ -269,6 +277,46 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.getByText("1 item added to today")).not.toBeNull();
   });
 
+  it("sorts grid results by most recent first and hides image type labels", async () => {
+    setupFolio({
+      data: makeData({
+        items: [
+          makeItem("alpha", {
+            title: "Mango",
+            date: "2026-06-15T08:00:00.000Z",
+          }),
+          makeItem("bravo", {
+            title: "Zulu",
+            date: "2026-06-15T09:00:00.000Z",
+          }),
+          makeItem("charlie", {
+            title: "Apple",
+            date: "2026-06-15T10:00:00.000Z",
+          }),
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await screen.findByRole("button", { name: /strip/i });
+    await screen.findByText("Mango");
+    await user.click(screen.getByRole("button", { name: /grid/i }));
+
+    const sortSelect = screen.getByRole("combobox", {
+      name: /sort grid items/i,
+    }) as HTMLSelectElement;
+    expect(sortSelect.value).toBe("recent");
+    expect(gridTitles()).toEqual(["Apple", "Zulu", "Mango"]);
+    expect(within(archiveRoute()).queryByText("Sketch · alpha.png")).toBeNull();
+    expect(within(archiveRoute()).getByText("alpha.png")).not.toBeNull();
+
+    await user.selectOptions(sortSelect, "oldest");
+    expect(gridTitles()).toEqual(["Mango", "Zulu", "Apple"]);
+
+    await user.selectOptions(sortSelect, "title");
+    expect(gridTitles()).toEqual(["Apple", "Mango", "Zulu"]);
+  });
+
   it("filters grid results with only user-created tags", async () => {
     setupFolio({
       data: makeData({
@@ -296,6 +344,41 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(within(archiveRoute()).getByText("Alpha")).not.toBeNull();
     expect(within(archiveRoute()).queryByText("Bravo")).toBeNull();
     expect(within(archiveRoute()).queryByText("Charlie")).toBeNull();
+  });
+
+  it("does not render empty strip days while filtering by tag", async () => {
+    setupFolio({
+      data: makeData({
+        items: [
+          makeItem("untagged-newer", {
+            title: "Newer Untagged",
+            date: "2026-06-16T10:00:00.000Z",
+          }),
+          makeItem("tagged-older", {
+            title: "Older Tagged",
+            date: "2026-06-15T10:00:00.000Z",
+            tagIds: ["tag-sketch"],
+          }),
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await screen.findByRole("button", { name: /strip/i });
+    await screen.findByText("Newer Untagged");
+    expect(within(archiveRoute()).getByText("Tue, Jun 16, 2026")).not.toBeNull();
+    expect(within(archiveRoute()).getByText("Mon, Jun 15, 2026")).not.toBeNull();
+
+    await user.click(
+      within(screen.getByLabelText("Tags")).getByRole("button", {
+        name: /^sketchbook1$/i,
+      }),
+    );
+
+    expect(within(archiveRoute()).queryByText("Tue, Jun 16, 2026")).toBeNull();
+    expect(within(archiveRoute()).getByText("Mon, Jun 15, 2026")).not.toBeNull();
+    expect(within(archiveRoute()).getByText("Older Tagged")).not.toBeNull();
+    expect(within(archiveRoute()).queryByText("Newer Untagged")).toBeNull();
   });
 
   it("shows persistent upload density in the bottom bar with an 8 upload cap", async () => {
@@ -370,7 +453,14 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
 
     expect(screen.getByText("3 items selected")).not.toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: /open on new board/i }));
+    expect(screen.getByText("Drag onto a board")).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /add to active board/i }),
+    ).toBeNull();
+    expect(screen.queryByText("+2")).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: /create new board with selection/i }),
+    );
 
     await waitFor(() => {
       expect(app.data.canvases).toHaveLength(2);
@@ -573,7 +663,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("supports board rename, note creation, board import, and board deletion in the edit menu", async () => {
+  it("supports board rename, quick note creation, quick board import, and board deletion", async () => {
     const app = setupFolio({
       dialogPaths: ["/tmp/echo.png"],
       importedItems: [
@@ -588,6 +678,14 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await waitForArchive();
     await openBoardPanel(user);
+    expect(
+      screen.getByRole("button", { name: /add note/i }).closest(".canvas-board-actions"),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: /import images/i })
+        .closest(".canvas-board-actions"),
+    ).not.toBeNull();
     await user.click(screen.getByRole("button", { name: /edit/i }));
 
     const boardDialog = await screen.findByRole("dialog", { name: /edit board/i });
@@ -599,14 +697,12 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(
       within(actionBar).getByRole("button", { name: /save name/i }),
     ).not.toBeNull();
+    expect(within(actionBar).queryByRole("button", { name: /add note/i })).toBeNull();
     expect(
-      within(actionBar).getByRole("button", { name: /add note/i }),
-    ).not.toBeNull();
-    expect(
-      within(actionBar).getByRole("button", {
-        name: /import to board/i,
+      within(actionBar).queryByRole("button", {
+        name: /import images/i,
       }),
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       within(actionBar).getByRole("button", {
         name: /delete board/i,
@@ -622,14 +718,9 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.canvases[0].title).toBe("Story Board");
     });
 
-    await user.click(screen.getByRole("button", { name: /edit/i }));
-    const reopenedBoardDialog = await screen.findByRole("dialog", {
-      name: /edit board/i,
-    });
+    await user.click(closeButton);
 
-    await user.click(
-      within(reopenedBoardDialog).getByRole("button", { name: /add note/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /add note/i }));
     await waitFor(() => {
       expect(app.data.canvases[0].notes).toHaveLength(1);
     });
@@ -647,15 +738,17 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       });
     });
 
-    await user.click(
-      within(reopenedBoardDialog).getByRole("button", { name: /import to board/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /import images/i }));
     await waitFor(() => {
       expect(window.folio.copyToFolio).toHaveBeenCalledWith(["/tmp/echo.png"]);
       expect(app.data.items.some((item) => item.id === "echo")).toBe(true);
       expect(app.data.canvases[0].itemIds).toContain("echo");
     });
 
+    await user.click(screen.getByRole("button", { name: /edit/i }));
+    const reopenedBoardDialog = await screen.findByRole("dialog", {
+      name: /edit board/i,
+    });
     await user.click(
       within(reopenedBoardDialog).getByRole("button", { name: /delete board/i }),
     );
@@ -664,12 +757,16 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("creates new empty boards from the dock header", async () => {
+  it("creates new empty boards from the board grid", async () => {
     const app = setupFolio();
     const user = userEvent.setup();
 
     await waitForArchive();
     await openBoardPanel(user);
+    expect(screen.queryByRole("button", { name: /new board/i })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /^boards$/i }));
+    expect(screen.getByRole("button", { name: /new board/i })).not.toBeNull();
     await user.click(screen.getByRole("button", { name: /new board/i }));
 
     await waitFor(() => {
@@ -678,7 +775,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("switches boards by clicking the horizontal board list and always shows thumbnail previews", async () => {
+  it("switches boards from the board grid and always shows thumbnail previews", async () => {
     setupFolio({
       data: makeData({
         canvases: [
@@ -707,6 +804,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await waitForArchive();
     await openBoardPanel(user);
+    await user.click(screen.getByRole("button", { name: /^boards$/i }));
     const boardButtons = screen.getAllByRole("button", { name: /board [12]/i });
     expect(boardButtons).toHaveLength(2);
     expect(boardButtons[0].querySelectorAll(".thumb-shell")).toHaveLength(1);
@@ -885,7 +983,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     ).toBe(true);
 
     await openBoardPanel(user);
-    expect(screen.getByText("Open board")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /^boards$/i })).not.toBeNull();
     await user.click(screen.getByLabelText(/minimize board panel/i));
     expect(screen.getAllByLabelText(/open board panel/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/^Board$/)).toBeNull();

@@ -7,7 +7,7 @@ import type {
   FolioItem,
   ThumbnailUrls,
 } from "../../types";
-import { TYPE_LABELS, CANVAS_WORLD_ORIGIN } from "../folio/constants";
+import { CANVAS_WORLD_ORIGIN } from "../folio/constants";
 import { basename } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
@@ -43,10 +43,14 @@ export function CanvasItemCard({
       onClickCapture={onClickCapture}
       onClick={() => onOpen(item.id)}
     >
-      <div className="canvas-card-handle">
-        <span>{TYPE_LABELS[item.type]}</span>
+      <div className="canvas-card-media">
+        <LazyThumbnail
+          item={item}
+          thumbUrls={thumbUrls}
+          setThumbUrls={setThumbUrls}
+        />
         <button
-          className="icon-button"
+          className="icon-button canvas-card-remove-button"
           type="button"
           aria-label={`Remove ${item.title || basename(item.path)} from board`}
           title="Remove from board"
@@ -58,11 +62,6 @@ export function CanvasItemCard({
           <ButtonIcon icon={X} />
         </button>
       </div>
-      <LazyThumbnail
-        item={item}
-        thumbUrls={thumbUrls}
-        setThumbUrls={setThumbUrls}
-      />
       <strong>{item.title || basename(item.path)}</strong>
     </div>
   );

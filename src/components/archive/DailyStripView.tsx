@@ -18,6 +18,7 @@ export function DailyStripView({
   thumbUrls,
   setThumbUrls,
   selectedItemIds,
+  showDateGaps,
   onBackgroundClick,
   onDragStart,
   onItemOpen,
@@ -32,6 +33,7 @@ export function DailyStripView({
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   selectedItemIds: string[];
+  showDateGaps: boolean;
   onBackgroundClick: () => void;
   onDragStart: (itemId: string, event: React.DragEvent<HTMLElement>) => void;
   onItemOpen: ItemOpenHandler;
@@ -42,7 +44,13 @@ export function DailyStripView({
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const groups = useMemo(() => groupItemsByDate(items), [items]);
-  const dates = useMemo(() => buildDateRange(items), [items]);
+  const dates = useMemo(
+    () =>
+      showDateGaps
+        ? buildDateRange(items)
+        : Array.from(groups.keys()).sort((a, b) => b.localeCompare(a)),
+    [groups, items, showDateGaps],
+  );
   const selectedSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
 
   useEffect(() => {
@@ -102,7 +110,6 @@ export function DailyStripView({
                     thumbUrls={thumbUrls}
                     setThumbUrls={setThumbUrls}
                     isSelected={selectedSet.has(item.id)}
-                    selectedItemIds={selectedItemIds}
                     onDragStart={onDragStart}
                     onOpen={(itemId, event) =>
                       onItemOpen(itemId, event, items, true)

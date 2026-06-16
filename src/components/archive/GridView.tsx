@@ -1,11 +1,20 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Tag as TagIcon } from "lucide-react";
 import type { Canvas, FolioItem, Tag, ThumbnailUrls } from "../../types";
 import type { GridTagFilter, ItemOpenHandler } from "../folio/types";
-import { canvasColorsForItem } from "../folio/model";
+import { basename, canvasColorsForItem } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { EmptyState } from "../shared/EmptyState";
 import { ItemCard } from "./ItemCard";
+
+type GridSortMode = "recent" | "oldest" | "title";
+
+const itemTime = (item: FolioItem) => {
+  const time = Date.parse(item.date);
+  return Number.isNaN(time) ? 0 : time;
+};
+
+const itemLabel = (item: FolioItem) => item.title || basename(item.path);
 
 export function GridView({
   items,
@@ -40,6 +49,7 @@ export function GridView({
   onRemoveTag: (itemId: string, tagText: string) => void;
   onDeleteItem: (itemId: string) => void;
 }) {
+  const [sortMode, setSortMode] = useState<GridSortMode>("recent");
   const filteredItems = useMemo(
     () =>
       tagFilter === "all"
@@ -47,6 +57,31 @@ export function GridView({
         : items.filter((item) => item.tagIds.includes(tagFilter)),
     [items, tagFilter],
   );
+  const sortedItems = useMemo(() => {
+    const nextItems = [...filteredItems];
+    nextItems.sort((a, b) => {
+      if (sortMode === "title") {
+        return (
+          itemLabel(a).localeCompare(itemLabel(b), undefined, {
+            sensitivity: "base",
+          }) || b.date.localeCompare(a.date)
+        );
+      }
+
+      const dateSort =
+        sortMode === "recent"
+          ? itemTime(b) - itemTime(a)
+          : itemTime(a) - itemTime(b);
+
+      return (
+        dateSort ||
+        itemLabel(a).localeCompare(itemLabel(b), undefined, {
+          sensitivity: "base",
+        })
+      );
+    });
+    return nextItems;
+  }, [filteredItems, sortMode]);
   const selectedSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
 
   return (
@@ -56,36 +91,53 @@ export function GridView({
         if (event.currentTarget === event.target) onBackgroundClick();
       }}
     >
-      <div className="filter-bar">
-        <button
-          className={tagFilter === "all" ? "active" : ""}
-          type="button"
-          onClick={() => setTagFilter("all")}
-        >
-          <ButtonIcon icon={TagIcon} />
-          All
-        </button>
-        {tags.map((tag) => (
+      <div className="grid-toolbar">
+        <div className="filter-bar" aria-label="Tags">
           <button
-            className={tag.id === tagFilter ? "active" : ""}
-            key={tag.id}
+            className={tagFilter === "all" ? "active" : ""}
             type="button"
-            onClick={() => setTagFilter(tag.id)}
+            onClick={() => setTagFilter("all")}
           >
             <ButtonIcon icon={TagIcon} />
-            {tag.text}
+            All
           </button>
-        ))}
+          {tags.map((tag) => (
+            <button
+              className={tag.id === tagFilter ? "active" : ""}
+              key={tag.id}
+              type="button"
+              onClick={() => setTagFilter(tag.id)}
+            >
+              <ButtonIcon icon={TagIcon} />
+              {tag.text}
+            </button>
+          ))}
+        </div>
+
+        <label className="grid-sort-control">
+          <span>Sort</span>
+          <select
+            aria-label="Sort grid items"
+            value={sortMode}
+            onChange={(event) =>
+              setSortMode(event.currentTarget.value as GridSortMode)
+            }
+          >
+            <option value="recent">Most recent</option>
+            <option value="oldest">Oldest first</option>
+            <option value="title">Title A-Z</option>
+          </select>
+        </label>
       </div>
 
-      {filteredItems.length ? (
+      {sortedItems.length ? (
         <div
           className="item-grid"
           onMouseDown={(event) => {
             if (event.currentTarget === event.target) onBackgroundClick();
           }}
         >
-          {filteredItems.map((item) => (
+          {sortedItems.map((item) => (
             <ItemCard
               item={item}
               tags={tags}
@@ -94,10 +146,9 @@ export function GridView({
               thumbUrls={thumbUrls}
               setThumbUrls={setThumbUrls}
               isSelected={selectedSet.has(item.id)}
-              selectedItemIds={selectedItemIds}
               onDragStart={onDragStart}
               onOpen={(itemId, event) =>
-                onItemOpen(itemId, event, filteredItems, true)
+                onItemOpen(itemId, event, sortedItems, true)
               }
               onEdit={onEditItem}
               onAddTag={onAddTag}

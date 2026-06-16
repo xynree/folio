@@ -15,6 +15,29 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-color: #8e5f38 transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #8e5f38;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #6f472b;
+  background-clip: content-box;
 }
 
 html,
@@ -65,6 +88,10 @@ button svg {
 .drawer-header button,
 .drawer-actions button,
 .canvas-board-edit-button,
+.canvas-board-action-button,
+.canvas-board-back-button,
+.canvas-board-minimize-button,
+.canvas-board-new-button,
 .board-edit-popover button,
 .canvas-card-handle button,
 .canvas-note button {
@@ -165,6 +192,10 @@ button svg {
 .drawer-header button:hover,
 .drawer-actions button:hover,
 .canvas-board-edit-button:hover,
+.canvas-board-action-button:hover,
+.canvas-board-back-button:hover,
+.canvas-board-minimize-button:hover,
+.canvas-board-new-button:hover,
 .board-edit-popover button:hover,
 .canvas-card-handle button:hover,
 .canvas-note button:hover {
@@ -246,9 +277,9 @@ button svg {
 
 .selection-bar {
   grid-row: 2;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 14px;
   min-height: 42px;
   padding: 8px 24px;
@@ -259,13 +290,26 @@ button svg {
   animation: slide-down var(--motion-medium) var(--motion-pop) backwards;
 }
 
-.selection-bar strong {
-  color: #30251a;
-  font-weight: 780;
+.selection-bar-spacer {
+  min-width: 0;
 }
 
-.selection-bar > span {
-  flex: 1;
+.selection-message {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-width: 0;
+  text-align: center;
+}
+
+.selection-message strong {
+  color: #30251a;
+  font-weight: 780;
+  white-space: nowrap;
+}
+
+.selection-message span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -275,7 +319,9 @@ button svg {
 .selection-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
 }
 
 .selection-actions button {
@@ -414,7 +460,7 @@ button svg {
 
 .canvas-dock {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -816,6 +862,26 @@ button svg {
   height: 100%;
   overflow: auto;
   padding: 28px 24px 96px;
+  scrollbar-color: transparent transparent;
+}
+
+.archive-panel:hover .view-scroller {
+  scrollbar-color: #8e5f38 transparent;
+}
+
+.view-scroller::-webkit-scrollbar-thumb {
+  background: transparent;
+  background-clip: content-box;
+}
+
+.archive-panel:hover .view-scroller::-webkit-scrollbar-thumb {
+  background: #8e5f38;
+  background-clip: content-box;
+}
+
+.archive-panel:hover .view-scroller::-webkit-scrollbar-thumb:hover {
+  background: #6f472b;
+  background-clip: content-box;
 }
 
 .strip-view {
@@ -827,6 +893,7 @@ button svg {
 .day-row {
   position: relative;
   display: block;
+  flex: 0 0 auto;
   min-height: var(--archive-day-min-height);
   padding: 30px 0 22px;
   animation: view-item-enter var(--motion-slow) var(--motion-pop) backwards;
@@ -916,6 +983,19 @@ button svg {
   gap: 8px;
 }
 
+.grid-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.grid-toolbar .filter-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .filter-bar button {
   padding: 7px 13px;
   color: #66594d;
@@ -930,6 +1010,32 @@ button svg {
   color: #241f1a;
   background: #fffdf8;
   border-color: #c6b59e;
+}
+
+.grid-sort-control {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid #dbcebe;
+  border-radius: 8px;
+  color: #66594d;
+  background: #eee5d8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.grid-sort-control select {
+  min-height: 26px;
+  padding: 3px 26px 3px 8px;
+  border: 1px solid #cabca9;
+  border-radius: 6px;
+  color: #2e2822;
+  background: #fffdf8;
+  cursor: pointer;
+  font: inherit;
 }
 
 .item-grid {
@@ -949,10 +1055,13 @@ button svg {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-wrap: nowrap;
+  gap: 8px;
   max-width: calc(100% - 36px);
-  padding: 6px;
+  width: max-content;
+  padding: 5px;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid rgba(210, 194, 173, 0.86);
   border-radius: 8px;
   background: rgba(255, 253, 248, 0.92);
@@ -964,29 +1073,29 @@ button svg {
 .archive-scale-control {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex: 0 1 auto;
-  height: 38px;
-  min-height: 38px;
-  padding: 6px 10px;
+  height: 32px;
+  min-height: 32px;
+  padding: 4px 8px;
   border: 1px solid #ded2c2;
   border-radius: 8px;
   color: #66594d;
   background: #f8f1e6;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 720;
   white-space: nowrap;
   -webkit-app-region: no-drag;
 }
 
 .archive-scale-control input {
-  width: 92px;
+  width: 82px;
   accent-color: #385d56;
   cursor: pointer;
 }
 
 .archive-scale-control output {
-  min-width: 40px;
+  min-width: 34px;
   color: #2f514b;
   font-size: 11px;
   font-weight: 780;
@@ -995,21 +1104,26 @@ button svg {
 
 .archive-floating-actions .view-tabs,
 .archive-floating-actions .primary-action {
-  height: 38px;
-  min-height: 38px;
+  height: 32px;
+  min-height: 32px;
 }
 
 .archive-floating-actions .view-tabs {
-  padding: 4px;
+  padding: 3px;
 }
 
 .archive-floating-actions .view-tabs button {
-  min-height: 28px;
-  padding: 5px 12px;
+  width: 28px;
+  min-width: 28px;
+  min-height: 24px;
+  padding: 4px;
 }
 
 .archive-floating-actions .primary-action {
+  min-width: 92px;
   padding-block: 0;
+  padding-inline: 12px;
+  font-size: 12px;
 }
 
 .archive-heatmap {
@@ -1367,23 +1481,6 @@ button svg {
   border-radius: 999px;
 }
 
-.selection-count {
-  position: absolute;
-  top: 8px;
-  right: 42px;
-  display: grid;
-  place-items: center;
-  min-width: 28px;
-  height: 22px;
-  padding: 0 7px;
-  border: 1px solid #c18132;
-  border-radius: 999px;
-  color: #5b3b17;
-  background: #fff0c7;
-  font-size: 11px;
-  font-weight: 780;
-}
-
 .item-title {
   min-width: 0;
   overflow: hidden;
@@ -1664,6 +1761,10 @@ button svg {
 .drawer-actions button,
 .tag-input-row button,
 .canvas-board-edit-button,
+.canvas-board-action-button,
+.canvas-board-back-button,
+.canvas-board-minimize-button,
+.canvas-board-new-button,
 .board-edit-popover button,
 .canvas-card-handle button,
 .canvas-note button {
@@ -1756,9 +1857,77 @@ button svg {
 
 .canvas-workspace {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
+}
+
+.canvas-board-browser {
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  background: #fffaf2;
+}
+
+.canvas-board-browser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  min-height: 50px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e3d8ca;
+  background: #fffdf8;
+}
+
+.canvas-board-browser-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.canvas-board-browser-copy strong,
+.canvas-board-browser-copy span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-board-browser-copy strong {
+  color: #28231e;
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.canvas-board-browser-copy span {
+  color: #7c6f61;
+  font-size: 12px;
+}
+
+.canvas-board-browser-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.canvas-board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: #8e5f38 transparent;
+}
+
+.canvas-board-grid .canvas-list-item {
+  width: 100%;
+  min-width: 0;
 }
 
 .canvas-board-strip {
@@ -1770,7 +1939,7 @@ button svg {
   border-bottom: 1px solid #e3d8ca;
   background: #fffaf2;
   scrollbar-width: thin;
-  scrollbar-color: #c7b9a8 transparent;
+  scrollbar-color: #8e5f38 transparent;
   transition:
     background-color var(--motion-medium) var(--motion-ease),
     border-color var(--motion-medium) var(--motion-ease);
@@ -1786,7 +1955,7 @@ button svg {
 
 .canvas-board-strip::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: #c7b9a8;
+  background: #8e5f38;
 }
 
 .canvas-list {
@@ -1858,18 +2027,23 @@ button svg {
 }
 
 .canvas-list strong,
-.canvas-list small {
+.canvas-list small,
+.canvas-board-grid strong,
+.canvas-board-grid small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .canvas-list strong,
-.canvas-list small {
+.canvas-list small,
+.canvas-board-grid strong,
+.canvas-board-grid small {
   white-space: nowrap;
 }
 
-.canvas-list small {
+.canvas-list small,
+.canvas-board-grid small {
   color: #7c6f61;
   font-size: 11px;
 }
@@ -1898,6 +2072,7 @@ button svg {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   min-width: 0;
   padding: 10px 16px;
@@ -1912,6 +2087,7 @@ button svg {
   display: flex;
   align-items: center;
   gap: 9px;
+  flex: 1 1 210px;
   min-width: 0;
 }
 
@@ -1947,8 +2123,40 @@ button svg {
   border-radius: 999px;
 }
 
+.canvas-board-actions {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.canvas-board-back-button,
+.canvas-board-action-button,
+.canvas-board-minimize-button,
 .canvas-board-edit-button {
   flex: 0 0 auto;
+}
+
+.canvas-board-action-button,
+.canvas-board-back-button,
+.canvas-board-minimize-button {
+  width: 32px;
+  min-width: 32px;
+  padding: 6px;
+}
+
+.canvas-board-minimize-button {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.canvas-board-minimize-button:hover,
+.canvas-board-minimize-button:focus-visible {
+  outline: 0;
+  background: #fff8eb;
 }
 
 .board-edit-popover {
@@ -2125,6 +2333,34 @@ button svg {
   border-color: #b9c6be;
 }
 
+.canvas-card-media {
+  position: relative;
+  min-width: 0;
+}
+
+.canvas-card-remove-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 4px;
+  border: 1px solid rgba(215, 201, 180, 0.88);
+  border-radius: 7px;
+  background: rgba(255, 253, 248, 0.92);
+  box-shadow: 0 2px 8px rgba(55, 38, 21, 0.08);
+  cursor: pointer;
+}
+
+.canvas-card-remove-button:hover,
+.canvas-card-remove-button:focus-visible {
+  outline: 0;
+  background: #fff8eb;
+  transform: translateY(-1px);
+}
+
 .canvas-card-handle {
   display: flex;
   align-items: center;
@@ -2150,7 +2386,8 @@ button svg {
 .canvas-card strong {
   min-width: 0;
   overflow: hidden;
-  font-size: 12px;
+  font-size: 10px;
+  font-weight: 760;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;

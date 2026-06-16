@@ -1,5 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Edit3, ImagePlus, Save, StickyNote, Trash2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Edit3,
+  ImagePlus,
+  PanelRightClose,
+  Plus,
+  Save,
+  StickyNote,
+  Trash2,
+  X,
+} from "lucide-react";
 import type {
   Canvas,
   CanvasNote,
@@ -34,6 +44,8 @@ export function CanvasView({
   activeCanvasId,
   setActiveCanvasId,
   onOpenItem,
+  onCreateBoard,
+  onMinimize,
   thumbUrls,
   setThumbUrls,
   commitData,
@@ -44,6 +56,8 @@ export function CanvasView({
   activeCanvasId: string | null;
   setActiveCanvasId: React.Dispatch<React.SetStateAction<string | null>>;
   onOpenItem: ItemDetailsOpenHandler;
+  onCreateBoard: () => void;
+  onMinimize: () => void;
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   commitData: (updater: DataUpdater, message?: string) => void;
@@ -54,7 +68,6 @@ export function CanvasView({
     data.canvases.find((canvas) => canvas.id === activeCanvasId) ??
     data.canvases[0] ??
     null;
-  const boardStripRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const [dragPreview, setDragPreview] = useState<{
@@ -63,6 +76,7 @@ export function CanvasView({
     position: CanvasPosition;
   } | null>(null);
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
+  const [boardBrowserOpen, setBoardBrowserOpen] = useState(false);
   const [boardTitleDraft, setBoardTitleDraft] = useState("");
   const [canvasZoom, setCanvasZoom] = useState(1);
   const canvasZoomRef = useRef(1);
@@ -80,6 +94,10 @@ export function CanvasView({
     setBoardTitleDraft(activeCanvas?.title ?? "");
     setBoardToolsOpen(false);
   }, [activeCanvas?.id, activeCanvas?.title]);
+
+  useEffect(() => {
+    setBoardBrowserOpen(false);
+  }, [activeCanvas?.id]);
 
   useEffect(() => {
     if (!activeCanvas) return undefined;
@@ -213,6 +231,9 @@ export function CanvasView({
 
     setActiveCanvasId(nextActiveCanvasId);
     setBoardToolsOpen(false);
+    if (!nextActiveCanvasId) {
+      setBoardBrowserOpen(true);
+    }
   }, [activeCanvas, commitData, setActiveCanvasId]);
 
   const addNote = useCallback(() => {
@@ -513,51 +534,46 @@ export function CanvasView({
   const openCanvas = useCallback(
     (canvasId: string) => {
       setActiveCanvasId(canvasId);
+      setBoardBrowserOpen(false);
     },
     [setActiveCanvasId],
   );
 
-  const handleBoardStripWheel = useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      const strip = boardStripRef.current;
-      if (!strip || strip.scrollWidth <= strip.clientWidth) return;
+  const createBoardFromBrowser = useCallback(() => {
+    onCreateBoard();
+    setBoardBrowserOpen(false);
+  }, [onCreateBoard]);
 
-      const horizontalDelta =
-        Math.abs(event.deltaX) > Math.abs(event.deltaY)
-          ? event.deltaX
-          : event.deltaY;
-      if (!horizontalDelta) return;
-
-      event.preventDefault();
-      strip.scrollLeft += horizontalDelta;
-    },
-    [],
-  );
-
-  if (!activeCanvas) {
-    return (
-      <section className="view-scroller canvas-empty">
-        <div className="canvas-board-preview">
-          <div className="board-node board-node-a" />
-          <div className="board-node board-node-b" />
-          <div className="board-node board-node-c" />
-          <svg viewBox="0 0 460 240" aria-hidden="true">
-            <path d="M116 92 C170 54, 242 70, 310 116" />
-            <path d="M164 164 C226 186, 292 178, 346 142" />
-          </svg>
+  const renderBoardBrowser = () => (
+    <section className="canvas-workspace canvas-board-browser">
+      <header className="canvas-board-browser-header">
+        <div className="canvas-board-browser-copy">
+          <strong>Boards</strong>
+          <span>{formatCount(data.canvases.length, "board")}</span>
         </div>
-      </section>
-    );
-  }
+        <div className="canvas-board-browser-actions">
+          <button
+            className="secondary-action canvas-board-new-button"
+            type="button"
+            onClick={createBoardFromBrowser}
+          >
+            <ButtonIcon icon={Plus} />
+            New board
+          </button>
+          <button
+            className="icon-button canvas-board-minimize-button"
+            type="button"
+            aria-label="Minimize board panel"
+            title="Minimize board panel"
+            onClick={onMinimize}
+          >
+            <ButtonIcon icon={PanelRightClose} />
+          </button>
+        </div>
+      </header>
 
-  return (
-    <section className="canvas-workspace">
-      <div
-        className="canvas-board-strip"
-        ref={boardStripRef}
-        onWheel={handleBoardStripWheel}
-      >
-        <div className="canvas-list">
+      {data.canvases.length ? (
+        <div className="canvas-board-grid">
           {data.canvases.map((canvas) => {
             const memberItems = canvas.itemIds
               .map((itemId) => data.items.find((item) => item.id === itemId))
@@ -565,7 +581,7 @@ export function CanvasView({
             return (
               <button
                 className={`canvas-list-item ${
-                  canvas.id === activeCanvas.id ? "active" : ""
+                  canvas.id === activeCanvas?.id ? "active" : ""
                 }`}
                 key={canvas.id}
                 type="button"
@@ -600,11 +616,40 @@ export function CanvasView({
             );
           })}
         </div>
-      </div>
+      ) : (
+        <div className="canvas-empty">
+          <div className="canvas-board-preview">
+            <div className="board-node board-node-a" />
+            <div className="board-node board-node-b" />
+            <div className="board-node board-node-c" />
+            <svg viewBox="0 0 460 240" aria-hidden="true">
+              <path d="M116 92 C170 54, 242 70, 310 116" />
+              <path d="M164 164 C226 186, 292 178, 346 142" />
+            </svg>
+          </div>
+        </div>
+      )}
+    </section>
+  );
 
+  if (!activeCanvas || boardBrowserOpen) {
+    return renderBoardBrowser();
+  }
+
+  return (
+    <section className="canvas-workspace">
       <div className="canvas-panel" key={activeCanvas.id}>
         <header className="canvas-board-header">
           <div className="canvas-board-summary">
+            <button
+              className="canvas-board-back-button"
+              type="button"
+              aria-label="Boards"
+              title="Boards"
+              onClick={() => setBoardBrowserOpen(true)}
+            >
+              <ButtonIcon icon={ArrowLeft} />
+            </button>
             <span className="canvas-dot" style={{ background: activeCanvas.color }} />
             <span className="canvas-board-copy">
               <strong>{activeCanvas.title}</strong>
@@ -615,15 +660,44 @@ export function CanvasView({
               </span>
             </span>
           </div>
-          <button
-            className="canvas-board-edit-button"
-            type="button"
-            onClick={() => setBoardToolsOpen((current) => !current)}
-            aria-expanded={boardToolsOpen}
-          >
-            <ButtonIcon icon={Edit3} />
-            Edit
-          </button>
+          <div className="canvas-board-actions">
+            <button
+              className="canvas-board-action-button"
+              type="button"
+              aria-label="Add note"
+              title="Add note"
+              onClick={addNote}
+            >
+              <ButtonIcon icon={StickyNote} />
+            </button>
+            <button
+              className="canvas-board-action-button"
+              type="button"
+              aria-label="Import images"
+              title="Import images"
+              onClick={importToBoard}
+            >
+              <ButtonIcon icon={ImagePlus} />
+            </button>
+            <button
+              className="canvas-board-edit-button"
+              type="button"
+              onClick={() => setBoardToolsOpen((current) => !current)}
+              aria-expanded={boardToolsOpen}
+            >
+              <ButtonIcon icon={Edit3} />
+              Edit
+            </button>
+            <button
+              className="icon-button canvas-board-minimize-button"
+              type="button"
+              aria-label="Minimize board panel"
+              title="Minimize board panel"
+              onClick={onMinimize}
+            >
+              <ButtonIcon icon={PanelRightClose} />
+            </button>
+          </div>
 
           {boardToolsOpen ? (
             <div className="board-edit-popover" role="dialog" aria-label="Edit board">
@@ -664,24 +738,6 @@ export function CanvasView({
                 >
                   <ButtonIcon icon={Save} />
                   Save name
-                </button>
-                <button
-                  className="board-edit-action"
-                  type="button"
-                  onClick={addNote}
-                  aria-label="Add note"
-                  title="Add note"
-                >
-                  <ButtonIcon icon={StickyNote} />
-                </button>
-                <button
-                  className="board-edit-action"
-                  type="button"
-                  onClick={importToBoard}
-                  aria-label="Import to board"
-                  title="Import to board"
-                >
-                  <ButtonIcon icon={ImagePlus} />
                 </button>
                 <button
                   className="board-edit-action board-edit-delete"

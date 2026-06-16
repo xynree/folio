@@ -9,7 +9,6 @@ import {
   Trash2,
 } from "lucide-react";
 import type { FolioItem, Tag, ThumbnailUrls } from "../../types";
-import { TYPE_LABELS } from "../folio/constants";
 import { basename, tagTextsForItem } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { CanvasDots } from "../shared/CanvasDots";
@@ -22,7 +21,6 @@ export function ItemCard({
   thumbUrls,
   setThumbUrls,
   isSelected,
-  selectedItemIds,
   onDragStart,
   onOpen,
   onEdit,
@@ -37,7 +35,6 @@ export function ItemCard({
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   isSelected: boolean;
-  selectedItemIds: string[];
   onDragStart: (itemId: string, event: React.DragEvent<HTMLElement>) => void;
   onOpen: (itemId: string, event: React.MouseEvent) => void;
   onEdit: (itemId: string) => void;
@@ -88,9 +85,7 @@ export function ItemCard({
         />
         <CanvasDots colors={canvasColors} />
         <span className="item-title">{item.title || basename(item.path)}</span>
-        <span className="item-subtitle">
-          {TYPE_LABELS[item.type]} · {basename(item.path)}
-        </span>
+        <span className="item-subtitle">{basename(item.path)}</span>
         {itemTags.length ? (
           <span className="card-tags">
             {itemTags.slice(0, compact ? 2 : 3).map((tag) => (
@@ -194,9 +189,6 @@ export function ItemCard({
           </div>
         ) : null}
       </div>
-      {isSelected && selectedItemIds.length > 1 ? (
-        <span className="selection-count">+{selectedItemIds.length - 1}</span>
-      ) : null}
     </article>
   );
 }
