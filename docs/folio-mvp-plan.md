@@ -147,46 +147,52 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ## Phase 2 — Organize: tags and canvases
 
-### 2.1 Detail drawer
+### 2.1 Item details modal
 
-- [x] Single click on any item opens drawer (right-side detail panel)
-- [x] Show: thumbnail preview, title (editable inline), file type, canvas membership
-- [x] Inline title edit: update React state and persist with `saveFolioData` on blur
+- [x] Clicking an item selects it; item editing opens from the card `More (...)` menu via `Edit`
+- [x] Details open in a centered modal with a light blurred overlay so the rest of the UI is not interactive
+- [x] Show: thumbnail preview, title, notes/description, file type, and board membership chips
+- [x] Title/notes edits stay local until the user clicks `Save`, then persist with `saveFolioData`
 - [x] "Show in Finder" button: `window.folio.openInFinder(filename)`
 - [x] Delete button moves the file to Trash, removes metadata, and clears canvas memberships
 - [x] Click outside or press Escape to close
 
 ### 2.2 Tags
 
-- [x] Tag input in drawer: type name + Enter to add, x to remove
+- [x] Tag input in details modal: type name + Enter to add, x to remove
+- [x] Card `More (...)` menu includes an `Add tags` submenu where existing user tags can be toggled on or off for that item
 - [x] Store tag IDs in `item.tagIds[]`, deduplicate global records in `tags.json`
-- [x] Show tag chips on grid cards and in detail drawer
+- [x] Show tag chips on grid/strip cards and in detail modal
 - [x] Sidebar TAGS section: list all tags with item count, expand to see thumbnail strip
 - [x] Clicking a tag in sidebar filters the active view to items with that tag
+- [x] Tags sidebar is compact and can be minimized/restored
 
 ### 2.3 Multi-select
 
 - [x] ⌘+click (macOS) / Ctrl+click to toggle selection
-- [x] Shift+click for range select in grid view
+- [x] Shift+click for range select in strip and grid views
 - [x] Amber border on selected items
-- [x] Selection hint bar: "N selected — drag onto a canvas or open on new canvas →"
+- [x] Selection hint bar: "N selected — drag onto a board or open on new board →"
 - [x] Escape or click background to clear selection
 
-### 2.4 Open items on a canvas
+### 2.4 Open items on a board
 
-- [x] With items selected in strip/grid, user can drag them directly onto an open canvas, or use "open on new canvas" to create a blank canvas pre-populated with the selection
-- [x] Detail drawer can add the current item to the active canvas, creating a new board if needed
-- [x] Canvas toolbar can import new archive items directly onto the active board
-- [x] New canvas: auto-assign color from warm palette, save to `folio.json`
-- [x] Items can appear on multiple canvases simultaneously — canvas membership reflects what's been added to each canvas
+- [x] Canvas is now a persistent right-side board panel next to the Strip/Grid archive area rather than a separate archive view tab
+- [x] With items selected in strip/grid, user can drag them directly onto the open board, or use "open on new board" to create a blank board pre-populated with the selection
+- [x] Detail modal can add the current item to the active board, creating a new board if needed
+- [x] Board edit menu can import new archive items directly onto the active board
+- [x] New board: auto-assign color from warm palette, save to `folio.json`
+- [x] Items can appear on multiple boards simultaneously — board membership reflects what's been added to each board
 
-### 2.5 Canvas sidebar list
+### 2.5 Board list and edit menu
 
-- [x] Each canvas row: colored dot, name, item count
-- [x] Expand canvas: italic opening note, member thumbnail grid (max 8), "open canvas" button
-- [x] "Open canvas" navigates to the canvas view with that canvas loaded
-- [x] Canvas dots shown under strip thumbnails (one colored dot per canvas membership)
-- [x] Canvas chips shown in detail drawer
+- [x] Board list is horizontal at the top of the board panel, not a left sidebar
+- [x] Each board card: colored dot, name, item count, and always-visible member thumbnail preview grid (max 8)
+- [x] Clicking a board card opens that board directly; the old "Open board" button was removed
+- [x] Board panel can be minimized/restored and resized by dragging its divider
+- [x] Board edit menu supports rename, add note, import to board, and delete board
+- [x] Canvas dots shown under strip/grid thumbnails (one colored dot per board membership)
+- [x] Board chips shown in detail modal
 
 ---
 
@@ -204,8 +210,8 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [x] Items positioned absolutely on a large scrollable canvas surface (2400×1800px to give room to spread)
 - [x] Drag: pointer down → track pointer move delta → pointer up saves position to `folio.json`
 - [x] Positions stored per canvas in `folio.json` under `canvas.positions`
-- [ ] Items can be dragged directly from the strip or grid view onto an open canvas — they appear at the drop position
-- [x] Canvas archive rail shows uploaded archive items and can add any item not already on the open canvas
+- [x] Items can be dragged directly from the strip or grid view onto an open canvas — they appear at the drop position
+- [x] Canvas archive rail was removed; archive-to-board placement now happens by direct drag/drop, selection actions, details modal, or board import
 - [x] First-time layout: auto-arrange in a loose grid if no saved positions
 - [x] Dotted grid background: 24px radial-gradient pattern
 

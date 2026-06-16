@@ -4,6 +4,15 @@
     "es6": true,
     "node": true
   },
+  "globals": {
+    "afterEach": "readonly",
+    "beforeEach": "readonly",
+    "describe": "readonly",
+    "expect": "readonly",
+    "it": "readonly",
+    "vi": "readonly"
+  },
+  "ignorePatterns": ["node_modules/", "out/", "dist/", ".vite/"],
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/eslint-recommended",
@@ -14,6 +23,7 @@
   ],
   "parser": "@typescript-eslint/parser",
   "settings": {
+    "import/ignore": ["^vitest$", "^@testing-library/"],
     "import/resolver": {
       "typescript": {
         "extensions": [".ts", ".tsx", ".js", ".jsx"]

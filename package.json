@@ -6,11 +6,12 @@
   "main": ".vite/build/main.js",
   "private": true,
   "scripts": {
-    "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
-    "lint": "eslint --ext .ts,.tsx ."
+    "start": "node ./node_modules/@electron-forge/cli/dist/electron-forge.js start",
+    "package": "node ./node_modules/@electron-forge/cli/dist/electron-forge.js package",
+    "make": "node ./node_modules/@electron-forge/cli/dist/electron-forge.js make",
+    "publish": "node ./node_modules/@electron-forge/cli/dist/electron-forge.js publish",
+    "lint": "eslint --ext .ts,.tsx .",
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "xinruichen",
@@ -27,6 +28,8 @@
     "@electron-forge/publisher-github": "^7.11.1",
     "@electron/fuses": "^1.8.0",
     "@tailwindcss/postcss": "^4.2.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -37,13 +40,16 @@
     "eslint": "^8.57.1",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.32.0",
+    "jsdom": "^29.1.1",
     "postcss": "^8.5.8",
     "typescript": "~4.5.4",
-    "vite": "^5.4.21"
+    "vite": "^5.4.21",
+    "vitest": "^4.1.9"
   },
   "dependencies": {
     "chokidar": "^5.0.0",
     "electron-squirrel-startup": "^1.0.1",
+    "lucide-react": "^1.18.0",
     "nanoid": "^5.1.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
