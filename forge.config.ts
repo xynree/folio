@@ -10,6 +10,11 @@ import { FuseV1Options, FuseVersion } from '@electron/fuses';
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    extraResource: ['resources/native'],
+    extendInfo: {
+      NSPhotoLibraryUsageDescription:
+        'Folio uses the photo picker to import images and videos you select.',
+    },
   },
   rebuildConfig: {},
   makers: [

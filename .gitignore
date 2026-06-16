@@ -90,3 +90,6 @@ typings/
 
 # Electron-Forge
 out/
+
+# Native helper build outputs
+resources/native/FolioPhotosPicker

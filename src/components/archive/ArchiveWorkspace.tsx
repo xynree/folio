@@ -40,6 +40,7 @@ export function ArchiveWorkspace({
         }}
       />
       <div className="archive-route" style={routeStyle}>
+        <div className="archive-titlebar-drag-area" aria-hidden="true" />
         {children}
       </div>
     </section>

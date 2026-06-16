@@ -44,6 +44,10 @@ import type {
   ItemOpenHandler,
 } from "./folio/types";
 import {
+  chooseAndImportItems,
+  getImportFailureMessage,
+} from "./folio/importing";
+import {
   addItemToCanvas,
   addItemsToCanvas,
   basename,
@@ -146,7 +150,7 @@ export function AppShell() {
         }
       } catch (error) {
         console.error(error);
-        setToast("Import failed");
+        setToast(getImportFailureMessage(error, "Import failed"));
       } finally {
         setBusy(false);
       }
@@ -432,9 +436,23 @@ export function AppShell() {
   );
 
   const handleOpenDialog = useCallback(async () => {
-    const filePaths = await window.folio.openFileDialog();
-    await importFilePaths(filePaths);
-  }, [importFilePaths]);
+    setBusy(true);
+    try {
+      const imported = await chooseAndImportItems();
+      if (!imported.length) return;
+
+      putData({
+        ...dataRef.current,
+        items: mergeItems(dataRef.current.items, imported),
+      });
+      setToast(`${formatCount(imported.length, "item")} added to today`);
+    } catch (error) {
+      console.error(error);
+      setToast(getImportFailureMessage(error, "Import failed"));
+    } finally {
+      setBusy(false);
+    }
+  }, [putData]);
 
   const handleDrop = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {

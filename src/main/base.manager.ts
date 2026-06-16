@@ -1,7 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from "electron";
 import { watch } from "chokidar";
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { computeHash } from "../helpers";
 import { SCHEMA_VERSION } from "../constants";
 import {
@@ -18,6 +21,15 @@ import {
 import { ArchiveManager } from "./archive.manager";
 import { FolioStorage } from "./storage.manager";
 
+const execFileAsync = promisify(execFile);
+const PHOTOS_PICKER_CANCELLED = "__FOLIO_PHOTOS_PICKER_CANCELLED__";
+const PHOTOS_PICKER_HELPER_NAME = "FolioPhotosPicker";
+
+interface ImportFileSelection {
+  filePaths: string[];
+  cleanupDir?: string;
+}
+
 /**
  * The core engine of the main process.
  * Manages in-memory data, file operations, reconciliation, watcher events, and IPC.
@@ -29,6 +41,7 @@ export interface FolioManagerInterface {
   loadData(): Promise<FolioData>;
   saveFolioData(data: FolioData): Promise<void>;
   copyToFolio(filePaths: string[]): Promise<FolioItem[]>;
+  importToFolio(): Promise<FolioItem[]>;
   copyReference(
     canvasId: string,
     filePaths: string[],
@@ -79,6 +92,7 @@ export class FolioManager implements FolioManagerInterface {
     ipcMain.handle("folio:copy-to-folio", (_: unknown, filePaths: string[]) =>
       this.copyToFolio(filePaths),
     );
+    ipcMain.handle("folio:import-to-folio", () => this.importToFolio());
     ipcMain.handle(
       "folio:copy-reference",
       (_: unknown, canvasId: string, filePaths: string[]) =>
@@ -279,6 +293,19 @@ export class FolioManager implements FolioManagerInterface {
     return items;
   }
 
+  async importToFolio(): Promise<FolioItem[]> {
+    const selection = await this.chooseImportFilePaths();
+    if (!selection.filePaths.length) return [];
+
+    try {
+      return await this.copyToFolio(selection.filePaths);
+    } finally {
+      if (selection.cleanupDir) {
+        await this.removeTemporaryDirectory(selection.cleanupDir);
+      }
+    }
+  }
+
   async copyReference(
     canvasId: string,
     filePaths: string[],
@@ -361,6 +388,67 @@ export class FolioManager implements FolioManagerInterface {
     });
 
     return result.canceled ? [] : result.filePaths;
+  }
+
+  private async chooseImportFilePaths(): Promise<ImportFileSelection> {
+    if (process.platform !== "darwin") {
+      return { filePaths: await this.openFileDialog() };
+    }
+
+    const result = await dialog.showMessageBox({
+      type: "question",
+      buttons: ["Choose files", "Photos", "Cancel"],
+      defaultId: 0,
+      cancelId: 2,
+      title: "Import",
+      message: "Import from where?",
+      detail:
+        "Choose files from your drive, or select photos and videos from the macOS Photos app.",
+    });
+
+    if (result.response === 0) {
+      return { filePaths: await this.openFileDialog() };
+    }
+
+    if (result.response === 1) {
+      return this.openPhotosImportDialog();
+    }
+
+    return { filePaths: [] };
+  }
+
+  private async openPhotosImportDialog(): Promise<ImportFileSelection> {
+    const exportDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-photos-"));
+
+    try {
+      const result = await this.runPhotosPickerHelper(exportDir);
+      if (result === "cancelled") {
+        await this.removeTemporaryDirectory(exportDir);
+        return { filePaths: [] };
+      }
+
+      const filePaths = await this.listFilesRecursive(exportDir);
+
+      if (!filePaths.length) {
+        await this.removeTemporaryDirectory(exportDir);
+        await dialog.showMessageBox({
+          type: "warning",
+          message: "No Photos items were exported",
+          detail: "Select one or more items in the Photos picker and try again.",
+        });
+        return { filePaths: [] };
+      }
+
+      return { filePaths, cleanupDir: exportDir };
+    } catch (error) {
+      await this.removeTemporaryDirectory(exportDir);
+      await dialog.showMessageBox({
+        type: "error",
+        message: "Photos import failed",
+        detail: this.errorMessage(error),
+      });
+      return { filePaths: [] };
+    }
   }
 
   async ensureThumbnails(itemIds: string[]): Promise<ThumbnailUrls> {
@@ -476,7 +564,8 @@ export class FolioManager implements FolioManagerInterface {
   }
 
   private async scanArchiveFiles(): Promise<ReconciliationFile[]> {
-    const archiveRoot = path.join(this.folioRoot, "items");
+    const folioRoot = this.folioRoot;
+    const archiveRoot = path.join(folioRoot, "items");
     const files: ReconciliationFile[] = [];
 
     async function walk(dir: string): Promise<void> {
@@ -500,7 +589,7 @@ export class FolioManager implements FolioManagerInterface {
         try {
           const hash = await computeHash(absolutePath);
           files.push({
-            path: path.relative(this.folioRoot, absolutePath),
+            path: path.relative(folioRoot, absolutePath),
             absolutePath,
             hash,
           });
@@ -554,6 +643,80 @@ export class FolioManager implements FolioManagerInterface {
     } catch {
       return false;
     }
+  }
+
+  private async runPhotosPickerHelper(
+    exportDir: string,
+  ): Promise<"exported" | "cancelled"> {
+    const helperPath = this.getPhotosPickerHelperPath();
+    if (!(await this.fileExists(helperPath))) {
+      throw new Error(
+        "Photos picker helper is not available. Run npm run build:native and restart Folio.",
+      );
+    }
+
+    const { stdout } = await execFileAsync(
+      helperPath,
+      [exportDir],
+      {
+        timeout: 300000,
+      },
+    );
+
+    return stdout.includes(PHOTOS_PICKER_CANCELLED) ? "cancelled" : "exported";
+  }
+
+  private getPhotosPickerHelperPath(): string {
+    if (app.isPackaged) {
+      return path.join(
+        process.resourcesPath,
+        "native",
+        PHOTOS_PICKER_HELPER_NAME,
+      );
+    }
+
+    return path.join(
+      process.cwd(),
+      "resources",
+      "native",
+      PHOTOS_PICKER_HELPER_NAME,
+    );
+  }
+
+  private async listFilesRecursive(directory: string): Promise<string[]> {
+    const entries = await fs.readdir(directory, { withFileTypes: true });
+    const filePaths = await Promise.all(
+      entries.map(async (entry) => {
+        if (entry.name.startsWith(".")) return [];
+
+        const entryPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) return this.listFilesRecursive(entryPath);
+        if (entry.isFile()) return [entryPath];
+        return [];
+      }),
+    );
+
+    return filePaths.flat().sort((a, b) => a.localeCompare(b));
+  }
+
+  private async removeTemporaryDirectory(directory: string): Promise<void> {
+    try {
+      await fs.rm(directory, { recursive: true, force: true });
+    } catch (error) {
+      console.error("Unable to clean Photos import directory", directory, error);
+    }
+  }
+
+  private errorMessage(error: unknown): string {
+    const structuredError = error as { stderr?: unknown };
+    const stderr =
+      typeof structuredError?.stderr === "string"
+        ? structuredError.stderr.trim()
+        : "";
+    const message = stderr || (error instanceof Error ? error.message : String(error));
+    const executionError = message.match(/execution error: (.*?)(?: \(-?\d+\))?$/);
+
+    return executionError?.[1]?.trim() ?? message.trim();
   }
 
   private isSafeFolioPath(absolutePath: string): boolean {

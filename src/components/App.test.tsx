@@ -37,6 +37,7 @@ function setupFolio({
   });
   vi.mocked(window.folio.openFileDialog).mockResolvedValue(dialogPaths);
   vi.mocked(window.folio.copyToFolio).mockResolvedValue(importedItems);
+  vi.mocked(window.folio.importToFolio).mockResolvedValue(importedItems);
   vi.mocked(window.folio.copyReference).mockResolvedValue([]);
   vi.mocked(window.folio.deleteItems).mockImplementation(async (itemIds) => {
     currentData = {
@@ -121,6 +122,12 @@ function gridTitles() {
   );
 }
 
+function selectedItemTitles() {
+  return Array.from(
+    archiveRoute().querySelectorAll(".item-card.item-selected .item-title"),
+  ).map((element) => element.textContent ?? "");
+}
+
 function dispatchWheel(
   target: HTMLElement,
   options: Pick<WheelEventInit, "clientX" | "clientY" | "deltaY">,
@@ -178,7 +185,12 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     }) as HTMLInputElement;
     const archiveActions = archiveSizeSlider.closest(".archive-floating-actions");
     expect(archiveActions).not.toBeNull();
-    expect(archiveRoute().firstElementChild).toBe(archiveActions);
+    expect(
+      archiveRoute().firstElementChild?.classList.contains(
+        "archive-titlebar-drag-area",
+      ),
+    ).toBe(true);
+    expect(archiveRoute().contains(archiveActions)).toBe(true);
     expect(archiveActions?.firstElementChild).toBe(
       archiveSizeSlider.closest(".archive-scale-control"),
     );
@@ -271,10 +283,36 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await waitForArchive();
     await user.click(screen.getByRole("button", { name: /import/i }));
 
+    expect(window.folio.importToFolio).toHaveBeenCalledTimes(1);
+    expect(window.folio.openFileDialog).not.toHaveBeenCalled();
+    expect(window.folio.copyToFolio).not.toHaveBeenCalled();
+    expect(await screen.findByText("Delta")).not.toBeNull();
+    expect(screen.getByText("1 item added to today")).not.toBeNull();
+  });
+
+  it("falls back to the file dialog if the import bridge is not registered yet", async () => {
+    setupFolio({
+      dialogPaths: ["/tmp/delta.png"],
+      importedItems: [
+        makeItem("delta", {
+          title: "Delta",
+          path: "items/2026/06_june/delta.png",
+          date: "2026-06-15T11:00:00.000Z",
+        }),
+      ],
+    });
+    vi.mocked(window.folio.importToFolio).mockRejectedValueOnce(
+      new Error("No handler registered for 'folio:import-to-folio'"),
+    );
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(screen.getByRole("button", { name: /import/i }));
+
+    expect(window.folio.importToFolio).toHaveBeenCalledTimes(1);
     expect(window.folio.openFileDialog).toHaveBeenCalledTimes(1);
     expect(window.folio.copyToFolio).toHaveBeenCalledWith(["/tmp/delta.png"]);
     expect(await screen.findByText("Delta")).not.toBeNull();
-    expect(screen.getByText("1 item added to today")).not.toBeNull();
   });
 
   it("sorts grid results by most recent first and hides image type labels", async () => {
@@ -466,6 +504,53 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.canvases).toHaveLength(2);
     });
     expect(app.data.canvases[0].itemIds).toEqual(["alpha", "bravo", "charlie"]);
+  });
+
+  it("range selects across strip day sections in visual order", async () => {
+    setupFolio({
+      data: makeData({
+        items: [
+          makeItem("older-a", {
+            title: "Older A",
+            date: "2026-06-15T08:00:00.000Z",
+          }),
+          makeItem("older-b", {
+            title: "Older B",
+            date: "2026-06-15T09:00:00.000Z",
+          }),
+          makeItem("older-c", {
+            title: "Older C",
+            date: "2026-06-15T10:00:00.000Z",
+          }),
+          makeItem("newer-a", {
+            title: "Newer A",
+            date: "2026-06-16T08:00:00.000Z",
+          }),
+          makeItem("newer-b", {
+            title: "Newer B",
+            date: "2026-06-16T09:00:00.000Z",
+          }),
+          makeItem("newer-c", {
+            title: "Newer C",
+            date: "2026-06-16T10:00:00.000Z",
+          }),
+        ],
+      }),
+    });
+
+    await screen.findByRole("button", { name: /strip/i });
+    await screen.findByText("Newer B");
+    await userEvent.click(itemButton(/newer b/i));
+    fireEvent.click(itemButton(/older b/i), {
+      shiftKey: true,
+    });
+
+    expect(screen.getByText("4 items selected")).not.toBeNull();
+    expect(new Set(selectedItemTitles())).toEqual(
+      new Set(["Newer B", "Newer C", "Older A", "Older B"]),
+    );
+    expect(selectedItemTitles()).not.toContain("Newer A");
+    expect(selectedItemTitles()).not.toContain("Older C");
   });
 
   it("adds and removes item tags from the More menu submenu", async () => {
@@ -740,7 +825,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await user.click(screen.getByRole("button", { name: /import images/i }));
     await waitFor(() => {
-      expect(window.folio.copyToFolio).toHaveBeenCalledWith(["/tmp/echo.png"]);
+      expect(window.folio.importToFolio).toHaveBeenCalledTimes(1);
       expect(app.data.items.some((item) => item.id === "echo")).toBe(true);
       expect(app.data.canvases[0].itemIds).toContain("echo");
     });

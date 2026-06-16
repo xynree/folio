@@ -288,6 +288,7 @@ button svg {
   color: #5a4428;
   font-size: 13px;
   animation: slide-down var(--motion-medium) var(--motion-pop) backwards;
+  -webkit-app-region: drag;
 }
 
 .selection-bar-spacer {
@@ -322,6 +323,7 @@ button svg {
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
+  -webkit-app-region: no-drag;
 }
 
 .selection-actions button {
@@ -333,6 +335,7 @@ button svg {
   cursor: pointer;
   font-size: 12px;
   font-weight: 720;
+  -webkit-app-region: no-drag;
 }
 
 .studio-workspace {
@@ -644,6 +647,8 @@ button svg {
 
 .archive-route {
   position: relative;
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -661,6 +666,13 @@ button svg {
   --archive-strip-card-max: 156px;
   --archive-strip-card-min: 132px;
   --archive-thumb-radius: 7px;
+}
+
+.archive-titlebar-drag-area {
+  grid-row: 1;
+  min-height: 52px;
+  background: #fbf9f5;
+  -webkit-app-region: drag;
 }
 
 .tags-sidebar {
@@ -859,10 +871,13 @@ button svg {
 }
 
 .view-scroller {
+  grid-row: 2;
+  min-height: 0;
   height: 100%;
   overflow: auto;
   padding: 28px 24px 96px;
   scrollbar-color: transparent transparent;
+  -webkit-app-region: no-drag;
 }
 
 .archive-panel:hover .view-scroller {

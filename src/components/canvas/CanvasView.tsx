@@ -31,6 +31,7 @@ import {
   formatCount,
   mergeItems,
 } from "../folio/model";
+import { chooseAndImportItems } from "../folio/importing";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
 import { CanvasItemCard, CanvasNoteCard, ReferenceCard } from "./CanvasCards";
@@ -155,11 +156,9 @@ export function CanvasView({
 
   const importToBoard = useCallback(async () => {
     if (!activeCanvas) return;
-    const filePaths = await window.folio.openFileDialog();
-    if (!filePaths.length) return;
 
     try {
-      const imported = await window.folio.copyToFolio(filePaths);
+      const imported = await chooseAndImportItems();
       if (!imported.length) return;
 
       const nextItems = mergeItems(data.items, imported);

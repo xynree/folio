@@ -51,6 +51,10 @@ export function DailyStripView({
         : Array.from(groups.keys()).sort((a, b) => b.localeCompare(a)),
     [groups, items, showDateGaps],
   );
+  const visualOrderedItems = useMemo(
+    () => dates.flatMap((date) => groups.get(date) ?? []),
+    [dates, groups],
+  );
   const selectedSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
 
   useEffect(() => {
@@ -112,7 +116,7 @@ export function DailyStripView({
                     isSelected={selectedSet.has(item.id)}
                     onDragStart={onDragStart}
                     onOpen={(itemId, event) =>
-                      onItemOpen(itemId, event, items, true)
+                      onItemOpen(itemId, event, visualOrderedItems, true)
                     }
                     onEdit={onEditItem}
                     onAddTag={onAddTag}

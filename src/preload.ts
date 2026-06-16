@@ -17,6 +17,9 @@ const folioApi = {
   copyToFolio: (filePaths: string[]): Promise<FolioItem[]> =>
     ipcRenderer.invoke("folio:copy-to-folio", filePaths),
 
+  importToFolio: (): Promise<FolioItem[]> =>
+    ipcRenderer.invoke("folio:import-to-folio"),
+
   copyReference: (
     canvasId: string,
     filePaths: string[],

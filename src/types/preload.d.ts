@@ -10,6 +10,7 @@ export interface FolioApi {
   getFolioData: () => Promise<FolioData>;
   saveFolioData: (data: FolioData) => Promise<void>;
   copyToFolio: (filePaths: string[]) => Promise<FolioItem[]>;
+  importToFolio?: () => Promise<FolioItem[]>;
   copyReference: (
     canvasId: string,
     filePaths: string[],
