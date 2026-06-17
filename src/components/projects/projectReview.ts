@@ -6,7 +6,7 @@ export type ProjectTimelineKind =
   | "work"
   | "reference"
   | "note"
-  | "output"
+  | "review"
   | "relationship";
 
 export type ProjectTimelineEntry = {
@@ -17,6 +17,7 @@ export type ProjectTimelineEntry = {
   timestamp: string;
   boardId?: string;
   itemId?: string;
+  reviewId?: string;
 };
 
 export type ProjectTimelineGroup = {
@@ -30,7 +31,7 @@ export type ProjectRecap = {
   workCount: number;
   boardCount: number;
   referenceCount: number;
-  outputCount: number;
+  reviewCount: number;
   activeDays: number;
   firstImageDate: string | null;
   latestSavedDate: string | null;
@@ -117,9 +118,7 @@ export function buildProjectReview(
       canvas.projectId === project.id || project.boardIds.includes(canvas.id),
   );
   const entries: ProjectTimelineEntry[] = [];
-  const outputItems = projectItems.filter(
-    (item) => item.stage === "final" || item.stage === "output",
-  );
+  const projectReviews = project.reviews ?? [];
 
   projectItems.forEach((item) => {
     const timestamp = fallbackTimestamp(item.date, item.updatedAt);
@@ -148,15 +147,14 @@ export function buildProjectReview(
     });
   });
 
-  outputItems.forEach((item) => {
+  projectReviews.forEach((review) => {
     entries.push({
-      id: `output-${item.id}`,
-      kind: "output",
-      title: itemTitle(item),
-      detail: item.stage === "final" ? "Final output" : "Output",
-      timestamp: fallbackTimestamp(item.updatedAt, item.date),
-      boardId: projectCanvases.find((canvas) => canvas.itemIds.includes(item.id))?.id,
-      itemId: item.id,
+      id: `review-${review.id}`,
+      kind: "review",
+      title: review.title || "Untitled review",
+      detail: `${review.workItemIds.length} tagged ${review.workItemIds.length === 1 ? "Work" : "Works"}`,
+      timestamp: fallbackTimestamp(review.updatedAt, review.createdAt),
+      reviewId: review.id,
     });
   });
 
@@ -209,6 +207,7 @@ export function buildProjectReview(
   const latestCandidates = [
     project.updatedAt,
     ...projectItems.flatMap((item) => [item.updatedAt, item.date]),
+    ...projectReviews.flatMap((review) => [review.updatedAt, review.createdAt]),
     ...projectCanvases.map((canvas) => canvas.updatedAt ?? canvas.createdAt),
     ...entries.map((entry) => entry.timestamp),
   ].filter(Boolean) as string[];
@@ -224,7 +223,7 @@ export function buildProjectReview(
         (count, canvas) => count + canvas.references.length,
         0,
       ),
-      outputCount: outputItems.length,
+      reviewCount: projectReviews.length,
       activeDays: dateKeys.size,
       firstImageDate: itemDates.length
         ? itemDates.reduce((earliest, date) => (date < earliest ? date : earliest))

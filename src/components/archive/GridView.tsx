@@ -32,7 +32,6 @@ export function GridView({
   onAddTag,
   onRemoveTag,
   onDeleteItem,
-  onPromoteToOutput,
 }: {
   items: FolioItem[];
   tags: Tag[];
@@ -49,7 +48,6 @@ export function GridView({
   onAddTag: (itemId: string, tagText: string) => void;
   onRemoveTag: (itemId: string, tagText: string) => void;
   onDeleteItem: (itemId: string) => void;
-  onPromoteToOutput: (itemId: string) => void;
 }) {
   const [sortMode, setSortMode] = useState<GridSortMode>("recent");
   const filteredItems = useMemo(
@@ -156,7 +154,6 @@ export function GridView({
               onAddTag={onAddTag}
               onRemoveTag={onRemoveTag}
               onDelete={onDeleteItem}
-              onPromoteToOutput={onPromoteToOutput}
             />
           ))}
         </div>

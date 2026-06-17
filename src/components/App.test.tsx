@@ -52,6 +52,7 @@ function setupFolio({
           imageIds: [],
           workItemIds: [],
           boardIds: [],
+          reviews: [],
         }),
         ...currentData.projects,
       ],
@@ -193,11 +194,19 @@ async function openActiveBoardCanvas(user: ReturnType<typeof userEvent.setup>) {
 }
 
 async function showHeatmap(user: ReturnType<typeof userEvent.setup>) {
+  const worksButton = screen.queryByRole("button", { name: /^works$/i });
+  if (
+    worksButton &&
+    worksButton.getAttribute("aria-pressed") !== "true" &&
+    !screen.queryByLabelText("Project Works heatmap")
+  ) {
+    await user.click(worksButton);
+  }
   const showButton = screen.queryByLabelText(/show heatmap/i);
   if (showButton) {
     await user.click(showButton);
   }
-  await screen.findByLabelText("Project activity heatmap");
+  await screen.findByLabelText("Project Works heatmap");
 }
 
 function itemButton(name: RegExp) {
@@ -331,25 +340,45 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.queryByText(/^Strip$/i)).toBeNull();
     expect(screen.queryByText(/^Grid$/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /^heatmap$/i })).toBeNull();
-    expect(
-      document
-        .querySelector(".archive-heatmap-footer")
-        ?.classList.contains("archive-heatmap-footer-minimized"),
-    ).toBe(false);
+    expect(document.querySelector(".archive-heatmap-footer")).toBeNull();
     expect(screen.queryByText("Heatmap")).toBeNull();
-    expect(
-      screen
-        .getByLabelText("Project activity heatmap")
-        .closest(".archive-heatmap-footer"),
-    ).not.toBeNull();
-    expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
+    expect(screen.queryByLabelText("Project Works heatmap")).toBeNull();
+    expect(screen.queryByLabelText(/minimize heatmap/i)).toBeNull();
     expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
     expect(screen.getByRole("separator", { name: /resize tags panel/i })).not.toBeNull();
     const panelModeControl = screen
       .getByRole("button", { name: /split panel view/i })
       .closest(".workspace-panel-mode-control");
     expect(panelModeControl).not.toBeNull();
-    expect(panelModeControl?.closest(".workspace-panel-mode-bar")).not.toBeNull();
+    const projectActionSidebar = document.querySelector(".project-action-sidebar");
+    expect(projectActionSidebar).not.toBeNull();
+    expect(panelModeControl?.closest(".project-action-sidebar")).toBe(
+      projectActionSidebar,
+    );
+    expect(
+      screen.getByRole("button", { name: /^projects$/i }).closest(
+        ".project-action-sidebar",
+      ),
+    ).toBe(projectActionSidebar);
+    expect(
+      screen
+        .getAllByText("Studio Archive")
+        .some(
+          (element) =>
+            element.closest(".project-action-sidebar") === projectActionSidebar,
+        ),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: /^all images$/i }).closest(
+        ".project-action-sidebar",
+      ),
+    ).toBe(projectActionSidebar);
+    expect(
+      screen.getByRole("button", { name: /open project folder/i }).closest(
+        ".project-action-sidebar",
+      ),
+    ).toBe(projectActionSidebar);
+    expect(panelModeControl?.closest(".workspace-panel-mode-bar")).toBeNull();
     expect(panelModeControl?.closest(".archive-floating-actions")).toBeNull();
     expect(
       Array.from(panelModeControl?.querySelectorAll("svg") ?? []).map((icon) => ({
@@ -483,6 +512,12 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.getByRole("separator", { name: /resize open board panel/i }))
       .not.toBeNull();
 
+    await user.click(screen.getByRole("button", { name: /^works$/i }));
+    expect(
+      screen.getByLabelText("Project Works heatmap").closest(
+        ".archive-heatmap-footer",
+      ),
+    ).not.toBeNull();
     await user.click(screen.getByLabelText(/minimize heatmap/i));
     expect(
       document
@@ -493,7 +528,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(
       document.querySelector(".archive-heatmap")?.getAttribute("aria-hidden"),
     ).toBe("true");
-    expect(screen.queryByLabelText("Project activity heatmap")).toBeNull();
+    expect(screen.queryByLabelText("Project Works heatmap")).toBeNull();
     expect(screen.getByLabelText(/show heatmap/i)).not.toBeNull();
 
     await user.click(screen.getByLabelText(/show heatmap/i));
@@ -502,7 +537,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
         .querySelector(".archive-heatmap-footer")
         ?.classList.contains("archive-heatmap-footer-minimized"),
     ).toBe(false);
-    expect(screen.getByLabelText("Project activity heatmap")).not.toBeNull();
+    expect(screen.getByLabelText("Project Works heatmap")).not.toBeNull();
 
     await waitFor(() => {
       expect(window.folio.ensureThumbnails).toHaveBeenCalledWith(
@@ -730,33 +765,47 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(within(archiveRoute()).queryByText("Newer Untagged")).toBeNull();
   });
 
-  it("shows persistent upload density in the bottom bar with an 8 upload cap", async () => {
+  it("shows Works-only density in the bottom bar with an 8 work cap", async () => {
+    const heatmapItems = [
+      makeItem("alpha", {
+        title: "Alpha",
+        date: "2026-06-15T18:00:00.000Z",
+      }),
+      makeItem("image-only", {
+        title: "Image Only",
+        date: "2026-06-15T18:30:00.000Z",
+      }),
+      ...Array.from({ length: 9 }, (_, index) =>
+        makeItem(`heavy-${index}`, {
+          date: `2026-06-15T18:${String(index).padStart(2, "0")}:00.000Z`,
+          title: `Heavy ${index}`,
+        }),
+      ),
+      ...Array.from({ length: 3 }, (_, index) =>
+        makeItem(`medium-${index}`, {
+          date: `2026-06-14T18:${String(index).padStart(2, "0")}:00.000Z`,
+          title: `Medium ${index}`,
+        }),
+      ),
+    ];
+
     setupFolio({
       data: makeData({
-        items: [
-          makeItem("alpha", {
-            title: "Alpha",
-            date: "2026-06-15T18:00:00.000Z",
+        items: heatmapItems,
+        projects: [
+          makeProject("project-1", {
+            imageIds: heatmapItems.map((item) => item.id),
+            workItemIds: heatmapItems
+              .filter((item) => item.id !== "image-only")
+              .map((item) => item.id),
           }),
-          ...Array.from({ length: 9 }, (_, index) =>
-            makeItem(`heavy-${index}`, {
-              date: `2026-06-15T18:${String(index).padStart(2, "0")}:00.000Z`,
-              title: `Heavy ${index}`,
-            }),
-          ),
-          ...Array.from({ length: 3 }, (_, index) =>
-            makeItem(`medium-${index}`, {
-              date: `2026-06-14T18:${String(index).padStart(2, "0")}:00.000Z`,
-              title: `Medium ${index}`,
-            }),
-          ),
         ],
       }),
     });
     await waitForArchive();
     const user = userEvent.setup();
     await showHeatmap(user);
-    const heatmap = screen.getByLabelText("Project activity heatmap");
+    const heatmap = screen.getByLabelText("Project Works heatmap");
     expect(
       heatmap.querySelector(".archive-heatmap-months")?.textContent,
     ).toContain("Jun");
@@ -964,7 +1013,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("shows project review recap, timeline entries, and board jumps", async () => {
+  it("creates project reviews, tags Works in review notes, and shows progress timeline", async () => {
     const app = setupFolio({
       data: makeData({
         items: [
@@ -975,7 +1024,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
           }),
           makeItem("bravo", {
             title: "Bravo",
-            date: "2026-06-16T08:00:00.000Z",
+            date: "2026-06-15T08:00:00.000Z",
             projectId: "project-1",
             stage: "final",
             updatedAt: "2026-06-17T09:00:00.000Z",
@@ -1021,8 +1070,18 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
         projects: [
           makeProject("project-1", {
             imageIds: ["alpha", "bravo"],
-            workItemIds: ["alpha"],
+            workItemIds: ["alpha", "bravo"],
             boardIds: ["board-1", "board-2"],
+            reviews: [
+              {
+                id: "review-1",
+                title: "Week 1 review",
+                markdown: "# Week 1\n\nAlpha has a clear direction.",
+                workItemIds: ["alpha"],
+                createdAt: "2026-06-17T10:00:00.000Z",
+                updatedAt: "2026-06-17T10:30:00.000Z",
+              },
+            ],
           }),
         ],
       }),
@@ -1034,47 +1093,56 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     expect(screen.getByLabelText("Project review")).not.toBeNull();
     expect(screen.getByText("References")).not.toBeNull();
-    expect(screen.getByText("Outputs")).not.toBeNull();
+    expect(screen.getByText("Reviews")).not.toBeNull();
+    expect(screen.queryByText("Outputs")).toBeNull();
+    expect(screen.getAllByText("Week 1 review").length).toBeGreaterThan(0);
     expect(screen.getByText("Tighten values")).not.toBeNull();
     expect(screen.getByText("version-of on Review Board")).not.toBeNull();
-    expect(screen.getByText("Final output")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /promote to output/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /open on board/i })).toBeNull();
+    expect(screen.queryByLabelText("Review editor")).toBeNull();
 
-    const alphaTimelineEntry = screen
-      .getAllByText("Alpha")
-      .map((element) => element.closest(".project-timeline-entry") as HTMLElement)
-      .find((entry) =>
-        within(entry).queryByRole("button", { name: /promote to output/i }),
-      ) as HTMLElement;
+    const imageTimelineGrid = screen.getByLabelText("2 images in timeline");
+    expect(within(imageTimelineGrid).getByText("Alpha")).not.toBeNull();
+    expect(within(imageTimelineGrid).getByText("Bravo")).not.toBeNull();
+    await waitFor(() => {
+      expect(imageTimelineGrid.querySelectorAll(".thumb-shell img")).toHaveLength(2);
+    });
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll(".entry-work .project-timeline-work-thumb img"),
+      ).toHaveLength(2);
+    });
+    const workTimelineEntry = document.querySelector(".entry-work") as HTMLElement;
+    await user.dblClick(workTimelineEntry);
+    expect(screen.getByLabelText("Item details")).not.toBeNull();
+    await user.click(screen.getByLabelText("Close details"));
+
     await user.click(
-      within(alphaTimelineEntry).getByRole("button", {
-        name: /promote to output/i,
+      within(screen.getByLabelText("Project reviews")).getByRole("button", {
+        name: /week 1 review/i,
       }),
     );
+    expect(screen.getByLabelText("Review editor")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: /^review$/i }));
+    expect(screen.getByLabelText("Project review")).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /new review/i }));
+    expect(screen.getByLabelText("Review editor")).not.toBeNull();
     await waitFor(() => {
-      expect(app.data.items.find((item) => item.id === "alpha")?.stage).toBe(
-        "output",
-      );
+      expect(app.data.projects[0].reviews).toHaveLength(2);
+      expect(app.data.projects[0].reviews[0].title).toBe("Review 2");
+    });
+    const workTags = screen.getByLabelText("Tagged Works");
+    await user.click(within(workTags).getByRole("button", { name: /bravo/i }));
+    await waitFor(() => {
+      expect(app.data.projects[0].reviews[0].workItemIds).toEqual(["bravo"]);
+      expect(app.data.projects[0].reviews[0].markdown).toContain("## Bravo");
     });
 
-    await user.click(screen.getAllByRole("button", { name: /open on board/i })[0]);
-    await waitFor(() => {
-      expect(document.querySelector(".canvas-surface")).not.toBeNull();
-    });
-  });
-
-  it("promotes archive items to output from the item card menu", async () => {
-    const app = setupFolio();
-    const user = userEvent.setup();
-
-    await waitForArchive();
-    await user.click(screen.getByLabelText(/more actions for alpha/i));
-    await user.click(screen.getByRole("menuitem", { name: /promote to output/i }));
-
-    await waitFor(() => {
-      expect(app.data.items.find((item) => item.id === "alpha")?.stage).toBe(
-        "output",
-      );
-    });
+    await user.click(screen.getByRole("button", { name: /^projects$/i }));
+    expect(await screen.findByRole("heading", { name: /studio workspace/i }))
+      .not.toBeNull();
   });
 
   it("bulk deletes selected items from the selection action bar", async () => {
@@ -1232,24 +1300,6 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("promotes an item to output from the details modal", async () => {
-    const app = setupFolio();
-    const user = userEvent.setup();
-
-    await waitForArchive();
-    await user.click(screen.getByLabelText(/more actions for alpha/i));
-    await user.click(screen.getByRole("menuitem", { name: /edit/i }));
-
-    const dialog = await screen.findByRole("dialog", { name: /item details/i });
-    await user.click(within(dialog).getByRole("button", { name: /promote to output/i }));
-
-    await waitFor(() => {
-      expect(app.data.items.find((item) => item.id === "alpha")?.stage).toBe(
-        "output",
-      );
-    });
-  });
-
   it("runs detail modal Finder and delete actions and clears canvas memberships", async () => {
     const app = setupFolio({
       data: makeData({
@@ -1388,12 +1438,6 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await waitForArchive();
     await openActiveBoardCanvas(user);
-    await user.click(screen.getByLabelText(/promote alpha to output/i));
-    await waitFor(() => {
-      expect(app.data.items.find((item) => item.id === "alpha")?.stage).toBe(
-        "output",
-      );
-    });
     await user.click(screen.getByLabelText("Open board folder"));
     expect(window.folio.openInFinder).toHaveBeenCalledWith(
       "projects/studio-archive/boards/board-1",
@@ -2423,8 +2467,11 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     ).toBe(true);
     expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
     expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
-    expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
+    expect(screen.queryByLabelText(/minimize heatmap/i)).toBeNull();
     expect(screen.queryByText("Heatmap")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /^works$/i }));
+    expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
 
     await user.click(screen.getByLabelText(/hide tags/i));
     expect(screen.getByLabelText(/show tags/i)).not.toBeNull();

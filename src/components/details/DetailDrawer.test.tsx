@@ -5,6 +5,10 @@ import { DetailDrawer } from "./DetailDrawer";
 import { describe, expect, it, vi } from "vitest";
 
 function renderDrawer(overrides = {}) {
+  vi.mocked(window.folio.getFileDataUrl).mockResolvedValue(
+    "folio://file/items/2026/06_june/alpha.png",
+  );
+
   const props = {
     item: makeItem("alpha", {
       title: "Alpha",
@@ -21,7 +25,6 @@ function renderDrawer(overrides = {}) {
     onAddTag: vi.fn(),
     onRemoveTag: vi.fn(),
     onAddToCanvas: vi.fn(),
-    onPromoteToOutput: vi.fn(),
     onDelete: vi.fn(),
     ...overrides,
   };
@@ -45,7 +48,6 @@ describe("DetailDrawer", () => {
         onAddTag={vi.fn()}
         onRemoveTag={vi.fn()}
         onAddToCanvas={vi.fn()}
-        onPromoteToOutput={vi.fn()}
         onDelete={vi.fn()}
       />,
     );
@@ -55,6 +57,13 @@ describe("DetailDrawer", () => {
 
   it("saves changed metadata and closes from the overlay", async () => {
     const props = renderDrawer();
+
+    expect(
+      (await screen.findByRole("img", { name: "Alpha" })).getAttribute("src"),
+    ).toBe("folio://file/items/2026/06_june/alpha.png");
+    expect(window.folio.getFileDataUrl).toHaveBeenCalledWith(
+      "items/2026/06_june/alpha.png",
+    );
 
     fireEvent.change(screen.getByDisplayValue("Alpha"), {
       target: { value: "Updated Alpha" },

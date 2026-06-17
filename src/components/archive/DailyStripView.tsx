@@ -26,7 +26,6 @@ export function DailyStripView({
   onAddTag,
   onRemoveTag,
   onDeleteItem,
-  onPromoteToOutput,
 }: {
   items: FolioItem[];
   tags: Tag[];
@@ -42,7 +41,6 @@ export function DailyStripView({
   onAddTag: (itemId: string, tagText: string) => void;
   onRemoveTag: (itemId: string, tagText: string) => void;
   onDeleteItem: (itemId: string) => void;
-  onPromoteToOutput: (itemId: string) => void;
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const groups = useMemo(() => groupItemsByDate(items), [items]);
@@ -124,7 +122,6 @@ export function DailyStripView({
                     onAddTag={onAddTag}
                     onRemoveTag={onRemoveTag}
                     onDelete={onDeleteItem}
-                    onPromoteToOutput={onPromoteToOutput}
                   />
                 ))}
               </div>

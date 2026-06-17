@@ -364,6 +364,182 @@ button svg {
   white-space: nowrap;
 }
 
+.project-review-overview {
+  display: grid;
+  grid-template-columns: minmax(172px, 0.28fr) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+
+.project-review-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.project-review-list button {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #ded2c1;
+  border-radius: 8px;
+  color: #5f5348;
+  background: rgba(255, 253, 248, 0.78);
+  cursor: pointer;
+  text-align: left;
+}
+
+.project-review-list button.active {
+  border-color: rgba(56, 93, 86, 0.32);
+  background: rgba(56, 93, 86, 0.1);
+}
+
+.project-review-list strong,
+.project-review-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-review-list strong {
+  color: #2f403d;
+  font-size: 13px;
+}
+
+.project-review-list span {
+  color: #7c6f61;
+  font-size: 11px;
+  font-weight: 680;
+}
+
+.project-review-editor-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.project-review-editor-header label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.project-review-editor-header label span {
+  color: #7c6f61;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.project-review-editor-header input {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d7c9b4;
+  border-radius: 7px;
+  color: #2e2822;
+  background: #fffdf8;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 720;
+}
+
+.project-review-work-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+
+.project-review-work-tags button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid #ded2c1;
+  border-radius: 999px;
+  color: #5f5348;
+  background: #fffaf0;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.project-review-work-tags button.active {
+  color: #2f403d;
+  border-color: rgba(56, 93, 86, 0.32);
+  background: rgba(56, 93, 86, 0.11);
+}
+
+.project-review-work-tags span {
+  color: #7c6f61;
+  font-size: 12px;
+}
+
+.project-markdown-editor {
+  min-width: 0;
+}
+
+.project-markdown-editor .w-md-editor {
+  border-color: #ded2c1;
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.project-markdown-editor .w-md-editor-toolbar {
+  border-color: #e6dacb;
+  border-radius: 8px 8px 0 0;
+}
+
+.review-editor-page {
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.review-editor-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 4px 16px 4px 82px;
+  border-bottom: 1px solid #e5dbcf;
+  background: rgba(255, 253, 248, 0.86);
+  -webkit-app-region: drag;
+}
+
+.review-editor-titlebar button {
+  min-height: 28px;
+  padding: 5px 9px;
+  font-size: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.review-editor-titlebar strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #4c3b24;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-editor-surface {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  padding: 18px;
+  overflow: auto;
+}
+
 .project-timeline {
   display: grid;
   gap: 14px;
@@ -385,20 +561,45 @@ button svg {
 .project-timeline-group ol {
   display: grid;
   gap: 8px;
+  position: relative;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 22px;
   list-style: none;
+}
+
+.project-timeline-group ol::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 6px;
+  width: 1px;
+  background: #dfd0bd;
 }
 
 .project-timeline-entry {
   display: grid;
   grid-template-columns: 96px minmax(0, 1fr) auto;
   align-items: center;
+  position: relative;
   gap: 10px;
   padding: 10px;
   border: 1px solid #ded2c1;
   border-radius: 8px;
   background: rgba(255, 253, 248, 0.78);
+}
+
+.project-timeline-entry::before {
+  content: "";
+  position: absolute;
+  top: 22px;
+  left: -20px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #fffdf8;
+  border-radius: 999px;
+  background: #6f9088;
+  box-shadow: 0 0 0 1px #cbbba8;
 }
 
 .project-timeline-kind {
@@ -435,6 +636,64 @@ button svg {
 .project-timeline-copy small {
   color: #7c6f61;
   font-size: 12px;
+}
+
+.project-timeline-image-grid-entry {
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: start;
+}
+
+.project-timeline-entry-with-thumb {
+  grid-template-columns: 96px 48px minmax(0, 1fr) auto;
+  cursor: default;
+}
+
+.project-timeline-work-thumb {
+  display: block;
+  width: 48px;
+  min-width: 0;
+}
+
+.project-timeline-work-thumb .thumb-shell {
+  border-radius: 6px;
+}
+
+.project-timeline-entry-with-thumb:focus-visible,
+.project-timeline-thumb:focus-visible {
+  outline: 2px solid rgba(56, 93, 86, 0.34);
+  outline-offset: 2px;
+}
+
+.project-timeline-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.project-timeline-thumb {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  cursor: default;
+}
+
+.project-timeline-thumb .thumb-shell {
+  border-radius: 6px;
+}
+
+.project-timeline-thumb figcaption {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  color: #6f6255;
+  font-size: 10px;
+  font-weight: 690;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .project-timeline-actions {
@@ -635,59 +894,97 @@ button svg {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 28px;
+  min-height: 36px;
   -webkit-app-region: drag;
 }
 
-.project-back-button {
-  position: absolute;
-  left: 16px;
-  height: 24px;
-  min-height: 24px;
-  padding: 0 9px;
-  font-size: 12px;
+.project-workspace-shell {
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  min-height: 0;
+  border-top: 1px solid #e5dbcf;
+}
+
+.project-action-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 10px;
+  overflow: auto;
+  border-right: 1px solid #e1d7c9;
+  background: rgba(255, 253, 248, 0.86);
   -webkit-app-region: no-drag;
 }
 
-.active-project-title {
-  position: absolute;
-  left: 112px;
-  max-width: min(42vw, 460px);
-  overflow: hidden;
+.project-action-sidebar-header {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #ece1d3;
+}
+
+.project-sidebar-back-button {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 32px;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.project-sidebar-title {
+  min-width: 0;
   color: #4c3b24;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 18px;
+  font-weight: 780;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.project-action-group {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #ece1d3;
+}
+
+.project-action-group:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .project-surface-tabs {
-  position: absolute;
-  right: 16px;
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  background: rgba(255, 253, 248, 0.76);
-  border: 1px solid #ded2c1;
-  border-radius: 7px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   -webkit-app-region: no-drag;
 }
 
 .project-folder-actions {
-  position: absolute;
-  left: min(590px, calc(100vw - 300px));
-  display: inline-flex;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
   -webkit-app-region: no-drag;
 }
 
 .project-folder-actions .icon-button {
-  width: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  padding: 4px;
-  border: 0;
-  background: transparent;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px;
+  border: 1px solid #ded2c2;
+  border-radius: 7px;
+  background: #fff8eb;
   box-shadow: none;
+  cursor: pointer;
 }
 
 .project-folder-actions .icon-button:hover,
@@ -697,26 +994,31 @@ button svg {
 }
 
 .project-surface-tabs button {
-  min-height: 22px;
-  padding: 0 8px;
+  justify-content: flex-start;
+  min-height: 32px;
+  width: 100%;
+  padding: 0 10px;
   color: #6f6255;
-  background: transparent;
-  border: 0;
-  border-radius: 5px;
+  background: #f8f1e6;
+  border: 1px solid #ded2c2;
+  border-radius: 7px;
+  cursor: pointer;
   font-size: 12px;
   font-weight: 720;
 }
 
 .project-surface-tabs button.active {
   color: #2f403d;
+  border-color: rgba(56, 93, 86, 0.3);
   background: rgba(56, 93, 86, 0.12);
 }
 
 .workspace-panel-mode-control {
-  justify-self: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   z-index: 5;
-  gap: 2px;
-  min-height: 24px;
+  gap: 6px;
+  min-height: 0;
   margin: 0;
   padding: 0;
   border: 0;
@@ -724,22 +1026,23 @@ button svg {
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
 }
 
 .workspace-panel-mode-control button {
-  width: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  padding: 4px;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px;
+  border: 1px solid #ded2c2;
+  border-radius: 7px;
+  background: #f8f1e6;
   box-shadow: none;
   -webkit-app-region: no-drag;
 }
 
 .workspace-panel-mode-control button.active {
+  border-color: rgba(56, 93, 86, 0.3);
   background: rgba(56, 93, 86, 0.12);
   box-shadow: none;
 }
@@ -915,7 +1218,6 @@ button svg {
 }
 
 .studio-workspace {
-  grid-row: 2;
   display: grid;
   height: 100%;
   min-height: 0;
@@ -2367,16 +2669,38 @@ button svg {
 .detail-drawer {
   position: relative;
   display: grid;
-  gap: 14px;
-  width: min(440px, calc(100vw - 36px));
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
+  width: min(1240px, calc(100vw - 36px));
+  height: min(820px, calc(100vh - 36px));
   max-height: calc(100vh - 36px);
-  overflow: auto;
-  padding: 16px;
+  overflow: hidden;
+  padding: 0;
   border: 1px solid #d4c5b1;
   border-radius: 8px;
   background: #fffdf8;
   box-shadow: 0 18px 50px rgba(52, 36, 21, 0.18);
   animation: modal-in var(--motion-medium) var(--motion-pop) backwards;
+}
+
+.drawer-image-pane {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px;
+  border-right: 1px solid #e4d8ca;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 253, 248, 0.76), transparent 34%),
+    #efe7dc;
+}
+
+.drawer-details-pane {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
 }
 
 .drawer-header {
@@ -2410,7 +2734,7 @@ button svg {
 
 .drawer-header strong {
   display: block;
-  max-width: 240px;
+  max-width: 100%;
   overflow: hidden;
   color: #28231e;
   font-size: 14px;
@@ -2420,14 +2744,25 @@ button svg {
 
 .drawer-preview {
   width: 100%;
-  max-height: 240px;
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 7px;
+  background: rgba(255, 253, 248, 0.58);
+}
+
+.drawer-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .drawer-preview .thumb-shell {
-  max-height: 240px;
-  aspect-ratio: 16 / 10;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
 }
 
 .drawer-header button,
@@ -2528,6 +2863,18 @@ button svg {
   color: #7b2f25;
   border-color: #d5a196;
   background: #fff0ed;
+}
+
+@media (max-width: 860px) {
+  .detail-drawer {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(260px, 48vh) minmax(0, 1fr);
+  }
+
+  .drawer-image-pane {
+    border-right: 0;
+    border-bottom: 1px solid #e4d8ca;
+  }
 }
 
 .canvas-workspace {
@@ -3442,8 +3789,7 @@ button svg {
   object-fit: contain;
 }
 
-.canvas-card-remove-button,
-.canvas-card-output-button {
+.canvas-card-remove-button {
   position: absolute;
   top: 6px;
   z-index: 2;
@@ -3464,20 +3810,12 @@ button svg {
   right: 6px;
 }
 
-.canvas-card-output-button {
-  right: 40px;
-}
-
 .canvas-card:hover .canvas-card-remove-button,
-.canvas-card:hover .canvas-card-output-button,
 .canvas-card:focus-within .canvas-card-remove-button,
-.canvas-card:focus-within .canvas-card-output-button,
 .canvas-note:hover .canvas-note-handle button,
 .canvas-note:focus-within .canvas-note-handle button,
 .canvas-card-remove-button:hover,
-.canvas-card-remove-button:focus-visible,
-.canvas-card-output-button:hover,
-.canvas-card-output-button:focus-visible {
+.canvas-card-remove-button:focus-visible {
   outline: 0;
   opacity: 1;
   pointer-events: auto;

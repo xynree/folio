@@ -48,7 +48,6 @@ function noopProps() {
     onDragStart: vi.fn(),
     onEditItem: vi.fn(),
     onItemOpen: vi.fn(),
-    onPromoteToOutput: vi.fn(),
     onRemoveTag: vi.fn(),
     setThumbUrls: vi.fn(),
   };
@@ -61,7 +60,6 @@ describe("archive components", () => {
     const onAddTag = vi.fn();
     const onRemoveTag = vi.fn();
     const onDelete = vi.fn();
-    const onPromoteToOutput = vi.fn();
 
     render(
       <ItemCard
@@ -77,11 +75,11 @@ describe("archive components", () => {
         onAddTag={onAddTag}
         onRemoveTag={onRemoveTag}
         onDelete={onDelete}
-        onPromoteToOutput={onPromoteToOutput}
       />,
     );
 
     fireEvent.click(screen.getAllByRole("button", { name: /Alpha/ })[0]);
+    fireEvent.doubleClick(screen.getAllByRole("button", { name: /Alpha/ })[0]);
     fireEvent.click(screen.getByLabelText("More actions for Alpha"));
     fireEvent.mouseEnter(screen.getByText("Add tags"));
     fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: /sketch/ }));
@@ -96,6 +94,7 @@ describe("archive components", () => {
     expect(onRemoveTag).toHaveBeenCalledWith("alpha", "sketch");
     expect(onAddTag).toHaveBeenCalledWith("alpha", "reference");
     expect(onEdit).toHaveBeenCalledWith("alpha");
+    expect(onEdit).toHaveBeenCalledTimes(2);
     expect(onDelete).toHaveBeenCalledWith("alpha");
   });
 
@@ -169,7 +168,6 @@ describe("archive components", () => {
         onAddTag={props.onAddTag}
         onRemoveTag={props.onRemoveTag}
         onDeleteItem={props.onDeleteItem}
-        onPromoteToOutput={props.onPromoteToOutput}
       />,
     );
 
@@ -214,7 +212,6 @@ describe("archive components", () => {
         onAddTag={props.onAddTag}
         onRemoveTag={props.onRemoveTag}
         onDeleteItem={props.onDeleteItem}
-        onPromoteToOutput={props.onPromoteToOutput}
       />,
     );
 
@@ -244,7 +241,6 @@ describe("archive components", () => {
         onAddTag={vi.fn()}
         onRemoveTag={vi.fn()}
         onDeleteItem={vi.fn()}
-        onPromoteToOutput={vi.fn()}
       />,
     );
 

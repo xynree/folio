@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { GripVertical, Star, Trash2, X } from "lucide-react";
+import { GripVertical, Trash2, X } from "lucide-react";
 import type {
   CanvasConnectionSide,
   CanvasNote,
@@ -95,7 +95,6 @@ export function CanvasItemCard({
   thumbUrls,
   setThumbUrls,
   onOpen,
-  onPromoteToOutput,
   onRemove,
   onConnectorPointerDown,
   onPointerDown,
@@ -107,7 +106,6 @@ export function CanvasItemCard({
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   onOpen: (itemId: string) => void;
-  onPromoteToOutput: (itemId: string) => void;
   onRemove: (itemId: string) => void;
   onConnectorPointerDown: ConnectorPointerDownHandler;
   onPointerDown: (event: React.PointerEvent) => void;
@@ -124,24 +122,17 @@ export function CanvasItemCard({
       onPointerDown={onPointerDown}
       onClickCapture={onClickCapture}
       onClick={() => onOpen(item.id)}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpen(item.id);
+      }}
     >
       <LazyThumbnail
         item={item}
         thumbUrls={thumbUrls}
         setThumbUrls={setThumbUrls}
       />
-      <button
-        className="icon-button canvas-card-output-button"
-        type="button"
-        aria-label={`Promote ${item.title || basename(item.path)} to output`}
-        title="Promote to output"
-        onClick={(event) => {
-          event.stopPropagation();
-          onPromoteToOutput(item.id);
-        }}
-      >
-        <ButtonIcon icon={Star} />
-      </button>
       <button
         className="icon-button canvas-card-remove-button"
         type="button"

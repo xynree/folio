@@ -47,7 +47,7 @@ Important product constraints remain:
 - Files remain readable outside the app.
 - Metadata remains inspectable and migratable.
 - Fast capture should not require users to classify everything immediately. Dragging or pasting images into a project should create project images automatically.
-- Process artifacts are valuable: references, WIP, notes, failures, and outputs all belong in the record.
+- Process artifacts are valuable: references, WIP, notes, reviews, failures, and final pieces all belong in the record.
 - Project review is personal self-review, not collaborative review. The data model should not include teammates, assignees, approvals, shared comment threads, or review requests.
 - Sharing affordances should stay outside the live app surface: export board snapshots, export project artifacts, and open project-related folders in Finder.
 
@@ -247,7 +247,6 @@ type ItemStage =
   | "wip"
   | "process"
   | "final"
-  | "output"
   | "note"
   | "other";
 
@@ -300,7 +299,6 @@ type RelationshipType =
   | "version-of"
   | "response-to"
   | "part-of"
-  | "output-of"
   | "related";
 
 interface CanvasEdge {
@@ -393,6 +391,7 @@ Opening a project shows a project workspace with three primary surfaces:
 
 - **All Images**: every image in `Project.imageIds`, including images dragged, pasted, imported, or dropped onto a project board.
 - **Works**: the subset in `Project.workItemIds`, shown with strip, grid, and heatmap views so the user can track actual pieces of work over time.
+- **Review**: a progress overview with Markdown review documents for private self-review against Works. Opening a review navigates to a dedicated editor page with Work tags and direct navigation back to Projects.
 - **Boards**: all canvases owned by the project, with creation, switching, and board canvas editing.
 
 The existing archive strip/grid can remain available as a legacy or global view, but the default product path should be project selection, then project-scoped capture and review. Tags, filters, size controls, and thumbnail behavior should be reused inside project image and Works views before creating parallel UI systems.
@@ -456,9 +455,9 @@ The project Review surface builds a derived timeline from the owning `Project` a
 
 - Image events come from `Project.imageIds` and each item `date` or `updatedAt`.
 - Works events come from `Project.workItemIds` and each promoted item's timeline metadata.
+- Review events come from `Project.reviews`; each review stores Markdown and `workItemIds` for Works tagged in that review.
 - Reference events come from references in canvases where `canvas.projectId` matches the project.
 - Note events come from `canvas.notes` using optional note timestamps when present.
-- Output events come from project items whose `stage` is `final` or `output`.
 - Relationship events come from edges with `createdAt` or `updatedAt`; edges also support a lightweight relationship type including `version-of`.
 
 Mutable board objects carry optional timestamps for timeline ordering:
@@ -610,7 +609,7 @@ Near-term roadmap:
 - Add project image intake from drag/drop, paste, import, and board drop.
 - Add Works promotion and Works strip/grid/heatmap views.
 - Scope boards to projects while preserving existing canvas behavior.
-- Add item stages so sketches, WIP, final pieces, output, and references are distinct.
+- Add item stages so sketches, WIP, final pieces, notes, and references are distinct.
 - Add project timeline view from existing item/reference/note data.
 - Add clipboard paste and URL capture for references.
 - Add backlinks and connected-item summaries in detail views.
@@ -620,7 +619,7 @@ Middle-term roadmap:
 
 - Add canvas sections, board templates, lasso selection, alignment, and minimap.
 - Add reference browser with Pinterest-like browsing and filters.
-- Add iteration/version grouping and "promote to output" flows.
+- Add iteration/version grouping and richer Work review flows.
 - Add global search across items, boards, notes, references, tags, and edges.
 - Add weekly/project self-review summaries.
 - Add export for board snapshots, project timelines, and contact sheets.

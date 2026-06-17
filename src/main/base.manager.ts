@@ -282,6 +282,7 @@ export class FolioManager implements FolioManagerInterface {
     this.canvases = canvasesBase.canvases;
     this.projects = projectsBase.projects;
 
+    const repairedLegacyOutputStages = this.repairLegacyOutputStages();
     const migratedProjects = await this.migrateProjectData();
     const repairedMissingFlags = await this.repairMissingFlagsForExistingFiles();
     const repairedMediaDimensions =
@@ -289,7 +290,12 @@ export class FolioManager implements FolioManagerInterface {
     const repairedReferenceMediaDimensions =
       this.repairReferenceMediaDimensions();
 
-    if (migratedProjects || repairedMissingFlags || repairedMediaDimensions) {
+    if (
+      repairedLegacyOutputStages ||
+      migratedProjects ||
+      repairedMissingFlags ||
+      repairedMediaDimensions
+    ) {
       await this.archiveManager.save(this.version);
     }
 
@@ -344,12 +350,22 @@ export class FolioManager implements FolioManagerInterface {
 
   async saveFolioData(data: FolioData): Promise<void> {
     this.version = SCHEMA_VERSION;
-    this.archiveManager.setItems(data.items);
+    this.archiveManager.setItems(
+      data.items.map((item) =>
+        (item.stage as string | undefined) === "output"
+          ? { ...item, stage: "final" }
+          : item,
+      ),
+    );
     this.tags = data.tags;
     this.canvases = data.canvases;
-    this.projects = data.projects;
+    this.projects = data.projects.map((project) => ({
+      ...project,
+      reviews: project.reviews ?? [],
+    }));
 
     await Promise.all(this.projects.map((project) => this.ensureProjectDirectories(project)));
+    await Promise.all(this.projects.map((project) => this.syncProjectReviewFiles(project)));
 
     await Promise.all([
       this.archiveManager.save(this.version),
@@ -382,6 +398,7 @@ export class FolioManager implements FolioManagerInterface {
       imageIds: [],
       workItemIds: [],
       boardIds: [],
+      reviews: [],
     };
 
     await this.ensureProjectDirectories(project);
@@ -967,6 +984,7 @@ export class FolioManager implements FolioManagerInterface {
         imageIds: items.map((item) => item.id),
         workItemIds: [],
         boardIds: this.canvases.map((canvas) => canvas.id),
+        reviews: [],
       };
       this.projects = [defaultProject];
       changed = true;
@@ -1013,18 +1031,31 @@ export class FolioManager implements FolioManagerInterface {
         await this.ensureProjectDirectories(project);
         const imageIds = Array.from(itemIdsByProject.get(project.id) ?? []);
         const boardIds = Array.from(boardIdsByProject.get(project.id) ?? []);
+        const previousReviews = Array.isArray(project.reviews)
+          ? project.reviews
+          : [];
+        const normalizedReviews = previousReviews.map((review) => ({
+          ...review,
+          workItemIds: review.workItemIds.filter((id) => imageIds.includes(id)),
+        }));
         const normalizedProject = {
           ...project,
           status: project.status ?? "active",
           imageIds,
           workItemIds: project.workItemIds.filter((id) => imageIds.includes(id)),
           boardIds,
+          reviews: normalizedReviews,
         };
         if (
           normalizedProject.status !== project.status ||
           normalizedProject.imageIds.length !== project.imageIds.length ||
           normalizedProject.workItemIds.length !== project.workItemIds.length ||
-          normalizedProject.boardIds.length !== project.boardIds.length
+          normalizedProject.boardIds.length !== project.boardIds.length ||
+          previousReviews !== project.reviews ||
+          normalizedProject.reviews.some(
+            (review, index) =>
+              review.workItemIds.length !== previousReviews[index]?.workItemIds.length,
+          )
         ) {
           changed = true;
         }
@@ -1074,12 +1105,36 @@ export class FolioManager implements FolioManagerInterface {
       fs.mkdir(path.join(projectRoot, "images"), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "works"), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "boards"), { recursive: true }),
+      fs.mkdir(path.join(projectRoot, "reviews"), { recursive: true }),
       ...project.boardIds.map((boardId) =>
         fs.mkdir(path.join(projectRoot, "boards", boardId, "references"), {
           recursive: true,
         }),
       ),
     ]);
+  }
+
+  private repairLegacyOutputStages(): boolean {
+    let changed = false;
+
+    for (const item of this.archiveManager.getItems()) {
+      if ((item.stage as string | undefined) !== "output") continue;
+      item.stage = "final";
+      changed = true;
+    }
+
+    return changed;
+  }
+
+  private async syncProjectReviewFiles(project: Project): Promise<void> {
+    const reviewsDir = path.join(this.folioRoot, project.folderPath, "reviews");
+    await fs.mkdir(reviewsDir, { recursive: true });
+
+    await Promise.all(
+      (project.reviews ?? []).map((review) =>
+        fs.writeFile(path.join(reviewsDir, `review-${review.id}.md`), review.markdown),
+      ),
+    );
   }
 
   private async syncProjectWorksFolder(project: Project): Promise<void> {

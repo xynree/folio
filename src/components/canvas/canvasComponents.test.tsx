@@ -362,7 +362,6 @@ describe("canvas components", () => {
         thumbUrls={thumbUrls}
         setThumbUrls={vi.fn()}
         onOpen={onOpen}
-        onPromoteToOutput={vi.fn()}
         onRemove={onRemove}
         onConnectorPointerDown={onConnector}
         onPointerDown={onPointerDown}
@@ -377,11 +376,13 @@ describe("canvas components", () => {
     ) as HTMLElement;
     expect(screen.queryByText("Alpha")).toBeNull();
     fireEvent.click(itemCard);
+    fireEvent.doubleClick(itemCard);
     fireEvent.pointerDown(screen.getByLabelText("Connect Alpha from right"));
     fireEvent.pointerDown(resizeCorner);
     fireEvent.click(screen.getByLabelText("Remove Alpha from board"));
 
     expect(onOpen).toHaveBeenCalledWith("alpha");
+    expect(onOpen).toHaveBeenCalledTimes(2);
     expect(onConnector).toHaveBeenCalledWith(expect.any(Object), "right");
     expect(onResizePointerDown).toHaveBeenCalledWith(expect.any(Object));
     expect(onRemove).toHaveBeenCalledWith("alpha");
@@ -504,7 +505,6 @@ describe("canvas components", () => {
         onDeleteNote={vi.fn()}
         onDeleteTextElement={vi.fn()}
         onOpenItem={onOpenItem}
-        onPromoteItemToOutput={vi.fn()}
         onRemoveItem={vi.fn()}
         onRemoveReference={vi.fn()}
         onStartConnectorDrag={vi.fn()}

@@ -25,7 +25,6 @@ export type ItemStage =
   | "wip"
   | "process"
   | "final"
-  | "output"
   | "note"
   | "other";
 
@@ -42,6 +41,16 @@ export interface Project {
   imageIds: string[];
   workItemIds: string[];
   boardIds: string[];
+  reviews: ProjectReviewDocument[];
+}
+
+export interface ProjectReviewDocument {
+  id: string;
+  title: string;
+  markdown: string;
+  workItemIds: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** A single metadata entry for a file in the archive */

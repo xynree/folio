@@ -70,7 +70,6 @@ export function CanvasView({
   canvasDetailRequestId,
   setActiveCanvasId,
   onOpenItem,
-  onPromoteItemToOutput,
   onCreateBoard,
   onMinimize,
   thumbUrls,
@@ -85,7 +84,6 @@ export function CanvasView({
   canvasDetailRequestId: number;
   setActiveCanvasId: React.Dispatch<React.SetStateAction<string | null>>;
   onOpenItem: ItemDetailsOpenHandler;
-  onPromoteItemToOutput: (itemId: string) => void;
   onCreateBoard: () => void;
   onMinimize: () => void;
   thumbUrls: ThumbnailUrls;
@@ -1072,7 +1070,6 @@ export function CanvasView({
             onDeleteNote={deleteNote}
             onDeleteTextElement={deleteTextElement}
             onOpenItem={onOpenItem}
-            onPromoteItemToOutput={onPromoteItemToOutput}
             onRemoveItem={removeItem}
             onRemoveReference={removeReference}
             onStartConnectorDrag={startConnectorDrag}

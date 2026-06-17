@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FolderOpen, Plus, Save, Star, Trash2, X } from "lucide-react";
+import { FolderOpen, Plus, Save, Trash2, X } from "lucide-react";
 import type { Canvas, FolioItem, ItemStage, ThumbnailUrls, Tag } from "../../types";
 import { ITEM_STAGE_LABELS, TYPE_LABELS } from "../folio/constants";
 import type { ItemDetailsMode } from "../folio/types";
@@ -19,7 +19,6 @@ export function DetailDrawer({
   onAddTag,
   onRemoveTag,
   onAddToCanvas,
-  onPromoteToOutput,
   onDelete,
 }: {
   item: FolioItem | null;
@@ -33,13 +32,13 @@ export function DetailDrawer({
   onAddTag: (itemId: string, text: string) => void;
   onRemoveTag: (itemId: string, tagText: string) => void;
   onAddToCanvas: (itemId: string) => void;
-  onPromoteToOutput: (itemId: string) => void;
   onDelete: (itemId: string) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [stage, setStage] = useState<"" | ItemStage>("");
   const [tagInput, setTagInput] = useState("");
+  const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const tagInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -48,6 +47,29 @@ export function DetailDrawer({
     setDescription(item?.description ?? "");
     setStage(item?.stage ?? "");
     setTagInput("");
+  }, [item]);
+
+  useEffect(() => {
+    if (!item) {
+      setFullImageUrl(null);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setFullImageUrl(null);
+    window.folio
+      .getFileDataUrl(item.path)
+      .then((url) => {
+        if (!cancelled) setFullImageUrl(url);
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) setFullImageUrl(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [item]);
 
   useEffect(() => {
@@ -108,167 +130,173 @@ export function DetailDrawer({
         aria-modal="true"
         role="dialog"
       >
-        <div className="drawer-header">
-          <div className="drawer-title">
-            <p>{TYPE_LABELS[item.type]}</p>
-            <strong>{basename(item.path)}</strong>
-          </div>
-          <div
-            className="drawer-header-actions"
-            onPointerDown={(event) => event.stopPropagation()}
-          >
-            <button
-              className="drawer-save-button"
-              type="button"
-              disabled={!hasUnsavedChanges}
-              onClick={saveDetails}
-            >
-              <ButtonIcon icon={Save} />
-              Save
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={onClose}
-              aria-label="Close details"
-              title="Close details"
-            >
-              <ButtonIcon icon={X} />
-            </button>
-          </div>
-        </div>
-
-        <div className="drawer-preview">
-          <LazyThumbnail
-            item={item}
-            thumbUrls={thumbUrls}
-            setThumbUrls={setThumbUrls}
-          />
-        </div>
-
-        <label className="field">
-          <span>Title</span>
-          <input
-            ref={titleInputRef}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                saveDetails();
-              }
-            }}
-          />
-        </label>
-
-        <label className="field">
-          <span>Notes</span>
-          <textarea
-            value={description}
-            rows={4}
-            onChange={(event) => setDescription(event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                event.preventDefault();
-                saveDetails();
-              }
-            }}
-          />
-        </label>
-
-        <label className="field">
-          <span>Stage</span>
-          <select
-            value={stage}
-            onChange={(event) => setStage(event.currentTarget.value as "" | ItemStage)}
-          >
-            <option value="">No stage</option>
-            {Object.entries(ITEM_STAGE_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div className="drawer-section">
-          <div className="drawer-label">Tags</div>
-          <div className="tag-list">
-            {itemTags.length ? (
-              itemTags.map((tag) => (
-                <button
-                  className="tag-chip tag-chip-removable"
-                  key={tag}
-                  type="button"
-                  onClick={() => onRemoveTag(item.id, tag)}
-                >
-                  {tag}
-                  <ButtonIcon icon={X} size={12} />
-                </button>
-              ))
+        <section className="drawer-image-pane" aria-label="Image preview">
+          <div className="drawer-preview">
+            {fullImageUrl ? (
+              <img src={fullImageUrl} alt={normalizedTitle} draggable={false} />
             ) : (
-              <span className="muted">No tags</span>
+              <LazyThumbnail
+                item={item}
+                thumbUrls={thumbUrls}
+                setThumbUrls={setThumbUrls}
+              />
             )}
           </div>
-          <div className="tag-input-row">
+        </section>
+
+        <section className="drawer-details-pane" aria-label="Editable details">
+          <div className="drawer-header">
+            <div className="drawer-title">
+              <p>{TYPE_LABELS[item.type]}</p>
+              <strong>{basename(item.path)}</strong>
+            </div>
+            <div
+              className="drawer-header-actions"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button
+                className="drawer-save-button"
+                type="button"
+                disabled={!hasUnsavedChanges}
+                onClick={saveDetails}
+              >
+                <ButtonIcon icon={Save} />
+                Save
+              </button>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={onClose}
+                aria-label="Close details"
+                title="Close details"
+              >
+                <ButtonIcon icon={X} />
+              </button>
+            </div>
+          </div>
+
+          <label className="field">
+            <span>Title</span>
             <input
-              ref={tagInputRef}
-              className="tag-input"
-              placeholder="Tag name"
-              value={tagInput}
-              onChange={(event) => setTagInput(event.target.value)}
+              ref={titleInputRef}
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
-                  submitTag();
+                  saveDetails();
                 }
               }}
             />
-            <button type="button" onClick={submitTag}>
+          </label>
+
+          <label className="field">
+            <span>Notes</span>
+            <textarea
+              value={description}
+              rows={4}
+              onChange={(event) => setDescription(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  saveDetails();
+                }
+              }}
+            />
+          </label>
+
+          <label className="field">
+            <span>Stage</span>
+            <select
+              value={stage}
+              onChange={(event) =>
+                setStage(event.currentTarget.value as "" | ItemStage)
+              }
+            >
+              <option value="">No stage</option>
+              {Object.entries(ITEM_STAGE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="drawer-section">
+            <div className="drawer-label">Tags</div>
+            <div className="tag-list">
+              {itemTags.length ? (
+                itemTags.map((tag) => (
+                  <button
+                    className="tag-chip tag-chip-removable"
+                    key={tag}
+                    type="button"
+                    onClick={() => onRemoveTag(item.id, tag)}
+                  >
+                    {tag}
+                    <ButtonIcon icon={X} size={12} />
+                  </button>
+                ))
+              ) : (
+                <span className="muted">No tags</span>
+              )}
+            </div>
+            <div className="tag-input-row">
+              <input
+                ref={tagInputRef}
+                className="tag-input"
+                placeholder="Tag name"
+                value={tagInput}
+                onChange={(event) => setTagInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    submitTag();
+                  }
+                }}
+              />
+              <button type="button" onClick={submitTag}>
+                <ButtonIcon icon={Plus} />
+                Add tag
+              </button>
+            </div>
+          </div>
+
+          <div className="drawer-section">
+            <div className="drawer-label">Board membership</div>
+            {itemCanvases.length ? (
+              <div className="canvas-chip-list">
+                {itemCanvases.map((canvas) => (
+                  <span className="canvas-chip" key={canvas.id}>
+                    <span style={{ background: canvas.color }} aria-hidden="true" />
+                    {canvas.title}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">No boards</p>
+            )}
+          </div>
+
+          <div className="drawer-actions">
+            <button type="button" onClick={() => onAddToCanvas(item.id)}>
               <ButtonIcon icon={Plus} />
-              Add tag
+              Add to board
+            </button>
+            <button type="button" onClick={() => window.folio.openInFinder(item.path)}>
+              <ButtonIcon icon={FolderOpen} />
+              Show in Finder
+            </button>
+            <button
+              className="danger-action"
+              type="button"
+              onClick={() => onDelete(item.id)}
+            >
+              <ButtonIcon icon={Trash2} />
+              Delete
             </button>
           </div>
-        </div>
-
-        <div className="drawer-section">
-          <div className="drawer-label">Board membership</div>
-          {itemCanvases.length ? (
-            <div className="canvas-chip-list">
-              {itemCanvases.map((canvas) => (
-                <span className="canvas-chip" key={canvas.id}>
-                  <span style={{ background: canvas.color }} aria-hidden="true" />
-                  {canvas.title}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="muted">No boards</p>
-          )}
-        </div>
-
-        <div className="drawer-actions">
-          <button type="button" onClick={() => onAddToCanvas(item.id)}>
-            <ButtonIcon icon={Plus} />
-            Add to board
-          </button>
-          <button type="button" onClick={() => window.folio.openInFinder(item.path)}>
-            <ButtonIcon icon={FolderOpen} />
-            Show in Finder
-          </button>
-          <button type="button" onClick={() => onPromoteToOutput(item.id)}>
-            <ButtonIcon icon={Star} />
-            Promote to output
-          </button>
-          <button
-            className="danger-action"
-            type="button"
-            onClick={() => onDelete(item.id)}
-          >
-            <ButtonIcon icon={Trash2} />
-            Delete
-          </button>
-        </div>
+        </section>
       </aside>
     </div>
   );

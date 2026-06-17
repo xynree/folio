@@ -58,6 +58,7 @@ export function makeProject(
     imageIds: ["alpha", "bravo", "charlie"],
     workItemIds: [],
     boardIds: ["board-1"],
+    reviews: [],
     ...overrides,
   };
 }

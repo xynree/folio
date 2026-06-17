@@ -4,7 +4,6 @@ import {
   ChevronRight,
   Edit3,
   Ellipsis,
-  Star,
   Tag as TagIcon,
   Trash2,
 } from "lucide-react";
@@ -27,7 +26,6 @@ export function ItemCard({
   onAddTag,
   onRemoveTag,
   onDelete,
-  onPromoteToOutput,
   compact = false,
 }: {
   item: FolioItem;
@@ -42,7 +40,6 @@ export function ItemCard({
   onAddTag: (itemId: string, tagText: string) => void;
   onRemoveTag: (itemId: string, tagText: string) => void;
   onDelete: (itemId: string) => void;
-  onPromoteToOutput: (itemId: string) => void;
   compact?: boolean;
 }) {
   const itemTags = tagTextsForItem(item, tags);
@@ -79,6 +76,11 @@ export function ItemCard({
         className="item-card-main"
         type="button"
         onClick={(event) => onOpen(item.id, event)}
+        onDoubleClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onEdit(item.id);
+        }}
       >
         <LazyThumbnail
           item={item}
@@ -186,18 +188,6 @@ export function ItemCard({
                 </div>
               ) : null}
             </div>
-            <button
-              type="button"
-              role="menuitem"
-              onMouseEnter={() => setTagsMenuOpen(false)}
-              onClick={() => {
-                setMenuOpen(false);
-                onPromoteToOutput(item.id);
-              }}
-            >
-              <ButtonIcon icon={Star} />
-              Promote to output
-            </button>
             <button
               className="danger-menu-item"
               type="button"

@@ -23,7 +23,6 @@ export const ITEM_STAGE_LABELS: Record<ItemStage, string> = {
   wip: "WIP",
   process: "Process",
   final: "Final",
-  output: "Output",
   note: "Note",
   other: "Other",
 };

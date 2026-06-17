@@ -25,6 +25,7 @@ import type {
   FolioItem,
   ImportSource,
   Project,
+  ProjectReviewDocument,
   ReconciliationResult,
   ThumbnailUrls,
 } from "../types";
@@ -71,7 +72,10 @@ import {
 import { ReconciliationNotice } from "./layout/ReconciliationNotice";
 import { SelectionBar } from "./layout/SelectionBar";
 import { StatusBar } from "./layout/StatusBar";
-import { ProjectReviewView } from "./projects/ProjectReviewView";
+import {
+  ProjectReviewEditorPage,
+  ProjectReviewView,
+} from "./projects/ProjectReviewView";
 import { ProjectsView } from "./projects/ProjectsView";
 import { ButtonIcon } from "./shared/ButtonIcon";
 
@@ -153,6 +157,7 @@ export function AppShell() {
   const [lastSelectedItemId, setLastSelectedItemId] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projectSurface, setProjectSurface] = useState<ProjectSurface>("images");
+  const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const [activeCanvasId, setActiveCanvasId] = useState<string | null>(null);
   const [canvasDetailRequestId, setCanvasDetailRequestId] = useState(0);
   const [reconciliation, setReconciliation] =
@@ -403,6 +408,13 @@ export function AppShell() {
     [activeProjectId, data.projects],
   );
 
+  const activeReview = useMemo(
+    () =>
+      activeProject?.reviews.find((review) => review.id === activeReviewId) ??
+      null,
+    [activeProject, activeReviewId],
+  );
+
   const projectImageIdSet = useMemo(
     () => new Set(activeProject?.imageIds ?? []),
     [activeProject],
@@ -457,6 +469,24 @@ export function AppShell() {
     [gridTagFilter, sortedItems],
   );
 
+  const projectWorkHeatmapItems = useMemo(
+    () =>
+      activeProject
+        ? data.items.filter((item) => projectWorkItemIdSet.has(item.id))
+        : [],
+    [activeProject, data.items, projectWorkItemIdSet],
+  );
+
+  const visibleWorkHeatmapItems = useMemo(
+    () =>
+      gridTagFilter === "all"
+        ? projectWorkHeatmapItems
+        : projectWorkHeatmapItems.filter((item) =>
+            item.tagIds.includes(gridTagFilter),
+          ),
+    [gridTagFilter, projectWorkHeatmapItems],
+  );
+
   const archiveScale = archiveUiScale / 100;
   const archiveRouteStyle = useMemo(
     () =>
@@ -504,6 +534,7 @@ export function AppShell() {
 
       setActiveProjectId(project.id);
       setProjectSurface("images");
+      setActiveReviewId(null);
       setActiveCanvasId(project.boardIds[0] ?? null);
       setArchiveMinimized(false);
       setCanvasMinimized(false);
@@ -515,6 +546,7 @@ export function AppShell() {
   const closeProject = useCallback(() => {
     setActiveProjectId(null);
     setProjectSurface("images");
+    setActiveReviewId(null);
     setActiveCanvasId(null);
     setDetailItemId(null);
     clearSelection();
@@ -534,12 +566,101 @@ export function AppShell() {
     [openFolioPath],
   );
 
-  const openProjectTimelineBoard = useCallback((boardId: string) => {
-    setActiveCanvasId(boardId);
-    setCanvasMinimized(false);
-    setArchiveMinimized(false);
-    setCanvasDetailRequestId((current) => current + 1);
-  }, []);
+  const createProjectReview = useCallback((): ProjectReviewDocument => {
+    if (!activeProject) {
+      throw new Error("No active project is open.");
+    }
+
+    const now = new Date().toISOString();
+    const review: ProjectReviewDocument = {
+      id: createId("review"),
+      title: `Review ${(activeProject.reviews ?? []).length + 1}`,
+      markdown: `# ${activeProject.title} review\n\n`,
+      workItemIds: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    commitData(
+      (current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === activeProject.id
+            ? {
+                ...project,
+                reviews: [review, ...(project.reviews ?? [])],
+                updatedAt: now,
+              }
+            : project,
+        ),
+      }),
+      "Review created",
+    );
+
+    setActiveReviewId(review.id);
+
+    return review;
+  }, [activeProject, commitData]);
+
+  const updateProjectReview = useCallback(
+    (reviewId: string, patch: Partial<ProjectReviewDocument>) => {
+      if (!activeProject) return;
+      const savedAt = new Date().toISOString();
+
+      commitData((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === activeProject.id
+            ? {
+                ...project,
+                reviews: (project.reviews ?? []).map((review) =>
+                  review.id === reviewId
+                    ? {
+                        ...review,
+                        ...patch,
+                        title: patch.title?.trim() || review.title,
+                        updatedAt: savedAt,
+                      }
+                    : review,
+                ),
+                updatedAt: savedAt,
+              }
+            : project,
+        ),
+      }));
+    },
+    [activeProject, commitData],
+  );
+
+  const deleteProjectReview = useCallback(
+    (reviewId: string) => {
+      if (!activeProject) return;
+      const savedAt = new Date().toISOString();
+
+      commitData(
+        (current) => ({
+          ...current,
+          projects: current.projects.map((project) =>
+            project.id === activeProject.id
+              ? {
+                  ...project,
+                  reviews: (project.reviews ?? []).filter(
+                    (review) => review.id !== reviewId,
+                  ),
+                  updatedAt: savedAt,
+                }
+              : project,
+          ),
+        }),
+        "Review deleted",
+      );
+
+      if (activeReviewId === reviewId) {
+        setActiveReviewId(null);
+      }
+    },
+    [activeProject, activeReviewId, commitData],
+  );
 
   const createProjectFromHome = useCallback(
     async (title: string) => {
@@ -823,17 +944,6 @@ export function AppShell() {
       );
     },
     [commitData],
-  );
-
-  const promoteItemToOutput = useCallback(
-    (itemId: string) => {
-      patchItem(
-        itemId,
-        { stage: "output", updatedAt: new Date().toISOString() },
-        "Promoted to output",
-      );
-    },
-    [patchItem],
   );
 
   const addTagToItem = useCallback(
@@ -1170,131 +1280,158 @@ export function AppShell() {
         onDismiss={() => setReconciliationDismissed(true)}
       />
 
-      {activeProject ? (
+      {activeProject && activeReview ? (
+        <ProjectReviewEditorPage
+          project={activeProject}
+          review={activeReview}
+          items={data.items}
+          onBackToProjectReview={() => {
+            setActiveReviewId(null);
+            setProjectSurface("review");
+          }}
+          onBackToProjects={closeProject}
+          onUpdateReview={updateProjectReview}
+          onDeleteReview={deleteProjectReview}
+        />
+      ) : activeProject ? (
       <main className="app-main">
-        <div className="workspace-panel-mode-bar">
-          <button
-            className="secondary-action project-back-button"
-            type="button"
-            onClick={closeProject}
+        <div className="workspace-panel-mode-bar" aria-hidden="true" />
+        <div className="project-workspace-shell">
+          <aside className="project-action-sidebar" aria-label="Project action bar">
+            <div className="project-action-sidebar-header">
+              <button
+                className="secondary-action project-sidebar-back-button"
+                type="button"
+                onClick={closeProject}
+              >
+                <ButtonIcon icon={ArrowLeft} />
+                Projects
+              </button>
+              <strong className="project-sidebar-title">{activeProject.title}</strong>
+            </div>
+
+            <div className="project-action-group">
+              <div className="project-surface-tabs" aria-label="Project surface">
+                <button
+                  className={projectSurface === "images" ? "active" : ""}
+                  type="button"
+                  aria-pressed={projectSurface === "images"}
+                  onClick={() => {
+                    setProjectSurface("images");
+                    clearSelection();
+                  }}
+                >
+                  All Images
+                </button>
+                <button
+                  className={projectSurface === "works" ? "active" : ""}
+                  type="button"
+                  aria-pressed={projectSurface === "works"}
+                  onClick={() => {
+                    setProjectSurface("works");
+                    clearSelection();
+                  }}
+                >
+                  Works
+                </button>
+                <button
+                  className={projectSurface === "review" ? "active" : ""}
+                  type="button"
+                  aria-pressed={projectSurface === "review"}
+                  onClick={() => {
+                    setProjectSurface("review");
+                    clearSelection();
+                  }}
+                >
+                  Review
+                </button>
+              </div>
+            </div>
+
+            <div className="project-action-group">
+              <div
+                className="view-tabs workspace-panel-mode-control"
+                aria-label="Workspace panel view"
+              >
+                <button
+                  className={panelMode === "left" ? "active" : ""}
+                  type="button"
+                  aria-label="Left only panel view"
+                  aria-pressed={panelMode === "left"}
+                  title="Left only"
+                  onClick={showLeftOnlyPanel}
+                >
+                  <ButtonIcon icon={PanelLeft} size={16} />
+                </button>
+                <button
+                  className={panelMode === "split" ? "active" : ""}
+                  type="button"
+                  aria-label="Split panel view"
+                  aria-pressed={panelMode === "split"}
+                  title="Split"
+                  onClick={showSplitPanel}
+                >
+                  <ButtonIcon icon={Columns2} size={16} />
+                </button>
+                <button
+                  className={panelMode === "right" ? "active" : ""}
+                  type="button"
+                  aria-label="Right only panel view"
+                  aria-pressed={panelMode === "right"}
+                  title="Right only"
+                  onClick={showRightOnlyPanel}
+                >
+                  <ButtonIcon icon={PanelRight} size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="project-action-group">
+              <div className="project-folder-actions" aria-label="Project folders">
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label="Open project folder"
+                  title="Open project folder"
+                  onClick={() => openFolioPath(activeProject.folderPath)}
+                >
+                  <ButtonIcon icon={FolderOpen} />
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label="Open project images folder"
+                  title="Open project images folder"
+                  onClick={() => openFolioPath(`${activeProject.folderPath}/images`)}
+                >
+                  <ButtonIcon icon={Images} />
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label="Open project Works folder"
+                  title="Open project Works folder"
+                  onClick={() => openFolioPath(`${activeProject.folderPath}/works`)}
+                >
+                  <ButtonIcon icon={Star} />
+                </button>
+              </div>
+            </div>
+          </aside>
+
+          <section
+            ref={studioWorkspaceRef}
+            className={`studio-workspace ${
+              canvasMinimized ? "studio-workspace-canvas-minimized" : ""
+            } ${
+              archiveMinimized ? "studio-workspace-archive-minimized" : ""
+            } ${
+              canvasDockResizing || tagsSidebarResizing
+                ? "studio-workspace-resizing"
+                : ""
+            }`}
+            style={{ gridTemplateColumns: studioGridTemplateColumns }}
           >
-            <ButtonIcon icon={ArrowLeft} />
-            Projects
-          </button>
-          <strong className="active-project-title">{activeProject.title}</strong>
-          <div className="project-folder-actions" aria-label="Project folders">
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="Open project folder"
-              title="Open project folder"
-              onClick={() => openFolioPath(activeProject.folderPath)}
-            >
-              <ButtonIcon icon={FolderOpen} />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="Open project images folder"
-              title="Open project images folder"
-              onClick={() => openFolioPath(`${activeProject.folderPath}/images`)}
-            >
-              <ButtonIcon icon={Images} />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="Open project Works folder"
-              title="Open project Works folder"
-              onClick={() => openFolioPath(`${activeProject.folderPath}/works`)}
-            >
-              <ButtonIcon icon={Star} />
-            </button>
-          </div>
-          <div className="project-surface-tabs" aria-label="Project surface">
-            <button
-              className={projectSurface === "images" ? "active" : ""}
-              type="button"
-              aria-pressed={projectSurface === "images"}
-              onClick={() => {
-                setProjectSurface("images");
-                clearSelection();
-              }}
-            >
-              All Images
-            </button>
-            <button
-              className={projectSurface === "works" ? "active" : ""}
-              type="button"
-              aria-pressed={projectSurface === "works"}
-              onClick={() => {
-                setProjectSurface("works");
-                clearSelection();
-              }}
-            >
-              Works
-            </button>
-            <button
-              className={projectSurface === "review" ? "active" : ""}
-              type="button"
-              aria-pressed={projectSurface === "review"}
-              onClick={() => {
-                setProjectSurface("review");
-                clearSelection();
-              }}
-            >
-              Review
-            </button>
-          </div>
-          <div
-            className="view-tabs workspace-panel-mode-control"
-            aria-label="Workspace panel view"
-          >
-            <button
-              className={panelMode === "left" ? "active" : ""}
-              type="button"
-              aria-label="Left only panel view"
-              aria-pressed={panelMode === "left"}
-              title="Left only"
-              onClick={showLeftOnlyPanel}
-            >
-              <ButtonIcon icon={PanelLeft} size={16} />
-            </button>
-            <button
-              className={panelMode === "split" ? "active" : ""}
-              type="button"
-              aria-label="Split panel view"
-              aria-pressed={panelMode === "split"}
-              title="Split"
-              onClick={showSplitPanel}
-            >
-              <ButtonIcon icon={Columns2} size={16} />
-            </button>
-            <button
-              className={panelMode === "right" ? "active" : ""}
-              type="button"
-              aria-label="Right only panel view"
-              aria-pressed={panelMode === "right"}
-              title="Right only"
-              onClick={showRightOnlyPanel}
-            >
-              <ButtonIcon icon={PanelRight} size={16} />
-            </button>
-          </div>
-        </div>
-        <section
-          ref={studioWorkspaceRef}
-          className={`studio-workspace ${
-            canvasMinimized ? "studio-workspace-canvas-minimized" : ""
-          } ${
-            archiveMinimized ? "studio-workspace-archive-minimized" : ""
-          } ${
-            canvasDockResizing || tagsSidebarResizing
-              ? "studio-workspace-resizing"
-              : ""
-          }`}
-          style={{ gridTemplateColumns: studioGridTemplateColumns }}
-        >
           <section
             className={`archive-panel ${
               archiveMinimized ? "archive-panel-minimized" : ""
@@ -1309,8 +1446,11 @@ export function AppShell() {
                     project={activeProject}
                     items={data.items}
                     canvases={projectCanvases}
-                    onOpenBoard={openProjectTimelineBoard}
-                    onPromoteToOutput={promoteItemToOutput}
+                    thumbUrls={thumbUrls}
+                    setThumbUrls={setThumbUrls}
+                    onCreateReview={createProjectReview}
+                    onOpenItem={openItemDetails}
+                    onOpenReview={setActiveReviewId}
                   />
                 ) : (
                   <ArchiveWorkspace
@@ -1440,7 +1580,6 @@ export function AppShell() {
                         onAddTag={addTagToItem}
                         onRemoveTag={removeTagFromItem}
                         onDeleteItem={deleteItem}
-                        onPromoteToOutput={promoteItemToOutput}
                       />
                     ) : (
                       <GridView
@@ -1459,25 +1598,22 @@ export function AppShell() {
                         onAddTag={addTagToItem}
                         onRemoveTag={removeTagFromItem}
                         onDeleteItem={deleteItem}
-                        onPromoteToOutput={promoteItemToOutput}
                       />
                     )}
                   </ArchiveWorkspace>
                 )}
 
-                {projectSurface === "review" ? null : (
+                {projectSurface === "works" ? (
                   <footer
                     className={`archive-heatmap-footer ${
                       heatmapMinimized ? "archive-heatmap-footer-minimized" : ""
                     }`}
                   >
                     <ArchiveHeatmap
-                      items={visibleArchiveItems}
+                      items={visibleWorkHeatmapItems}
                       minimized={heatmapMinimized}
-                      ariaLabel={
-                        activeProject ? "Project activity heatmap" : "Upload heatmap"
-                      }
-                      unitLabel={activeProject ? "activity" : "upload"}
+                      ariaLabel="Project Works heatmap"
+                      unitLabel="work"
                     />
                     <button
                       className="icon-button archive-heatmap-toggle"
@@ -1491,7 +1627,7 @@ export function AppShell() {
                       <ButtonIcon icon={heatmapMinimized ? ChevronUp : ChevronDown} />
                     </button>
                   </footer>
-                )}
+                ) : null}
               </>
             )}
           </section>
@@ -1535,7 +1671,6 @@ export function AppShell() {
                 canvasDetailRequestId={canvasDetailRequestId}
                 setActiveCanvasId={setActiveCanvasId}
                 onOpenItem={openItemDetails}
-                onPromoteItemToOutput={promoteItemToOutput}
                 onCreateBoard={createBoard}
                 onMinimize={showLeftOnlyPanel}
                 thumbUrls={thumbUrls}
@@ -1549,7 +1684,8 @@ export function AppShell() {
               />
             )}
           </aside>
-        </section>
+          </section>
+        </div>
       </main>
       ) : (
         <ProjectsView
@@ -1580,7 +1716,6 @@ export function AppShell() {
         onAddTag={addTagToItem}
         onRemoveTag={removeTagFromItem}
         onAddToCanvas={addItemToActiveCanvas}
-        onPromoteToOutput={promoteItemToOutput}
         onDelete={deleteItem}
       />
 

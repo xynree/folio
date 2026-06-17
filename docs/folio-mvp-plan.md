@@ -16,14 +16,14 @@
 Folio should move from a file archive with boards into a project-based local studio workspace for creative practice. The app has three core jobs:
 
 1. **Projects as the primary workspace** — opening the app shows a Projects view; each project owns its image list, Works view, boards, and local folder.
-2. **Interactive studio wall** — within a project, users can upload work, arrange it, track it, and watch a body of output evolve over days and weeks.
+2. **Interactive studio wall** — within a project, users can upload work, arrange it, track it, and watch Works evolve over days and weeks.
 3. **Reference and inspiration graph** — users can collect reference material like a personal Pinterest board, then connect references, notes, work-in-progress, and finished pieces back to specific projects.
 
 The design should preserve these principles:
 
 - **Local-first ownership**: source files remain readable in `~/Documents/Folio`; app metadata stays portable and inspectable in `.folio/*.json`.
 - **Fast capture first**: adding work, reference, or notes should take one gesture and should not force metadata decisions up front.
-- **Process is first-class**: sketches, references, WIP, outputs, notes, revisions, and gaps should all contribute to the record of practice.
+- **Process is first-class**: sketches, references, WIP, final pieces, notes, reviews, revisions, and gaps should all contribute to the record of practice.
 - **Spatial thinking plus time**: boards show relationships in space; project image, Works, and review views show how work changes over time.
 - **Gentle organization**: tags, projects, statuses, and relationships should help discovery without turning the app into a heavy task manager.
 - **Personal review, not collaboration**: project review means self-review inside a private studio surface. The app should not add comments, approvals, assignments, shared cursors, or team workflow.
@@ -183,8 +183,8 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 - [x] Floating archive action bar includes Size, Strip/Grid icon-only toggle, and Import controls
 - [x] Size scale ranges from 50% to 200% and scales thumbnails, card text, spacing, and board dots
-- [x] Bottom heatmap is always part of the archive layout rather than a separate mode
-- [x] Heatmap uses green intensity with a max bucket of 8 uploads per day
+- [x] Bottom heatmap is part of the Works layout rather than a separate mode
+- [x] Heatmap uses green intensity with a max bucket of 8 Works per day
 - [x] Heatmap can minimize/restore with a transition and scroll horizontally when it overflows
 
 ---
@@ -347,7 +347,7 @@ This phase turns the current archive and board system into a project-based creat
 - [x] Works should represent the actual pieces of work being tracked, not every captured reference or process image.
 - [x] Keep Works lightweight: promoting to Works should not force stage, tag, title, or board assignment decisions.
 - [x] Add a user-accessible `works/` folder representation for promoted Works, while keeping canonical membership in `projects.json` so it can be reconciled.
-- [x] Add item `stage`: `reference`, `sketch`, `wip`, `process`, `final`, `output`, `note`, `other` only after Works membership exists, so stage does not carry the burden of identifying Works.
+- [x] Add item `stage`: `reference`, `sketch`, `wip`, `process`, `final`, `note`, `other` only after Works membership exists, so stage does not carry the burden of identifying Works.
 
 ### 4.4 Project boards
 
@@ -369,17 +369,16 @@ This phase turns the current archive and board system into a project-based creat
 - [x] Keep file operations non-destructive; reconciliation should mark missing files and repair moved paths by hash where possible.
 - [x] Preserve the legacy archive path as a migration and unsorted-import fallback, not the main product surface.
 
-### 4.6 Project review, timeline, and output
+### 4.6 Project review and progress timeline
 
 - [x] Add a project detail/timeline view from the owning `Project`, not from a single board.
-- [x] Timeline should combine project images, Works, board references, notes, output snapshots, and relationship changes in chronological order.
+- [x] Timeline should combine project images, Works, board references, notes, review documents, and relationship changes in chronological order.
 - [x] Group timeline entries by day, week, or milestone depending on density.
-- [x] Add project recap metadata: image count, Works count, board count, reference count, output count, active days, first image date, latest saved date.
-- [x] Expand heatmap meaning from upload volume only to project activity where appropriate.
-- [x] Add "open on board" from any timeline entry that has board placement.
+- [x] Add project recap metadata: image count, Works count, review count, board count, reference count, active days, first image date, latest saved date.
+- [x] Expand heatmap meaning from upload volume to Works activity in the project Works view.
+- [x] Keep review timeline entries focused on project progress, with image activity shown as thumbnail grids instead of board-jump actions.
 - [x] Add relationship type `version-of` or a dedicated `ItemRevisionGroup` to connect iterations of the same work.
-- [x] Add "promote to output" action from item card, detail modal, and board card.
-- [x] Let a project have multiple outputs, not just one final piece.
+- [x] Let a project have multiple Markdown reviews, each taggable to one or more Works.
 
 ---
 
@@ -410,7 +409,7 @@ This phase makes references and inspiration first-class. The goal is to move fro
 
 ### 5.3 Relationship labels and types
 
-- [ ] Extend `CanvasEdge` with `type`: `inspired-by`, `uses`, `variant-of`, `version-of`, `response-to`, `part-of`, `output-of`, `related`.
+- [ ] Extend `CanvasEdge` with `type`: `inspired-by`, `uses`, `variant-of`, `version-of`, `response-to`, `part-of`, `related`.
 - [ ] Keep optional freeform `label` for user language in addition to structured `type`.
 - [ ] Add inline label editing on double-click.
 - [ ] Add quick label menu after creating an edge.
@@ -423,7 +422,7 @@ This phase makes references and inspiration first-class. The goal is to move fro
 - [ ] In item details, show "Appears on" projects and boards.
 - [ ] In item details, show "Connected to" grouped by relationship type.
 - [ ] In reference details, show which work it inspired and which projects use it.
-- [ ] In project details, show inbound references and outbound outputs.
+- [ ] In project details, show inbound references and review-linked Works.
 - [ ] Add "open related on board" actions from details.
 - [ ] Add a command to create a board from selected related items.
 
@@ -445,7 +444,7 @@ This phase improves the canvas as a thinking surface so complex boards stay read
 ### 6.1 Canvas sections and frames
 
 - [ ] Add section/frame nodes to group cards spatially.
-- [ ] Allow users to title sections such as "References", "Sketches", "WIP", "Output", and "Open questions".
+- [ ] Allow users to title sections such as "References", "Sketches", "WIP", "Final pieces", and "Open questions".
 - [ ] Add section color and collapse/expand behavior.
 - [ ] Let cards be dragged into sections while preserving absolute canvas positions.
 - [ ] Store sections in `canvas.sections[]` with bounds, title, color, and collapsed state.
@@ -465,13 +464,13 @@ This phase improves the canvas as a thinking surface so complex boards stay read
 - [ ] Add minimap for large boards once content exceeds the visible viewport by a meaningful threshold.
 - [ ] Add zoom controls in the board header or corner overlay.
 - [ ] Add saved viewport per board so returning to a board restores the last useful area.
-- [ ] Add "jump to latest" and "jump to output" actions.
+- [ ] Add "jump to latest" and "jump to reviewed Work" actions.
 - [ ] Add search-within-board that highlights matching cards, notes, references, and labels.
 
 ### 6.4 Board templates
 
-- [ ] Add new-board templates: Project, Reference board, Moodboard, Output review, Research map.
-- [ ] Project template starts with sections for Brief, References, Work in progress, Output, and Notes.
+- [ ] Add new-board templates: Project, Reference board, Moodboard, Work review, Research map.
+- [ ] Project template starts with sections for Brief, References, Work in progress, Final pieces, and Notes.
 - [ ] Reference board template starts with sections for Sources, Patterns, Color/material, and Open questions.
 - [ ] Keep blank board as an option for unconstrained spatial work.
 - [ ] Store template choice only as initial board content; users can fully edit afterward.
@@ -486,7 +485,7 @@ This phase makes a larger project library useful without requiring perfect manua
 
 - [ ] Add global search across item titles, descriptions, tags, board titles, notes, reference metadata, and edge labels.
 - [ ] Add scoped search for current project or board.
-- [ ] Add saved filters for common queries such as "unused references", "active WIP", and "recent outputs".
+- [ ] Add saved filters for common queries such as "unused references", "active WIP", and "recent final pieces".
 - [ ] Add sort controls: newest, oldest, recently edited, project, stage, title.
 - [ ] Add "needs sorting" filter for items with no board, no tag, and no stage edits.
 
@@ -518,7 +517,7 @@ These ideas should not block the project workspace and reference graph MVP, but 
 - [ ] Export a board snapshot as a shareable outside file without introducing in-app collaboration state.
 - [ ] Export a project timeline as Markdown.
 - [ ] Export selected work and references into a portable folder with metadata JSON.
-- [ ] Add "presentation mode" for a board: clean view, hide controls, step through sections or outputs.
+- [ ] Add "presentation mode" for a board: clean view, hide controls, step through sections or reviewed Works.
 - [ ] Add printable project review summaries.
 - [ ] Add "Show project images", "Show project Works", and "Show board references" actions that open Finder to the folders related to the project.
 
