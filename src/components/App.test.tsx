@@ -136,7 +136,7 @@ function setupFolio({
 }
 
 async function waitForArchive() {
-  const openProjectButton = await screen.findByRole("button", {
+  const [openProjectButton] = await screen.findAllByRole("button", {
     name: /open project/i,
   });
   fireEvent.click(openProjectButton);
@@ -811,6 +811,8 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
     expect(app.data.canvases[0].title).toBe("Story");
     expect(app.data.canvases[0].itemIds).toEqual(["alpha", "bravo", "charlie"]);
+    expect(app.data.canvases[0].projectId).toBe("project-1");
+    expect(app.data.projects[0].boardIds[0]).toBe(app.data.canvases[0].id);
     expect(screen.queryByRole("dialog", { name: /name new board/i })).toBeNull();
     expect(screen.getByText(/Created/).textContent).toContain("Last saved");
     expect(screen.queryByText("3 items · 0 notes · 0 references")).toBeNull();
@@ -1327,6 +1329,65 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await waitFor(() => {
       expect(app.data.canvases).toHaveLength(2);
       expect(app.data.canvases[0].itemIds).toEqual([]);
+      expect(app.data.canvases[0].projectId).toBe("project-1");
+      expect(app.data.projects[0].boardIds[0]).toBe(app.data.canvases[0].id);
+    });
+  });
+
+  it("scopes the board browser to the active project", async () => {
+    const app = setupFolio({
+      data: makeData({
+        canvases: [
+          {
+            ...makeData().canvases[0],
+            id: "board-1",
+            title: "Board 1",
+            projectId: "project-1",
+            itemIds: ["alpha"],
+            positions: { alpha: { x: 80, y: 90 } },
+          },
+          {
+            ...makeData().canvases[0],
+            id: "board-2",
+            title: "Other Project Board",
+            projectId: "project-2",
+            itemIds: ["bravo"],
+            positions: { bravo: { x: 80, y: 90 } },
+          },
+        ],
+        projects: [
+          makeProject("project-1", {
+            title: "Studio Archive",
+            updatedAt: "2026-06-15T09:00:00.000Z",
+            imageIds: ["alpha", "bravo", "charlie"],
+            boardIds: ["board-1"],
+          }),
+          makeProject("project-2", {
+            title: "Other Project",
+            updatedAt: "2026-06-14T09:00:00.000Z",
+            folderPath: "projects/other-project",
+            imageIds: ["bravo"],
+            boardIds: ["board-2"],
+          }),
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openBoardBrowser(user);
+
+    expect(screen.getByRole("button", { name: /^open board 1,/i })).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^open other project board,/i }),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /new board/i }));
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].projectId).toBe("project-1");
+      expect(app.data.projects[0].boardIds[0]).toBe(app.data.canvases[0].id);
+      expect(app.data.projects[1].boardIds).toEqual(["board-2"]);
     });
   });
 
@@ -1487,6 +1548,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await waitFor(() => {
       expect(app.data.canvases.map((canvas) => canvas.id)).toEqual(["board-2"]);
+      expect(app.data.projects[0].boardIds).toEqual(["board-2"]);
     });
   });
 
@@ -1617,14 +1679,14 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       {
         id: "ref-a",
         filename: "reference-a.png",
-        path: "references/board-1/reference-a.png",
+        path: "projects/studio-archive/boards/board-1/references/reference-a.png",
         x: 0,
         y: 0,
       },
       {
         id: "ref-b",
         filename: "reference-b.png",
-        path: "references/board-1/reference-b.png",
+        path: "projects/studio-archive/boards/board-1/references/reference-b.png",
         x: 0,
         y: 0,
       },

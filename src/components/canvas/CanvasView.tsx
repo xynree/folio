@@ -92,9 +92,34 @@ export function CanvasView({
   saveData: (data: FolioData, message?: string) => void;
   clearDragState: () => void;
 }) {
+  const activeProject = useMemo(
+    () =>
+      activeProjectId
+        ? data.projects.find((project) => project.id === activeProjectId) ?? null
+        : null,
+    [activeProjectId, data.projects],
+  );
+  const projectBoardIdSet = useMemo(
+    () => new Set(activeProject?.boardIds ?? []),
+    [activeProject],
+  );
+  const projectImageIdSet = useMemo(
+    () => new Set(activeProject?.imageIds ?? []),
+    [activeProject],
+  );
+  const scopedCanvases = useMemo(
+    () =>
+      activeProject
+        ? data.canvases.filter(
+            (canvas) =>
+              canvas.projectId === activeProject.id || projectBoardIdSet.has(canvas.id),
+          )
+        : data.canvases,
+    [activeProject, data.canvases, projectBoardIdSet],
+  );
   const activeCanvas =
-    data.canvases.find((canvas) => canvas.id === activeCanvasId) ??
-    data.canvases[0] ??
+    scopedCanvases.find((canvas) => canvas.id === activeCanvasId) ??
+    scopedCanvases[0] ??
     null;
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
@@ -121,10 +146,10 @@ export function CanvasView({
   }, []);
 
   useEffect(() => {
-    if (!activeCanvas && data.canvases[0]) {
-      setActiveCanvasId(data.canvases[0].id);
+    if (activeCanvas && activeCanvas.id !== activeCanvasId) {
+      setActiveCanvasId(activeCanvas.id);
     }
-  }, [activeCanvas, data.canvases, setActiveCanvasId]);
+  }, [activeCanvas, activeCanvasId, setActiveCanvasId]);
 
   useEffect(() => {
     setBoardTitleDraft(activeCanvas?.title ?? "");
@@ -194,9 +219,9 @@ export function CanvasView({
   const boardPreviewItemIds = useMemo(
     () =>
       boardBrowserOpen
-        ? collectBoardPreviewItemIds(data.canvases, BOARD_BROWSER_PREVIEW_LIMIT)
+        ? collectBoardPreviewItemIds(scopedCanvases, BOARD_BROWSER_PREVIEW_LIMIT)
         : [],
-    [boardBrowserOpen, data.canvases],
+    [boardBrowserOpen, scopedCanvases],
   );
 
   useEffect(() => {
@@ -241,7 +266,11 @@ export function CanvasView({
     (itemIds: string[], position: CanvasPosition) => {
       if (!activeCanvas || !itemIds.length) return;
       const knownItemIds = new Set(data.items.map((item) => item.id));
-      const validItemIds = itemIds.filter((itemId) => knownItemIds.has(itemId));
+      const validItemIds = itemIds.filter(
+        (itemId) =>
+          knownItemIds.has(itemId) &&
+          (!activeProjectId || projectImageIdSet.has(itemId)),
+      );
       if (!validItemIds.length) return;
 
       updateCanvas(
@@ -250,7 +279,7 @@ export function CanvasView({
         "Selection added to board",
       );
     },
-    [activeCanvas, data.items, updateCanvas],
+    [activeCanvas, activeProjectId, data.items, projectImageIdSet, updateCanvas],
   );
 
   const importToBoard = useCallback(async () => {
@@ -313,7 +342,7 @@ export function CanvasView({
       let nextActiveCanvasId: string | null = null;
       commitData(
         (current) => {
-          const boardIndex = current.canvases.findIndex(
+          const boardIndex = scopedCanvases.findIndex(
             (canvas) => canvas.id === canvasId,
           );
           if (boardIndex === -1) return current;
@@ -321,16 +350,31 @@ export function CanvasView({
           const nextCanvases = current.canvases.filter(
             (canvas) => canvas.id !== canvasId,
           );
-          nextActiveCanvasId = nextCanvases.some(
+          const nextScopedCanvases = scopedCanvases.filter(
+            (canvas) => canvas.id !== canvasId,
+          );
+          nextActiveCanvasId = nextScopedCanvases.some(
             (canvas) => canvas.id === activeCanvasId,
           )
             ? activeCanvasId
-            : nextCanvases[Math.min(boardIndex, nextCanvases.length - 1)]?.id ??
+            : nextScopedCanvases[
+                Math.min(boardIndex, nextScopedCanvases.length - 1)
+              ]?.id ??
               null;
+          const savedAt = new Date().toISOString();
 
           return {
             ...current,
             canvases: nextCanvases,
+            projects: current.projects.map((project) =>
+              project.boardIds.includes(canvasId)
+                ? {
+                    ...project,
+                    boardIds: project.boardIds.filter((id) => id !== canvasId),
+                    updatedAt: savedAt,
+                  }
+                : project,
+            ),
           };
         },
         "Board deleted",
@@ -343,7 +387,14 @@ export function CanvasView({
         setBoardBrowserOpen(true);
       }
     },
-    [activeCanvasId, boardBrowserOpen, commitData, data.canvases, setActiveCanvasId],
+    [
+      activeCanvasId,
+      boardBrowserOpen,
+      commitData,
+      data.canvases,
+      scopedCanvases,
+      setActiveCanvasId,
+    ],
   );
 
   const deleteBoard = useCallback(() => {
@@ -796,7 +847,7 @@ export function CanvasView({
 
   const editCanvasFromBrowser = useCallback(
     (canvasId: string) => {
-      const canvasToEdit = data.canvases.find((canvas) => canvas.id === canvasId);
+      const canvasToEdit = scopedCanvases.find((canvas) => canvas.id === canvasId);
       if (!canvasToEdit) return;
 
       setBoardMenuCanvasId(null);
@@ -804,7 +855,7 @@ export function CanvasView({
       setBoardColorDraft(canvasToEdit.color ?? CANVAS_COLORS[0]);
       setBrowserEditCanvasId(canvasId);
     },
-    [data.canvases],
+    [scopedCanvases],
   );
 
   const createBoardFromBrowser = useCallback(() => {
@@ -829,7 +880,11 @@ export function CanvasView({
       try {
         const itemIds = JSON.parse(itemPayload) as string[];
         const knownItemIds = new Set(data.items.map((item) => item.id));
-        const validItemIds = itemIds.filter((itemId) => knownItemIds.has(itemId));
+        const validItemIds = itemIds.filter(
+          (itemId) =>
+            knownItemIds.has(itemId) &&
+            (!activeProjectId || projectImageIdSet.has(itemId)),
+        );
         if (!validItemIds.length) return;
         const savedAt = new Date().toISOString();
 
@@ -851,7 +906,7 @@ export function CanvasView({
         console.error(error);
       }
     },
-    [clearDragState, commitData, data.items],
+    [activeProjectId, clearDragState, commitData, data.items, projectImageIdSet],
   );
 
   const handleBoardTileDragOver = useCallback(
@@ -885,7 +940,7 @@ export function CanvasView({
         boardMenuCanvasId={boardMenuCanvasId}
         boardTitleDraft={boardTitleDraft}
         browserEditCanvas={browserEditCanvas}
-        canvases={data.canvases}
+        canvases={scopedCanvases}
         itemsById={itemsById}
         thumbUrls={thumbUrls}
         setThumbUrls={setThumbUrls}

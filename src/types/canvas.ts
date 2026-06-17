@@ -69,7 +69,7 @@ export interface CanvasTextElement extends CanvasObjectGeometry {
 /** A reference image that only exists on a specific canvas */
 export type CanvasReference = CanvasObjectGeometry & {
   id: string;
-  path: string; // Path relative to ~/Folio/references/<canvasId>/
+  path: string; // Path relative to ~/Documents/Folio/
   filename: string;
   mediaWidth?: number; // Natural source image width when known
   mediaHeight?: number; // Natural source image height when known

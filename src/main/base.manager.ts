@@ -556,7 +556,17 @@ export class FolioManager implements FolioManagerInterface {
     canvasId: string,
     filePaths: string[],
   ): Promise<CanvasReference[]> {
-    return this.archiveManager.copyReferences(canvasId, filePaths);
+    const canvas = this.canvases.find((candidate) => candidate.id === canvasId);
+    const project =
+      canvas?.projectId
+        ? this.projects.find((candidate) => candidate.id === canvas.projectId)
+        : this.projects.find((candidate) => candidate.boardIds.includes(canvasId));
+
+    return this.archiveManager.copyReferences(
+      canvasId,
+      filePaths,
+      project?.folderPath,
+    );
   }
 
   async deleteItems(itemIds: string[]): Promise<FolioData> {

@@ -351,12 +351,12 @@ This phase turns the current archive and board system into a project-based creat
 
 ### 4.4 Project boards
 
-- [ ] Let each project have any number of boards.
-- [ ] Scope the board browser to the active project by `Project.boardIds` and `canvas.projectId`.
-- [ ] Creating a board from inside a project should create a `Canvas` owned by that project.
-- [ ] Existing canvas behavior remains the project board surface: draggable image cards, notes, board text, references, strokes, and edges.
-- [ ] Any image in `Project.imageIds` should be available to place on any board in that project.
-- [ ] Board-local references should save under `projects/<project>/boards/<board-id>/references/`.
+- [x] Let each project have any number of boards.
+- [x] Scope the board browser to the active project by `Project.boardIds` and `canvas.projectId`.
+- [x] Creating a board from inside a project should create a `Canvas` owned by that project.
+- [x] Existing canvas behavior remains the project board surface: draggable image cards, notes, board text, references, strokes, and edges.
+- [x] Any image in `Project.imageIds` should be available to place on any board in that project.
+- [x] Board-local references should save under `projects/<project>/boards/<board-id>/references/`.
 - [ ] Keep board headers focused on created/saved timestamps and board actions, not object counts.
 - [ ] Board edit UI can expose board kind, status, brief, and outcome later without cluttering quick rename/color editing.
 

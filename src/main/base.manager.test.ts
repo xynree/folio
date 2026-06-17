@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FolioManager } from "./base.manager";
-import { makeData, makeItem, makeProject } from "../test/fixtures";
+import { makeCanvas, makeData, makeItem, makeProject } from "../test/fixtures";
 
 const electronMocks = vi.hoisted(() => ({
   homePath: "",
@@ -105,5 +105,49 @@ describe("FolioManager project Works", () => {
 
     expect(unmarkedData.projects[0].workItemIds).toEqual([]);
     await expect(fs.readdir(worksDir)).resolves.toEqual([]);
+  });
+
+  it("copies board references under the owning project board folder", async () => {
+    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "folio-manager-"));
+    electronMocks.homePath = tempHome;
+
+    const folioRoot = path.join(tempHome, "Documents", "Folio");
+    const dotFolio = path.join(folioRoot, ".folio");
+    const sourcePath = path.join(tempHome, "Reference.PNG");
+    await fs.mkdir(dotFolio, { recursive: true });
+    await fs.writeFile(sourcePath, "reference bytes");
+
+    const manager = new FolioManager();
+    await manager.saveFolioData(
+      makeData({
+        items: [],
+        canvases: [
+          makeCanvas("board-1", {
+            projectId: "project-1",
+            itemIds: [],
+            positions: {},
+          }),
+        ],
+        projects: [
+          makeProject("project-1", {
+            title: "Color Study",
+            folderPath: "projects/color-study",
+            imageIds: [],
+            workItemIds: [],
+            boardIds: ["board-1"],
+          }),
+        ],
+      }),
+    );
+
+    const references = await manager.copyReference("board-1", [sourcePath]);
+
+    expect(references).toHaveLength(1);
+    expect(references[0].path).toMatch(
+      /^projects\/color-study\/boards\/board-1\/references\/reference.*\.png$/,
+    );
+    await expect(
+      fs.readFile(path.join(folioRoot, references[0].path), "utf-8"),
+    ).resolves.toBe("reference bytes");
   });
 });

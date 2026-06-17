@@ -21,6 +21,7 @@ import type {
   FolioData,
   FolioItem,
   ImportSource,
+  Project,
   ReconciliationResult,
   ThumbnailUrls,
 } from "../types";
@@ -97,6 +98,25 @@ function normalizeFolioData(data: FolioData): FolioData {
     tags: data.tags ?? [],
     projects: data.projects ?? [],
   };
+}
+
+function assignBoardToProject(
+  projects: Project[],
+  projectId: string | null,
+  boardId: string,
+  savedAt: string,
+): Project[] {
+  if (!projectId) return projects;
+
+  return projects.map((project) =>
+    project.id === projectId
+      ? {
+          ...project,
+          boardIds: [boardId, ...project.boardIds.filter((id) => id !== boardId)],
+          updatedAt: savedAt,
+        }
+      : project,
+  );
 }
 
 export function AppShell() {
@@ -892,14 +912,36 @@ export function AppShell() {
       commitData((current) => {
         const savedAt = new Date().toISOString();
         let canvases = [...current.canvases];
-        if (!targetCanvasId || !canvases.some((canvas) => canvas.id === targetCanvasId)) {
-          createdCanvas = createCanvas(canvases.length);
+        const targetCanvas = targetCanvasId
+          ? canvases.find((canvas) => canvas.id === targetCanvasId)
+          : null;
+        const activeProject = activeProjectId
+          ? current.projects.find((project) => project.id === activeProjectId)
+          : null;
+        const targetBelongsToActiveProject =
+          !activeProjectId ||
+          targetCanvas?.projectId === activeProjectId ||
+          Boolean(activeProject?.boardIds.includes(targetCanvasId ?? ""));
+
+        if (!targetCanvas || !targetBelongsToActiveProject) {
+          createdCanvas = {
+            ...createCanvas(canvases.length),
+            projectId: activeProjectId ?? undefined,
+          };
           targetCanvasId = createdCanvas.id;
           canvases = [createdCanvas, ...canvases];
         }
 
         return {
           ...current,
+          projects: createdCanvas
+            ? assignBoardToProject(
+                current.projects,
+                activeProjectId,
+                createdCanvas.id,
+                savedAt,
+              )
+            : current.projects,
           canvases: canvases.map((canvas) =>
             canvas.id === targetCanvasId
               ? markCanvasSaved(addItemToCanvas(canvas, itemId), savedAt)
@@ -914,7 +956,7 @@ export function AppShell() {
         setCanvasDetailRequestId((current) => current + 1);
       }
     },
-    [activeCanvasId, commitData],
+    [activeCanvasId, activeProjectId, commitData],
   );
 
   const createBoard = useCallback(() => {
@@ -922,10 +964,23 @@ export function AppShell() {
 
     commitData(
       (current) => {
-        const board = createCanvas(current.canvases.length);
+        const savedAt = new Date().toISOString();
+        const board = markCanvasSaved(
+          {
+            ...createCanvas(current.canvases.length),
+            projectId: activeProjectId ?? undefined,
+          },
+          savedAt,
+        );
         boardId = board.id;
         return {
           ...current,
+          projects: assignBoardToProject(
+            current.projects,
+            activeProjectId,
+            board.id,
+            savedAt,
+          ),
           canvases: [board, ...current.canvases],
         };
       },
@@ -937,7 +992,7 @@ export function AppShell() {
       setCanvasMinimized(false);
       setCanvasDetailRequestId((current) => current + 1);
     }
-  }, [commitData]);
+  }, [activeProjectId, commitData]);
 
   const openSelectedOnNewCanvas = useCallback((title?: string) => {
     const itemIds = [...selectedItemIds];
@@ -953,7 +1008,10 @@ export function AppShell() {
 
         const board = markCanvasSaved(
           addItemsToCanvas(
-            createCanvas(current.canvases.length, title),
+            {
+              ...createCanvas(current.canvases.length, title),
+              projectId: activeProjectId ?? undefined,
+            },
             validItemIds,
           ),
           savedAt,
@@ -962,6 +1020,12 @@ export function AppShell() {
 
         return {
           ...current,
+          projects: assignBoardToProject(
+            current.projects,
+            activeProjectId,
+            board.id,
+            savedAt,
+          ),
           canvases: [board, ...current.canvases],
         };
       },
@@ -976,7 +1040,7 @@ export function AppShell() {
     } else {
       setToast("No selected items found");
     }
-  }, [clearSelection, commitData, selectedItemIds]);
+  }, [activeProjectId, clearSelection, commitData, selectedItemIds]);
 
   const deleteSelectedItems = useCallback(async () => {
     const itemIds = [...selectedItemIds];

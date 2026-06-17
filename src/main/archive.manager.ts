@@ -209,14 +209,18 @@ export class ArchiveManager {
   async copyReferences(
     canvasId: string,
     filePaths: string[],
+    projectFolderPath?: string,
   ): Promise<CanvasReference[]> {
-    const destDir = path.join(this.folioRoot, "references", canvasId);
+    const destDir = projectFolderPath
+      ? path.join(this.folioRoot, projectFolderPath, "boards", canvasId, "references")
+      : path.join(this.folioRoot, "references", canvasId);
     await fs.mkdir(destDir, { recursive: true });
 
     const references: CanvasReference[] = [];
     for (const filePath of filePaths) {
-      const ext = path.extname(filePath).toLowerCase();
-      const filename = path.basename(filePath, ext);
+      const originalExt = path.extname(filePath);
+      const ext = originalExt.toLowerCase();
+      const filename = path.basename(filePath, originalExt);
       const destPath = await this.saveToDirectory(
         { kind: "path", filePath },
         filename,
