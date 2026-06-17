@@ -118,6 +118,7 @@ window.folio.onFilesAdded(callback);
 - [x] `copyToFolio()`: resolve destination as `~/Documents/Folio/items/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix
 - [x] `computeHash(filePath)`: read first 64KB of file, return 8-char hex hash using Node's built-in `crypto.createHash('sha256')` — fast enough for large files, unique enough for a personal archive
 - [x] `copyReference()`: copy files to `~/Documents/Folio/references/<canvas-id>/`
+- [x] Imported archive images and board-local references store optional natural image dimensions for proportional board card sizing
 - [x] `loadFolioData()`: read all three `.json` files in parallel on startup; if missing, create fresh empty schemas via `initialize()`
 - [x] File sanitization helper: lowercase, spaces → hyphens, strip special characters (shared utility used by both `copyToFolio` and `copyReference`)
 

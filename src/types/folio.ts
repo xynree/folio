@@ -27,6 +27,8 @@ export interface FolioItem {
   title: string;
   description: string;
   tagIds: string[]; // References to Tag.id
+  mediaWidth?: number; // Natural source image width when known
+  mediaHeight?: number; // Natural source image height when known
   missing?: boolean; // True if file is missing from disk
 }
 

@@ -9,6 +9,7 @@ import {
   eraseStrokePathAtPoint,
   objectLayoutFromPosition,
   pointsFromStrokePath,
+  sizeForCanvasImageObject,
   sizeForCanvasObject,
   strokeIntersectsEraser,
 } from "./canvasGeometry";
@@ -59,6 +60,33 @@ describe("canvas geometry helpers", () => {
       width: 300,
       height: 96,
     });
+  });
+
+  it("scales image object defaults from natural media proportions", () => {
+    expect(
+      sizeForCanvasImageObject("item", { x: 0, y: 0 }, {
+        width: 400,
+        height: 200,
+      }),
+    ).toEqual({ width: 190, height: 95 });
+    expect(
+      sizeForCanvasImageObject("reference", { x: 0, y: 0 }, {
+        width: 900,
+        height: 1200,
+      }),
+    ).toEqual({ width: 143, height: 190 });
+    expect(
+      sizeForCanvasImageObject("item", { x: 0, y: 0, width: 240 }, {
+        width: 400,
+        height: 200,
+      }),
+    ).toEqual({ width: 240, height: 120 });
+    expect(
+      sizeForCanvasImageObject("item", { x: 0, y: 0, width: 162, height: 190 }, {
+        width: 4032,
+        height: 3024,
+      }),
+    ).toEqual({ width: 190, height: 143 });
   });
 
   it("renders edges from explicit side handles", () => {

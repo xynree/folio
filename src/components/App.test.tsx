@@ -212,15 +212,29 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       .getByRole("button", { name: /split panel view/i })
       .closest(".workspace-panel-mode-control");
     expect(panelModeControl).not.toBeNull();
+    expect(panelModeControl?.closest(".workspace-panel-mode-bar")).not.toBeNull();
     expect(panelModeControl?.closest(".archive-floating-actions")).toBeNull();
+    expect(
+      Array.from(panelModeControl?.querySelectorAll("svg") ?? []).map((icon) => ({
+        height: icon.getAttribute("height"),
+        width: icon.getAttribute("width"),
+      })),
+    ).toEqual([
+      { height: "16", width: "16" },
+      { height: "16", width: "16" },
+      { height: "16", width: "16" },
+    ]);
     expect(screen.getByRole("button", { name: /left only panel view/i }))
       .not.toBeNull();
     expect(screen.getByRole("button", { name: /split panel view/i }))
       .not.toBeNull();
     expect(screen.getByRole("button", { name: /right only panel view/i }))
       .not.toBeNull();
-    expect(screen.getByRole("button", { name: /split panel view/i }))
-      .toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen
+        .getByRole("button", { name: /split panel view/i })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     expect(screen.queryByRole("button", { name: /open archive panel/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
     expect(document.querySelector(".canvas-dock-minimized")).toBeNull();
@@ -305,8 +319,11 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await user.click(screen.getByRole("button", { name: /right only panel view/i }));
     expect(document.querySelector(".archive-panel-minimized")).not.toBeNull();
-    expect(screen.getByRole("button", { name: /right only panel view/i }))
-      .toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen
+        .getByRole("button", { name: /right only panel view/i })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     expect(screen.queryByRole("button", { name: /open archive panel/i })).toBeNull();
     expect(screen.queryByRole("separator", { name: /resize open board panel/i }))
       .toBeNull();
@@ -316,8 +333,11 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await user.click(screen.getByRole("button", { name: /left only panel view/i }));
     expect(document.querySelector(".archive-panel-minimized")).toBeNull();
     expect(document.querySelector(".canvas-dock-minimized")).not.toBeNull();
-    expect(screen.getByRole("button", { name: /left only panel view/i }))
-      .toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen
+        .getByRole("button", { name: /left only panel view/i })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
     expect(workspace.style.gridTemplateColumns).toContain("0px 0px");
 
@@ -1786,7 +1806,12 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     fireEvent.click(image);
 
     await waitFor(() => {
-      expect(app.data.canvases[0].positions.alpha).toEqual({ x: 140, y: 120 });
+      expect(app.data.canvases[0].positions.alpha).toMatchObject({
+        x: 140,
+        y: 120,
+        width: 162,
+        height: 190,
+      });
     });
     expect(screen.queryByRole("dialog", { name: /item details/i })).toBeNull();
 
@@ -1946,8 +1971,11 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await openBoardPanel(user);
     expect(screen.getByText(/^Boards$/i)).not.toBeNull();
     await user.click(screen.getByLabelText(/minimize board panel/i));
-    expect(screen.getByRole("button", { name: /left only panel view/i }))
-      .toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen
+        .getByRole("button", { name: /left only panel view/i })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
     expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
     expect(screen.queryByText(/^Board$/)).toBeNull();
     await user.click(screen.getByRole("button", { name: /split panel view/i }));

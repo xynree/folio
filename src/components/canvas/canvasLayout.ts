@@ -6,7 +6,10 @@ import type {
   CanvasTextElement,
   FolioItem,
 } from "../../types";
-import { objectLayoutFromPosition } from "./canvasGeometry";
+import {
+  objectLayoutFromPosition,
+  sizeForCanvasImageObject,
+} from "./canvasGeometry";
 import type { CanvasObjectKind, CanvasObjectLayout } from "./canvasTypes";
 
 export type CanvasDragPreview = {
@@ -50,9 +53,19 @@ export function positionForCanvasItem(
     return dragPreview.position;
   }
 
-  return canvas?.positions[item.id] ?? {
+  const savedPosition = canvas?.positions[item.id] ?? {
     x: 80 + (index % 4) * 190,
     y: 90 + Math.floor(index / 4) * 230,
+  };
+  const size = sizeForCanvasImageObject("item", savedPosition, {
+    width: item.mediaWidth,
+    height: item.mediaHeight,
+  });
+
+  return {
+    ...savedPosition,
+    width: size.width,
+    height: size.height,
   };
 }
 
@@ -64,11 +77,21 @@ export function positionForCanvasReference(
     return dragPreview.position;
   }
 
-  return {
+  const savedPosition = {
     x: reference.x,
     y: reference.y,
     width: reference.width,
     height: reference.height,
+  };
+  const size = sizeForCanvasImageObject("reference", savedPosition, {
+    width: reference.mediaWidth,
+    height: reference.mediaHeight,
+  });
+
+  return {
+    ...savedPosition,
+    width: size.width,
+    height: size.height,
   };
 }
 

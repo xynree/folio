@@ -281,23 +281,51 @@ button svg {
   overflow: hidden;
 }
 
-.workspace-panel-mode-control {
+.workspace-panel-mode-bar {
   grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  -webkit-app-region: drag;
+}
+
+.workspace-panel-mode-control {
   justify-self: center;
   z-index: 5;
-  margin: 8px 0 6px;
-  padding: 3px;
-  border-color: rgba(210, 194, 173, 0.9);
-  background: rgba(255, 253, 248, 0.94);
-  box-shadow: 0 10px 24px rgba(52, 36, 21, 0.12);
-  backdrop-filter: blur(10px);
+  gap: 2px;
+  min-height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-app-region: drag;
 }
 
 .workspace-panel-mode-control button {
-  width: 32px;
-  min-width: 32px;
-  min-height: 28px;
+  width: 24px;
+  min-width: 24px;
+  min-height: 24px;
   padding: 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+  -webkit-app-region: no-drag;
+}
+
+.workspace-panel-mode-control button.active {
+  background: rgba(56, 93, 86, 0.12);
+  box-shadow: none;
+}
+
+.workspace-panel-mode-control button:hover,
+.workspace-panel-mode-control button:focus-visible {
+  background: rgba(56, 93, 86, 0.16);
+  transform: none;
 }
 
 .selection-bar {
@@ -2945,7 +2973,7 @@ button svg {
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   animation: board-card-enter var(--motion-medium) var(--motion-pop) backwards;
   transition:
     border-color var(--motion-fast) var(--motion-ease),
@@ -2956,12 +2984,22 @@ button svg {
   border-color: #b9c6be;
 }
 
+.canvas-card:hover,
+.canvas-card:focus-within,
+.canvas-note:hover,
+.canvas-note:focus-within,
+.canvas-text-card:hover,
+.canvas-text-card:focus-within {
+  z-index: 8;
+}
+
 .canvas-card > .thumb-shell,
 .reference-card > .thumb-shell {
   height: 100%;
   min-height: 0;
   aspect-ratio: auto;
   border-radius: 7px;
+  overflow: hidden;
 }
 
 .canvas-card .thumb-shell img {

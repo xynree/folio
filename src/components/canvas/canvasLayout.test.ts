@@ -12,7 +12,7 @@ import {
   positionForCanvasText,
 } from "./canvasLayout";
 
-function item(id: string): FolioItem {
+function item(id: string, overrides: Partial<FolioItem> = {}): FolioItem {
   return {
     id,
     path: `items/${id}.png`,
@@ -22,6 +22,7 @@ function item(id: string): FolioItem {
     title: id,
     description: "",
     tagIds: [],
+    ...overrides,
   };
 }
 
@@ -78,6 +79,40 @@ describe("canvas layout helpers", () => {
     expect(positionForCanvasItem(item("item-3"), 4, canvas, null)).toEqual({
       x: 80,
       y: 320,
+      width: 162,
+      height: 190,
+    });
+    expect(
+      positionForCanvasItem(
+        item("wide", { mediaWidth: 1200, mediaHeight: 600 }),
+        5,
+        canvas,
+        null,
+      ),
+    ).toEqual({
+      x: 270,
+      y: 320,
+      width: 190,
+      height: 95,
+    });
+    expect(
+      positionForCanvasItem(
+        item("legacy-size", { mediaWidth: 4032, mediaHeight: 3024 }),
+        6,
+        {
+          ...canvas,
+          positions: {
+            ...canvas.positions,
+            "legacy-size": { x: 100, y: 110, width: 162, height: 190 },
+          },
+        },
+        null,
+      ),
+    ).toEqual({
+      x: 100,
+      y: 110,
+      width: 190,
+      height: 143,
     });
     expect(
       positionForCanvasItem(item("item-3"), 4, canvas, {
@@ -96,6 +131,25 @@ describe("canvas layout helpers", () => {
       y: 60,
       width: 300,
       height: 340,
+    });
+    expect(
+      positionForCanvasReference(
+        {
+          id: "reference-2",
+          filename: "wide-ref.png",
+          path: "refs/wide-ref.png",
+          x: 90,
+          y: 100,
+          mediaWidth: 800,
+          mediaHeight: 400,
+        },
+        null,
+      ),
+    ).toEqual({
+      x: 90,
+      y: 100,
+      width: 190,
+      height: 95,
     });
     expect(
       positionForCanvasNote(canvas.notes[0], {

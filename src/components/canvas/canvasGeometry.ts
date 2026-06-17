@@ -28,6 +28,8 @@ export const CANVAS_OBJECT_MIN_SIZES: Record<CanvasObjectKind, CanvasObjectSize>
   text: { width: 132, height: 60 },
 };
 
+export const CANVAS_IMAGE_DEFAULT_LONG_EDGE = 190;
+
 export const CANVAS_CONNECTION_SIDES: CanvasConnectionSide[] = [
   "top",
   "right",
@@ -78,6 +80,71 @@ export function sizeForCanvasObject(
     width: geometry?.width ?? defaultSize.width,
     height: geometry?.height ?? defaultSize.height,
   };
+}
+
+function validDimension(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+export function sizeForCanvasImageObject(
+  kind: Extract<CanvasObjectKind, "item" | "reference">,
+  geometry?: Partial<CanvasObjectSize>,
+  media?: Partial<CanvasObjectSize>,
+): CanvasObjectSize {
+  const defaultSize = CANVAS_OBJECT_SIZES[kind];
+  const mediaWidth = media?.width;
+  const mediaHeight = media?.height;
+  if (!validDimension(mediaWidth) || !validDimension(mediaHeight)) {
+    return sizeForCanvasObject(kind, geometry);
+  }
+
+  const mediaAspectRatio = mediaWidth / mediaHeight;
+
+  if (validDimension(geometry?.width) && validDimension(geometry?.height)) {
+    const longEdge = Math.max(geometry.width, geometry.height);
+    if (mediaAspectRatio >= 1) {
+      return {
+        width: Math.round(longEdge),
+        height: Math.max(1, Math.round(longEdge / mediaAspectRatio)),
+      };
+    }
+
+    return {
+      width: Math.max(1, Math.round(longEdge * mediaAspectRatio)),
+      height: Math.round(longEdge),
+    };
+  }
+
+  if (validDimension(geometry?.width)) {
+    return {
+      width: Math.round(geometry.width),
+      height: Math.max(
+        1,
+        Math.round(geometry.width / mediaAspectRatio),
+      ),
+    };
+  }
+
+  if (validDimension(geometry?.height)) {
+    return {
+      width: Math.max(
+        1,
+        Math.round(geometry.height * mediaAspectRatio),
+      ),
+      height: Math.round(geometry.height),
+    };
+  }
+
+  const scale =
+    CANVAS_IMAGE_DEFAULT_LONG_EDGE / Math.max(mediaWidth, mediaHeight);
+  const proportionalSize = {
+    width: Math.max(1, Math.round(mediaWidth * scale)),
+    height: Math.max(1, Math.round(mediaHeight * scale)),
+  };
+
+  return proportionalSize.width && proportionalSize.height
+    ? proportionalSize
+    : defaultSize;
 }
 
 export function constrainCanvasObjectSize(

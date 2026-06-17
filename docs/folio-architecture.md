@@ -129,6 +129,8 @@ interface FolioItem {
   title: string;
   description: string;
   tagIds: string[];
+  mediaWidth?: number;
+  mediaHeight?: number;
   missing?: boolean;
 }
 ```
@@ -153,6 +155,14 @@ interface CanvasObjectGeometry {
 }
 
 type CanvasTextSize = "sm" | "md" | "large";
+
+interface CanvasReference extends CanvasObjectGeometry {
+  id: string;
+  path: string;
+  filename: string;
+  mediaWidth?: number;
+  mediaHeight?: number;
+}
 
 interface Canvas {
   id: string;
@@ -292,7 +302,7 @@ Canvas references use a separate path:
 ~/Documents/Folio/references/<board-id>/
 ```
 
-References belong to one board and do not become archive items.
+References belong to one board and do not become archive items. Imported archive images and copied board references store optional `mediaWidth`/`mediaHeight` values when Electron can read the source image dimensions; older metadata remains valid without these fields, and archive items plus board-local references are backfilled on load when their source files are present.
 
 ## Thumbnail Pipeline
 
@@ -345,7 +355,7 @@ Board headers show `createdAt` and `updatedAt` timestamps instead of object coun
 
 Canvas boards use `CanvasViewport`, which renders the dotted background with an actual HTML `<canvas>`. The scrollable surface contains cards, notes, and references as absolutely positioned React elements. Wheel input zooms around the pointer, clamps between the configured min and max zoom, and prevents the page-style scroll effect once the zoom limit is reached.
 
-Canvas archive cards and references render as image-only objects in the board surface. Cards, references, notes, and text elements are draggable from any non-control area. Pointer movement beyond the small drag threshold becomes a drag; otherwise the action remains a click. They can also be resized from the lower-right corner; saved dimensions are optional `width`/`height` fields on the same canvas objects, and image cards preserve their aspect ratio while resizing. Remove/delete controls appear on hover or focus. Board text renders in lightweight resizable text boxes, supports `sm`, `md`, and `large` text sizes, and saves typed text after a short debounce.
+Canvas archive cards and references render as image-only objects in the board surface. When source dimensions are known, default card bounds are scaled from the image's natural proportions instead of a single fixed rectangle; legacy items without dimensions use the existing fallback size. Cards, references, notes, and text elements are draggable from any non-control area. Pointer movement beyond the small drag threshold becomes a drag; otherwise the action remains a click. They can also be resized from the lower-right corner; saved dimensions are optional `width`/`height` fields on the same canvas objects, and image cards preserve their aspect ratio while resizing. Remove/delete controls appear on hover or focus. Board text renders in lightweight resizable text boxes, supports `sm`, `md`, and `large` text sizes, and saves typed text after a short debounce.
 
 ## Studio Wall Architecture
 

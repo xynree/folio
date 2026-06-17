@@ -19,6 +19,7 @@ import {
   ThumbnailUrls,
 } from "../types";
 import { ArchiveManager } from "./archive.manager";
+import { readImageDimensionsForFile } from "./media.helpers";
 import { FolioStorage } from "./storage.manager";
 
 const execFileAsync = promisify(execFile);
@@ -240,8 +241,22 @@ export class FolioManager implements FolioManagerInterface {
     this.tags = tagsBase.tags;
     this.canvases = canvasesBase.canvases;
 
-    if (await this.repairMissingFlagsForExistingFiles()) {
+    const repairedMissingFlags = await this.repairMissingFlagsForExistingFiles();
+    const repairedMediaDimensions =
+      await this.archiveManager.repairMissingMediaDimensions();
+    const repairedReferenceMediaDimensions =
+      this.repairReferenceMediaDimensions();
+
+    if (repairedMissingFlags || repairedMediaDimensions) {
       await this.archiveManager.save(this.version);
+    }
+
+    if (repairedReferenceMediaDimensions) {
+      await this.storageManager.saveCanvases(
+        this.canvasesPath,
+        this.canvases,
+        this.version,
+      );
     }
 
     return {
@@ -250,6 +265,31 @@ export class FolioManager implements FolioManagerInterface {
       tags: this.tags,
       canvases: this.canvases,
     };
+  }
+
+  private repairReferenceMediaDimensions(): boolean {
+    let changed = false;
+
+    this.canvases = this.canvases.map((canvas) => {
+      let canvasChanged = false;
+      const references = (canvas.references ?? []).map((reference) => {
+        if (reference.mediaWidth && reference.mediaHeight) return reference;
+
+        const dimensions = readImageDimensionsForFile(
+          path.join(this.folioRoot, reference.path),
+        );
+        if (!dimensions) return reference;
+
+        canvasChanged = true;
+        return { ...reference, ...dimensions };
+      });
+
+      if (!canvasChanged) return canvas;
+      changed = true;
+      return { ...canvas, references };
+    });
+
+    return changed;
   }
 
   async saveFolioData(data: FolioData): Promise<void> {

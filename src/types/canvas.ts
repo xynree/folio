@@ -62,6 +62,8 @@ export type CanvasReference = CanvasObjectGeometry & {
   id: string;
   path: string; // Path relative to ~/Folio/references/<canvasId>/
   filename: string;
+  mediaWidth?: number; // Natural source image width when known
+  mediaHeight?: number; // Natural source image height when known
 };
 
 /** A named thinking surface with positioned items and annotations */

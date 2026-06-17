@@ -839,40 +839,42 @@ export function AppShell() {
       />
 
       <main className="app-main">
-        <div
-          className="view-tabs workspace-panel-mode-control"
-          aria-label="Workspace panel view"
-        >
-          <button
-            className={panelMode === "left" ? "active" : ""}
-            type="button"
-            aria-label="Left only panel view"
-            aria-pressed={panelMode === "left"}
-            title="Left only"
-            onClick={showLeftOnlyPanel}
+        <div className="workspace-panel-mode-bar">
+          <div
+            className="view-tabs workspace-panel-mode-control"
+            aria-label="Workspace panel view"
           >
-            <ButtonIcon icon={PanelLeft} />
-          </button>
-          <button
-            className={panelMode === "split" ? "active" : ""}
-            type="button"
-            aria-label="Split panel view"
-            aria-pressed={panelMode === "split"}
-            title="Split"
-            onClick={showSplitPanel}
-          >
-            <ButtonIcon icon={Columns2} />
-          </button>
-          <button
-            className={panelMode === "right" ? "active" : ""}
-            type="button"
-            aria-label="Right only panel view"
-            aria-pressed={panelMode === "right"}
-            title="Right only"
-            onClick={showRightOnlyPanel}
-          >
-            <ButtonIcon icon={PanelRight} />
-          </button>
+            <button
+              className={panelMode === "left" ? "active" : ""}
+              type="button"
+              aria-label="Left only panel view"
+              aria-pressed={panelMode === "left"}
+              title="Left only"
+              onClick={showLeftOnlyPanel}
+            >
+              <ButtonIcon icon={PanelLeft} size={16} />
+            </button>
+            <button
+              className={panelMode === "split" ? "active" : ""}
+              type="button"
+              aria-label="Split panel view"
+              aria-pressed={panelMode === "split"}
+              title="Split"
+              onClick={showSplitPanel}
+            >
+              <ButtonIcon icon={Columns2} size={16} />
+            </button>
+            <button
+              className={panelMode === "right" ? "active" : ""}
+              type="button"
+              aria-label="Right only panel view"
+              aria-pressed={panelMode === "right"}
+              title="Right only"
+              onClick={showRightOnlyPanel}
+            >
+              <ButtonIcon icon={PanelRight} size={16} />
+            </button>
+          </div>
         </div>
         <section
           ref={studioWorkspaceRef}

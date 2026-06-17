@@ -21,6 +21,10 @@ import {
   normalizeArchiveItemType,
   resolveImportSourceMeta,
 } from "./archive.helpers";
+import {
+  readImageDimensionsForFile,
+  type MediaDimensions,
+} from "./media.helpers";
 import { FolioStorage } from "./storage.manager";
 
 interface ImportResult {
@@ -172,6 +176,7 @@ export class ArchiveManager {
         id: nanoid(),
         filename: path.basename(destPath),
         path: path.relative(this.folioRoot, destPath),
+        ...readImageDimensionsForFile(destPath),
         x: 0,
         y: 0,
       });
@@ -261,6 +266,23 @@ export class ArchiveManager {
     return `folio://file/${encodeURIComponent(relativePath)}`;
   }
 
+  public async repairMissingMediaDimensions(): Promise<boolean> {
+    let changed = false;
+
+    for (const item of this.items) {
+      if (item.mediaWidth && item.mediaHeight) continue;
+
+      const absolutePath = this.getAbsolutePath(item.path);
+      if (!(await exists(absolutePath))) continue;
+
+      changed =
+        this.applyMediaDimensions(item, readImageDimensionsForFile(absolutePath))
+        || changed;
+    }
+
+    return changed;
+  }
+
   public getAbsolutePath(relativeOrAbsolutePath: string): string {
     return path.isAbsolute(relativeOrAbsolutePath)
       ? relativeOrAbsolutePath
@@ -335,15 +357,23 @@ export class ArchiveManager {
       (item) => path.resolve(this.folioRoot, item.path) === absolutePath,
     );
     if (pathMatch) {
+      let changed = this.applyMediaDimensions(
+        pathMatch,
+        readImageDimensionsForFile(absolutePath),
+      );
       if (pathMatch.missing) {
         pathMatch.missing = false;
-        return { item: pathMatch, created: false, changed: true };
+        changed = true;
       }
-      return { item: pathMatch, created: false, changed: false };
+      return { item: pathMatch, created: false, changed };
     }
 
     const hashMatch = this.items.find((item) => item.hash === hash);
     if (hashMatch) {
+      this.applyMediaDimensions(
+        hashMatch,
+        readImageDimensionsForFile(absolutePath),
+      );
       hashMatch.path = relativePath;
       hashMatch.missing = false;
       return { item: hashMatch, created: false, changed: true };
@@ -374,8 +404,26 @@ export class ArchiveManager {
       title: filename,
       tagIds: [],
       description: "",
+      ...readImageDimensionsForFile(destPath),
       missing: false,
     };
+  }
+
+  private applyMediaDimensions(
+    item: FolioItem,
+    dimensions: MediaDimensions | undefined,
+  ) {
+    if (!dimensions) return false;
+    if (
+      item.mediaWidth === dimensions.mediaWidth
+      && item.mediaHeight === dimensions.mediaHeight
+    ) {
+      return false;
+    }
+
+    item.mediaWidth = dimensions.mediaWidth;
+    item.mediaHeight = dimensions.mediaHeight;
+    return true;
   }
 
   /**
