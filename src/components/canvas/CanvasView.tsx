@@ -7,7 +7,6 @@ import type {
   CanvasPosition,
   CanvasSection,
   CanvasTextElement,
-  CanvasTextSize,
   FolioData,
   FolioItem,
   ThumbnailUrls,
@@ -63,18 +62,9 @@ import {
   addCanvasLink,
   addCanvasTextElement,
   deleteCanvasObjects,
-  deleteCanvasNote,
-  deleteCanvasLink,
-  deleteCanvasSection,
-  deleteCanvasTextElement,
   duplicateCanvasObjects,
   removeItemFromCanvas,
   updateCanvasLink,
-  updateCanvasNoteSize,
-  updateCanvasNoteText,
-  updateCanvasSection,
-  updateCanvasTextElementSize,
-  updateCanvasTextElementText,
   updateCanvasViewport,
 } from "./canvasModel";
 import { canvasObjectViews } from "./canvasObjects";
@@ -97,6 +87,8 @@ import { useCanvasDrawingTools } from "./useCanvasDrawingTools";
 import { useCanvasEdges } from "./useCanvasEdges";
 import { useCanvasObjectDrag } from "./useCanvasObjectDrag";
 import { useCanvasObjectResize } from "./useCanvasObjectResize";
+import { useCanvasObjectMutations } from "./useCanvasObjectMutations";
+import { useCanvasKeyboardShortcuts } from "./useCanvasKeyboardShortcuts";
 
 const BOARD_BROWSER_PREVIEW_LIMIT = 3;
 
@@ -381,6 +373,21 @@ export function CanvasView({
     [commitData],
   );
 
+  const {
+    addNote,
+    removeItem,
+    updateNote,
+    updateNoteSize,
+    updateLink,
+    deleteLink,
+    updateSection,
+    deleteSection,
+    deleteNote,
+    updateTextElement,
+    updateTextElementSize,
+    deleteTextElement,
+  } = useCanvasObjectMutations({ activeCanvas, updateCanvas });
+
   const saveViewportState = useCallback(
     (viewport: { x: number; y: number; zoom: number }) => {
       if (!activeCanvas || boardBrowserOpen || restoringViewportRef.current) return;
@@ -504,18 +511,6 @@ export function CanvasView({
     }
   }, [activeCanvas, activeProjectId, data, saveData]);
 
-  const removeItem = useCallback(
-    (itemId: string) => {
-      if (!activeCanvas) return;
-      updateCanvas(
-        activeCanvas.id,
-        (canvas) => removeItemFromCanvas(canvas, itemId),
-        "Removed",
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
   const deleteBoardById = useCallback(
     (canvasId: string) => {
       const canvasToDelete = data.canvases.find((canvas) => canvas.id === canvasId);
@@ -586,24 +581,6 @@ export function CanvasView({
     if (!activeCanvas) return;
     deleteBoardById(activeCanvas.id);
   }, [activeCanvas, deleteBoardById]);
-
-  const addNote = useCallback(() => {
-    if (!activeCanvas) return;
-    const createdAt = new Date().toISOString();
-    const note: CanvasNote = {
-      id: createId("note"),
-      text: "",
-      x: 140,
-      y: 120,
-      createdAt,
-      updatedAt: createdAt,
-    };
-    updateCanvas(
-      activeCanvas.id,
-      (canvas) => ({ ...canvas, notes: [...canvas.notes, note] }),
-      "Note added",
-    );
-  }, [activeCanvas, updateCanvas]);
 
   const positionForItem = useCallback(
     (item: FolioItem, index: number): CanvasObjectGeometry => {
@@ -1156,97 +1133,23 @@ export function CanvasView({
     [activeCanvas, updateCanvas],
   );
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target;
-      const editingText =
-        target instanceof Element
-        && Boolean(target.closest("input, textarea, select"));
-      if (editingText) return;
-
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
-        if (activeStrokes.length) {
-          event.preventDefault();
-          undoLastStroke();
-        }
-        return;
-      }
-
-      if (event.key === "Escape") {
-        setActiveTool("select");
-        setSelectedObjects([]);
-        setSelectedEdgeId(null);
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d") {
-        if (selectedObjects.length) {
-          event.preventDefault();
-          duplicateSelectedObjects();
-        }
-        return;
-      }
-
-      if (event.key === "0") {
-        event.preventDefault();
-        resetZoom();
-        return;
-      }
-
-      if (event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        fitCanvasContent();
-        return;
-      }
-
-      if (event.key.toLowerCase() === "s" && selectedObjects.length) {
-        event.preventDefault();
-        zoomToSelection();
-        return;
-      }
-
-      if (
-        selectedObjects.length
-        && !editingEdgeId
-        && activeCanvas
-        && (event.key === "Delete" || event.key === "Backspace")
-      ) {
-        event.preventDefault();
-        deleteSelectedObjects();
-        return;
-      }
-
-      if (
-        !selectedEdgeId
-        || editingEdgeId
-        || (event.key !== "Delete" && event.key !== "Backspace")
-        || !activeCanvas
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      deleteEdge(selectedEdgeId);
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
+  useCanvasKeyboardShortcuts({
     activeCanvas,
-    activeStrokes.length,
-    deleteEdge,
-    deleteSelectedObjects,
-    duplicateSelectedObjects,
+    activeStrokeCount: activeStrokes.length,
     editingEdgeId,
-    fitCanvasContent,
-    resetZoom,
-    selectedObjects.length,
     selectedEdgeId,
+    selectedObjectCount: selectedObjects.length,
     setActiveTool,
+    clearSelectedObjects: () => setSelectedObjects([]),
     setSelectedEdgeId,
     undoLastStroke,
+    duplicateSelectedObjects,
+    deleteSelectedObjects,
+    deleteEdge,
+    resetZoom,
+    fitCanvasContent,
     zoomToSelection,
-  ]);
+  });
 
   const canvasPointFromEvent = useCallback((event: React.DragEvent) => {
     const surface = surfaceRef.current;
@@ -1403,124 +1306,6 @@ export function CanvasView({
     boardBrowserOpen,
     centerPositionForCurrentViewport,
   ]);
-
-  const updateNote = useCallback(
-    (noteId: string, text: string) => {
-      if (!activeCanvas) return;
-      updateCanvas(activeCanvas.id, (canvas) =>
-        updateCanvasNoteText(canvas, noteId, text),
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const updateNoteSize = useCallback(
-    (noteId: string, size: CanvasTextSize) => {
-      if (!activeCanvas) return;
-      updateCanvas(
-        activeCanvas.id,
-        (canvas) => updateCanvasNoteSize(canvas, noteId, size),
-        "Note text size updated",
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const updateLink = useCallback(
-    (
-      linkId: string,
-      patch: Partial<Pick<CanvasLink, "title" | "description" | "url">>,
-    ) => {
-      if (!activeCanvas) return;
-      updateCanvas(activeCanvas.id, (canvas) =>
-        updateCanvasLink(canvas, linkId, patch),
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const deleteLink = useCallback(
-    (linkId: string) => {
-      if (!activeCanvas) return;
-      updateCanvas(
-        activeCanvas.id,
-        (canvas) => deleteCanvasLink(canvas, linkId),
-        "Link deleted",
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const updateSection = useCallback(
-    (
-      sectionId: string,
-      patch: Partial<Pick<CanvasSection, "title" | "color" | "collapsed">>,
-    ) => {
-      if (!activeCanvas) return;
-      updateCanvas(activeCanvas.id, (canvas) =>
-        updateCanvasSection(canvas, sectionId, patch),
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const deleteSection = useCallback(
-    (sectionId: string) => {
-      if (!activeCanvas) return;
-      updateCanvas(
-        activeCanvas.id,
-        (canvas) => deleteCanvasSection(canvas, sectionId),
-        "Section deleted",
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const deleteNote = useCallback(
-    (noteId: string) => {
-      if (!activeCanvas) return;
-      updateCanvas(
-        activeCanvas.id,
-        (canvas) => deleteCanvasNote(canvas, noteId),
-        "Note deleted",
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const updateTextElement = useCallback(
-    (textElementId: string, text: string) => {
-      if (!activeCanvas) return;
-      updateCanvas(activeCanvas.id, (canvas) =>
-        updateCanvasTextElementText(canvas, textElementId, text),
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const updateTextElementSize = useCallback(
-    (textElementId: string, size: CanvasTextSize) => {
-      if (!activeCanvas) return;
-      updateCanvas(
-        activeCanvas.id,
-        (canvas) => updateCanvasTextElementSize(canvas, textElementId, size),
-        "Text size updated",
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const deleteTextElement = useCallback(
-    (textElementId: string) => {
-      if (!activeCanvas) return;
-      updateCanvas(
-        activeCanvas.id,
-        (canvas) => deleteCanvasTextElement(canvas, textElementId),
-        "Text deleted",
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
 
   const saveBoardSettingsForCanvas = useCallback((canvasToSave: Canvas | null) => {
     if (!canvasToSave) return;
