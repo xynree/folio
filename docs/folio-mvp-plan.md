@@ -371,106 +371,253 @@ This phase turns the current archive and board system into a project-based creat
 
 ---
 
-## Phase 5 — Reference graph: Pinterest-like collection and explicit links
+## Phase 5 — Canvas workspace: FigJam/MelloNote-style boards
 
-This phase would make references and inspiration first-class again if the product needs a dedicated inspiration library. Current Folio treats inspiration images as normal project images so they remain reusable across All Images, Works, Boards, and Review.
+This phase turns project Boards from a spatial image board into a flexible thinking canvas. A board should make it easy to drop images into the view, add text, attach documents, save outside links, connect any objects, organize content into sections, and start from built-in templates. The board remains local-first and single-user: source files stay in the project folder and board structure stays in `.folio/canvases.json`.
 
-### 5.1 Reference capture
+Phase 5 should be implemented as an additive evolution of the current board system. Do not rewrite the whole canvas at once. First introduce a clearer canvas-object model and helper layer, then add new node types and templates on top of it.
 
-- [x] Retire board-local reference capture in favor of importing images into the project All Images list before board placement.
-- [ ] Add paste-from-clipboard support for images and copied files.
-- [ ] Add URL reference capture: store URL, title, source domain, optional image, and captured date.
-- [ ] Add reference metadata: `sourceUrl`, `sourceTitle`, `author`, `capturedAt`, `notes`, and `tagIds`.
-- [ ] If a future reference library exists, support saving selected references into project Images.
-- [ ] Add reference detail modal parallel to item detail modal.
-- [ ] Add an optional inspiration inbox only if references need to exist before project assignment.
+### 5.1 Product scope and non-goals
 
-### 5.2 Edge drawing and rendering
+- [ ] Define Phase 5 acceptance criteria before implementation:
+  - A user can create a blank board or choose a template.
+  - A user can drop project images, external image files, documents, text snippets, and URLs directly onto a board.
+  - Dropped external files are imported into the active project before being placed on the board.
+  - A user can connect any supported board object to any other supported board object.
+  - A user can select multiple objects, move them together, align them, distribute them, and tidy them into a grid.
+  - A user can save, close, and reopen a board with object positions, sections, links, documents, edges, and viewport restored.
+- [ ] Keep collaboration out of scope: no shared cursors, comments, assignments, permissions, or live multiplayer state.
+- [ ] Keep a full database out of scope unless JSON persistence becomes a measured bottleneck.
+- [ ] Keep templates editable after creation; templates should seed content, not lock board structure.
 
-- [x] Render `canvas.edges[]` as SVG curves above the canvas background and below cards.
-- [x] Edges can connect current canvas objects: project/archive item, reference, note, and board text elements.
-- [x] Hold Shift and drag from a source card to a target card to create an edge.
-- [x] Add visible connection handles on hover/focus for each card side.
-- [x] Update edge endpoints live when connected cards move.
-- [x] Support edge selection, keyboard delete, and click-away deselection.
-- [x] Store edge geometry as derived layout, not persisted absolute path data, unless manual bend points are added later.
-- [x] Support no-direction, single-direction, and bidirectional edge rendering.
+### 5.2 Storage and schema foundation
 
-### 5.3 Relationship labels and types
+- [ ] Add a schema migration plan before changing persisted board data.
+- [ ] Keep `Canvas.itemIds`, `Canvas.positions`, `Canvas.notes`, `Canvas.texts`, `Canvas.edges`, and `Canvas.strokes` readable for old boards.
+- [ ] Add `Canvas.sections?: CanvasSection[]` for section/frame nodes:
 
-- [ ] Extend `CanvasEdge` with `type`: `inspired-by`, `uses`, `variant-of`, `version-of`, `response-to`, `part-of`, `related`.
-- [ ] Keep optional freeform `label` for user language in addition to structured `type`.
-- [ ] Add inline label editing on double-click.
-- [ ] Add quick label menu after creating an edge.
-- [ ] Render labels near the curve midpoint with collision-aware placement where practical.
-- [ ] Add filter controls to show/hide relationship types.
-- [ ] Add relationship type colors or line styles, but keep the visual system restrained.
+```ts
+interface CanvasSection extends CanvasObjectGeometry {
+  id: string;
+  title: string;
+  color?: string;
+  collapsed?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+```
 
-### 5.4 Backlinks and graph-aware details
+- [ ] Add `Canvas.links?: CanvasLink[]` for outside-link cards:
 
-- [ ] In item details, show "Appears on" projects and boards.
-- [ ] In item details, show "Connected to" grouped by relationship type.
-- [ ] In reference details, show which work it inspired and which projects use it.
-- [ ] In project details, show inbound references and review-linked Works.
-- [ ] Add "open related on board" actions from details.
-- [ ] Add a command to create a board from selected related items.
+```ts
+interface CanvasLink extends CanvasObjectGeometry {
+  id: string;
+  url: string;
+  title: string;
+  description?: string;
+  sourceDomain?: string;
+  faviconUrl?: string;
+  capturedAt: string;
+  updatedAt?: string;
+}
+```
 
-### 5.5 Pinterest-like browsing
+- [ ] Treat documents as normal `FolioItem` records so they can be reused across boards and details:
+  - Add or formalize a per-project `documents/` folder for imported PDF, Markdown, text, RTF, and office files.
+  - Continue storing visual images in `projects/<project>/images/`.
+  - Keep `works/` as a readable generated representation of Works membership, not a separate import location.
+- [ ] Decide whether Phase 5 renames `Project.imageIds` to `Project.itemIds` or keeps the current field as a compatibility alias:
+  - Preferred long-term shape: `itemIds` for all project assets and a derived image filter for the All Images view.
+  - If renaming is too disruptive, keep `imageIds` for now and document that it is a legacy project-asset list.
+- [ ] Add `createdAt` and `updatedAt` timestamps to all new canvas objects.
+- [ ] Keep edge paths derived from object geometry; do not persist SVG path data unless manual bend points are designed later.
 
-- [ ] Add a references view separate from project Works.
-- [ ] Support masonry/grid browsing for references with source, tags, project chips, and board dots.
-- [ ] Add reference filters: tag, source domain, project, date captured, used/unused, relationship type.
-- [ ] Add "save to project/board" from reference cards.
-- [ ] Add "similar nearby" layout option on boards: selected reference plus connected work and notes.
-- [ ] Add batch tagging and batch board assignment for references.
+### 5.3 Canvas object model refactor
 
----
+- [ ] Add a colocated canvas-object helper module, for example `src/components/canvas/canvasObjects.ts`.
+- [ ] Introduce a renderer view model over all board objects:
 
-## Phase 6 — Board composition tools
+```ts
+type CanvasObjectKind =
+  | "item"
+  | "note"
+  | "text"
+  | "document"
+  | "link"
+  | "section";
 
-This phase improves the canvas as a thinking surface so complex boards stay readable.
+interface CanvasObjectView {
+  id: string;
+  kind: CanvasObjectKind;
+  geometry: CanvasObjectGeometry;
+  title: string;
+  connectable: boolean;
+  selectable: boolean;
+}
+```
 
-### 6.1 Canvas sections and frames
+- [ ] Use this view model for selection, dragging, resizing, connector handles, edge endpoint calculation, keyboard delete, and hit testing.
+- [ ] Keep persisted data in existing arrays until the view model proves stable.
+- [ ] Extract canvas mutations into named helpers near `CanvasView`:
+  - `addItemsToCanvas`
+  - `addDocumentToCanvas`
+  - `addLinkToCanvas`
+  - `addSectionToCanvas`
+  - `moveCanvasObjects`
+  - `resizeCanvasObject`
+  - `deleteCanvasObjects`
+  - `duplicateCanvasObjects`
+- [ ] Add unit tests for every canvas mutation helper before wiring the UI.
 
-- [ ] Add section/frame nodes to group cards spatially.
-- [ ] Allow users to title sections such as "References", "Sketches", "WIP", "Final pieces", and "Open questions".
-- [ ] Add section color and collapse/expand behavior.
+### 5.4 Node creation and capture flows
+
+- [ ] Replace the current board header tool cluster with a compact canvas toolbar:
+  - Select
+  - Connect
+  - Image
+  - Note
+  - Text
+  - Document
+  - Link
+  - Section
+  - Pen
+  - Eraser
+- [ ] Keep tool buttons icon-first with tooltips and clear active states.
+- [ ] Add paste support:
+  - image clipboard data imports into project `images/`, then places an image card on the board
+  - copied files import into the correct project folder, then place cards on the board
+  - URL text creates a link card
+  - plain text creates a note or text element depending on active tool
+- [ ] Add drag/drop support:
+  - image files import into `images/`
+  - document files import into `documents/`
+  - URLs create link cards
+  - project-image tray cards can still be clicked to add existing images
+- [ ] Add a link card creation popover with URL, title, optional description, and source domain.
+- [ ] Add document cards that show filename, extension/type, and an open-in-Finder or preview action.
+- [ ] Add text nodes that can behave as headings, labels, or paragraph notes without becoming oversized cards.
+
+### 5.5 Connections and graph behavior
+
+- [ ] Keep visible side connector handles for all connectable object kinds.
+- [ ] Add a dedicated Connect tool in addition to Shift-drag so the feature is discoverable.
+- [ ] Extend relationship types to:
+  - `related`
+  - `inspired-by`
+  - `uses`
+  - `variant-of`
+  - `version-of`
+  - `response-to`
+  - `part-of`
+- [ ] Keep optional freeform edge labels in addition to relationship type.
+- [ ] Add a quick relationship menu after creating an edge.
+- [ ] Add inline edge label editing on double-click.
+- [ ] Keep edge direction controls: none, forward, bidirectional.
+- [ ] Add "Connected to" backlinks in item/document/link details, grouped by relationship type.
+- [ ] Add "Appears on" project and board backlinks in item/document details.
+- [ ] Add tests for edge creation, deletion, label editing, type changes, direction changes, and endpoint recalculation after object movement.
+
+### 5.6 Sections, frames, and organization
+
+- [ ] Add section/frame nodes with title, color, bounds, and collapsed state.
 - [ ] Let cards be dragged into sections while preserving absolute canvas positions.
-- [ ] Store sections in `canvas.sections[]` with bounds, title, color, and collapsed state.
-- [ ] Add board templates that create common sections for project boards and reference boards.
-
-### 6.2 Selection and arrangement
-
+- [ ] Render section headers as lightweight board structure, not decorative cards.
+- [ ] Add section actions: rename, recolor, collapse/expand, duplicate, delete.
 - [ ] Add marquee/lasso selection on the canvas.
-- [ ] Allow moving multiple selected canvas objects together.
-- [ ] Add align left, align top, distribute horizontal, distribute vertical, and tidy grid actions.
-- [ ] Add duplicate and remove actions for selected notes and text elements.
-- [ ] Add keyboard shortcuts for delete, escape, zoom reset, and fit to content.
-- [ ] Add "fit board to content" and "zoom to selection".
+- [ ] Allow moving multiple selected objects together.
+- [ ] Add align left, align top, align center, distribute horizontal, distribute vertical, and tidy grid actions.
+- [ ] Add "organize selected into section" from the selection action bar.
+- [ ] Add "arrange by date" and "arrange by type" for selected project items.
+- [ ] Add keyboard shortcuts for delete, escape, duplicate, zoom reset, fit to content, and zoom to selection.
 
-### 6.3 Canvas navigation
+### 5.7 Built-in templates
 
-- [ ] Add minimap for large boards once content exceeds the visible viewport by a meaningful threshold.
-- [ ] Add zoom controls in the board header or corner overlay.
-- [ ] Add saved viewport per board so returning to a board restores the last useful area.
-- [ ] Add "jump to latest" and "jump to reviewed Work" actions.
-- [ ] Add search-within-board that highlights matching cards, notes, text elements, and labels.
+- [ ] Add a new-board template picker before creating a board.
+- [ ] Store templates as TypeScript definitions, not persisted records. Applying a template creates normal sections, notes, text elements, and optional starter links.
+- [ ] Keep `createdFromTemplate?: string` on `Canvas` only as optional provenance.
+- [ ] Include these first templates:
+  - **Blank board**: empty spatial canvas.
+  - **Project planning**: Brief, References, Work in progress, Final pieces, Open questions.
+  - **Moodboard**: Visual references, Color/material, Type/tone, Patterns, Notes.
+  - **Research map**: Sources, Claims/ideas, Evidence, Open questions, Follow-ups.
+  - **Work review**: Current Works, Revisions, Feedback notes, Next experiments.
+  - **Process timeline**: Early sketches, Iterations, Decisions, Final direction.
+  - **Comparison board**: Option A, Option B, Shared patterns, Tradeoffs.
+- [ ] Template definitions should include:
+  - board title suggestion
+  - default color
+  - sections with positions and sizes
+  - starter text/note prompts
+  - optional initial zoom/viewport
+- [ ] Add template unit tests that assert generated objects have stable IDs, valid bounds, no overlapping required sections, and complete timestamps.
 
-### 6.4 Board templates
+### 5.8 Navigation, viewport, and performance
 
-- [ ] Add new-board templates: Project, Reference board, Moodboard, Work review, Research map.
-- [ ] Project template starts with sections for Brief, References, Work in progress, Final pieces, and Notes.
-- [ ] Reference board template starts with sections for Sources, Patterns, Color/material, and Open questions.
-- [ ] Keep blank board as an option for unconstrained spatial work.
-- [ ] Store template choice only as initial board content; users can fully edit afterward.
+- [ ] Add zoom controls in a corner overlay or board header.
+- [ ] Add fit-to-content and zoom-to-selection.
+- [ ] Add saved viewport per board:
+
+```ts
+interface CanvasViewportState {
+  x: number;
+  y: number;
+  zoom: number;
+  updatedAt: string;
+}
+```
+
+- [ ] Add minimap only after content exceeds the visible viewport by a meaningful threshold.
+- [ ] Add search-within-board that highlights matching image titles, document names, link titles, notes, text elements, section names, and edge labels.
+- [ ] Measure board performance with 100, 250, and 500 objects before adding virtualization.
+- [ ] Keep thumbnail usage for image cards and only load originals when editing or previewing.
+
+### 5.9 Testing and verification plan
+
+- [ ] Add model tests next to every new helper:
+  - `canvasObjects.test.ts`
+  - `canvasTemplates.test.ts`
+  - `canvasArrangement.test.ts`
+  - `canvasLinks.test.ts`
+- [ ] Add React tests for:
+  - template picker
+  - toolbar active states
+  - document card rendering
+  - link card rendering
+  - section collapse/expand
+  - multi-select and selection action bar
+  - connect tool and quick relationship menu
+- [ ] Add main-process tests for:
+  - document import into `documents/`
+  - image import into `images/`
+  - dropped URL metadata persistence
+  - schema migration for old canvases
+  - folder reconciliation with new document assets
+- [ ] Run before considering Phase 5 complete:
+  - `npm test`
+  - `npm run test:coverage`
+  - `npm run lint`
+  - `npm run package`
+- [ ] Preserve the repository coverage bar above 85% for statements, functions, and lines.
+
+### 5.10 Implementation order
+
+1. **Canvas object foundation**: add view-model helpers, tests, and existing-object adapters without UI changes.
+2. **Schema and folder migration**: add sections, links, document folder support, and migration tests.
+3. **Toolbar and creation flows**: add tools for image, note, text, document, link, and section creation.
+4. **Drop and paste capture**: route files, URLs, images, and text into the active board.
+5. **Connection upgrades**: add connect mode, expanded relationship types, quick label/type editing, and backlinks.
+6. **Selection and arrangement**: add lasso, multi-move, align, distribute, tidy grid, duplicate, and delete.
+7. **Templates**: add template definitions, chooser UI, preview, and template application tests.
+8. **Navigation polish**: add saved viewport, fit-to-content, zoom-to-selection, and optional minimap.
+9. **Performance and QA**: test large boards, keyboard paths, accessibility, package build, and data migration.
 
 ---
 
-## Phase 7 — Search, retrieval, and intelligence
+## Phase 6 — Search, retrieval, and intelligence
 
-This phase makes a larger project library useful without requiring perfect manual organization.
+This phase makes a larger project library useful without requiring perfect manual organization. It should build on the richer Phase 5 canvas objects and relationships rather than adding a separate database too early.
 
-### 7.1 Search foundation
+### 6.1 Search foundation
 
 - [ ] Add global search across item titles, descriptions, tags, board titles, notes, reference metadata, and edge labels.
 - [ ] Add scoped search for current project or board.
@@ -478,7 +625,7 @@ This phase makes a larger project library useful without requiring perfect manua
 - [ ] Add sort controls: newest, oldest, recently edited, project, stage, title.
 - [ ] Add "needs sorting" filter for items with no board, no tag, and no stage edits.
 
-### 7.2 Metadata extraction
+### 6.2 Metadata extraction
 
 - [ ] Store basic file metadata: size, dimensions, extension, importedAt, and optional original created date.
 - [ ] Add OCR for screenshots and text-heavy images only if local-first processing remains practical.
@@ -486,7 +633,7 @@ This phase makes a larger project library useful without requiring perfect manua
 - [ ] Add duplicate/near-duplicate detection beyond first-64KB hash.
 - [ ] Add optional generated contact sheets per project or board.
 
-### 7.3 Suggested organization
+### 6.3 Suggested organization
 
 - [ ] Suggest tags from filename, folder, board context, and existing tag vocabulary.
 - [ ] Suggest adding unsorted items to active projects or boards based on import timing and visual/source similarity.
@@ -496,11 +643,11 @@ This phase makes a larger project library useful without requiring perfect manua
 
 ---
 
-## Phase 8 — Longer-term directions
+## Phase 7 — Longer-term directions
 
 These ideas should not block the project workspace and reference graph MVP, but they describe where the product can go after the core loop works.
 
-### 8.1 Export and presentation
+### 7.1 Export and presentation
 
 - [ ] Export a project board as an image or PDF contact sheet.
 - [ ] Export a board snapshot as a shareable outside file without introducing in-app collaboration state.
@@ -510,7 +657,7 @@ These ideas should not block the project workspace and reference graph MVP, but 
 - [ ] Add printable project review summaries.
 - [ ] Add scoped folder actions only for current project folders that need direct Finder access.
 
-### 8.2 Sync and portability
+### 7.2 Sync and portability
 
 - [ ] Keep single-user local-first as the default product shape.
 - [ ] Design cloud sync only after conflict rules are specified for JSON metadata, moved files, and duplicate imports.
@@ -518,7 +665,7 @@ These ideas should not block the project workspace and reference graph MVP, but 
 - [ ] Add explicit backup/export workflow before any networked sync.
 - [ ] Keep readable file layout as a non-negotiable constraint.
 
-### 8.3 Collaboration and sharing
+### 7.3 Collaboration and sharing
 
 - [ ] Treat collaboration as out of scope for the app surface.
 - [ ] Do not add shared projects, invitations, comments, approvals, tasks, or team review states.

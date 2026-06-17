@@ -201,8 +201,9 @@ interface Project {
 
 Project semantics:
 
-- `imageIds` is the complete list of images in the project.
-- `workItemIds` is a subset of `imageIds` promoted into Works.
+- `imageIds` is the current complete list of project media/assets used by the project image and board flows.
+- Phase 5 should either formalize `imageIds` as a legacy compatibility name or introduce `itemIds` as the canonical list for all project assets, including documents.
+- `workItemIds` is a subset of the project asset list promoted into Works.
 - `boardIds` stores project board ordering. Each referenced canvas should also carry `projectId` so ownership can be recovered if ordering metadata drifts.
 - Works are not a separate file type or task state. A Work is an image in a project with project-level work membership.
 - The app may continue to support loose archive items, but the primary capture path should import into a project.
@@ -297,13 +298,21 @@ The app has existing import paths, plus planned clipboard capture, that should b
 2. Paste images or copied image files into a project. Clipboard capture should use the same project import path as drag/drop.
 3. Press Import and choose files or Photos. The main process opens a native file picker, or on macOS launches the Swift `FolioPhotosPicker` helper, then imports into the active project.
 
-Project imports are copied to:
+Visual project imports are copied to:
 
 ```text
 ~/Documents/Folio/projects/<project-slug-or-id>/images/
 ```
 
-The file is registered as a `FolioItem`, appended to `Project.imageIds`, and shown in the project's All Images list. Filenames are sanitized and collision-safe. When Electron can read image dimensions, imported images store optional `mediaWidth`/`mediaHeight` values for proportional board card sizing.
+The file is registered as a `FolioItem`, appended to the project asset list, and shown in the project's All Images list. Filenames are sanitized and collision-safe. When Electron can read image dimensions, imported images store optional `mediaWidth`/`mediaHeight` values for proportional board card sizing.
+
+Phase 5 document imports should be copied to:
+
+```text
+~/Documents/Folio/projects/<project-slug-or-id>/documents/
+```
+
+Documents should also be registered as `FolioItem` records so they can appear on multiple boards, be connected to other nodes, show backlinks, and be recovered through the same reconciliation path as images.
 
 Dragging or pasting a new image directly onto a project board should still import it into the project image list first, then add the resulting item to the board's `itemIds` and `positions`. This keeps board content reusable in the project instead of hiding media inside a board-only folder.
 
@@ -324,12 +333,14 @@ Generated files use `-small` suffixes and are served through `folio://thumb/...`
 
 Opening the app should show a Projects view, not the archive. The Projects view lists all projects from `projects.json`, supports creating any number of projects, and makes the local project folder easy to reveal in Finder.
 
-Opening a project shows a project workspace with three primary surfaces:
+Opening a project shows a project workspace with four primary surfaces:
 
 - **All Images**: every image in `Project.imageIds`, including images dragged, pasted, imported, or dropped onto a project board. This lives in its own Library area in the project sidebar.
 - **Works**: the subset in `Project.workItemIds`, shown with strip, grid, and heatmap views so the user can track actual pieces of work over time.
 - **Review**: a progress overview with Markdown review documents for private self-review against Works. Opening a review navigates to a dedicated editor page with Work tags and direct navigation back to Projects.
 - **Boards**: all canvases owned by the project, with creation, switching, project-image tray placement, and board canvas editing.
+
+If Phase 5 introduces project documents, the project sidebar can keep All Images as the visual library and add document access through board creation/search first. A broader Assets view should only replace All Images if the document workflow becomes common enough to justify the product language change.
 
 The existing archive strip/grid can remain available as a legacy or global view, but the default product path should be project selection, then project-scoped capture and review. Tags, filters, size controls, and thumbnail behavior should be reused inside project image and Works views before creating parallel UI systems.
 
@@ -371,6 +382,91 @@ Board headers show `createdAt` and `updatedAt` timestamps instead of object coun
 Canvas boards use `CanvasViewport`, which renders the dotted background with an actual HTML `<canvas>`. The scrollable surface contains project image cards, notes, and text elements as absolutely positioned React elements. Wheel input zooms around the pointer, clamps between the configured min and max zoom, and prevents the page-style scroll effect once the zoom limit is reached.
 
 Canvas project-image cards render as image-only objects in the board surface. When source dimensions are known, default card bounds are scaled from the image's natural proportions instead of a single fixed rectangle; legacy items without dimensions use the existing fallback size. Cards, notes, and text elements are draggable from any non-control area. Pointer movement beyond the small drag threshold becomes a drag; otherwise the action remains a click. They can also be resized from the lower-right corner; saved dimensions are optional `width`/`height` fields on the same canvas objects, and image cards preserve their aspect ratio while resizing. Remove/delete controls appear on hover or focus. Board text renders in lightweight resizable text boxes, supports `sm`, `md`, and `large` text sizes, and saves typed text after a short debounce.
+
+## Phase 5 Canvas Workspace Architecture
+
+Phase 5 should make Boards feel closer to a focused FigJam or MelloNote-style studio canvas while keeping Folio's local-first constraints. The implementation should evolve the existing canvas rather than replacing it with a separate whiteboard engine.
+
+The renderer should introduce a unified board-object view model over the existing persisted arrays:
+
+```ts
+type CanvasObjectKind =
+  | "item"
+  | "note"
+  | "text"
+  | "document"
+  | "link"
+  | "section";
+
+interface CanvasObjectView {
+  id: string;
+  kind: CanvasObjectKind;
+  geometry: CanvasObjectGeometry;
+  title: string;
+  connectable: boolean;
+  selectable: boolean;
+}
+```
+
+This model is a renderer adapter first, not necessarily the persisted schema. It should drive dragging, resizing, connector handles, lasso selection, multi-object movement, keyboard delete, edge endpoint calculation, and hit testing. Persisted board data should remain readable for old boards through `itemIds`, `positions`, `notes`, `texts`, `edges`, and `strokes`.
+
+Phase 5 adds two persisted canvas object types:
+
+```ts
+interface CanvasSection extends CanvasObjectGeometry {
+  id: string;
+  title: string;
+  color?: string;
+  collapsed?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface CanvasLink extends CanvasObjectGeometry {
+  id: string;
+  url: string;
+  title: string;
+  description?: string;
+  sourceDomain?: string;
+  faviconUrl?: string;
+  capturedAt: string;
+  updatedAt?: string;
+}
+
+interface Canvas {
+  // existing fields...
+  sections?: CanvasSection[];
+  links?: CanvasLink[];
+  viewport?: CanvasViewportState;
+  createdFromTemplate?: string;
+}
+```
+
+Documents should be normal `FolioItem` records rather than canvas-only blobs. The preferred visible folder layout is:
+
+```text
+projects/<project-slug>/
+  images/       # visual source files and image-like media
+  documents/    # PDFs, text, Markdown, office files, and other document assets
+  works/        # generated readable representation of Works membership
+  boards/
+  reviews/
+```
+
+Existing project imports currently use `images/` for all imported assets. A Phase 5 migration can either keep that behavior and document `imageIds` as a legacy asset list, or introduce `Project.itemIds` as the canonical all-asset list with `imageIds` retained as a compatibility alias during migration. The long-term architecture should prefer `itemIds` because boards will support documents and non-image assets.
+
+Outside links should live in `canvases.json` because a link card is board context, not a source file. If a future feature captures link preview images or archived page snapshots, those should be imported as explicit project assets and connected to the link card rather than hidden inside a board folder.
+
+Templates should be TypeScript definitions in the renderer, not persisted user records. Applying a template should create ordinary sections, notes, text elements, and optional starter links. After creation, the board is fully editable and no behavior depends on the template.
+
+Phase 5 should add helper modules before UI expansion:
+
+- `canvasObjects.ts` — builds object view models from items, notes, texts, links, and sections.
+- `canvasTemplates.ts` — owns built-in template definitions and object generation.
+- `canvasArrangement.ts` — align, distribute, tidy grid, arrange by date/type.
+- `canvasLinks.ts` — URL normalization and link-card defaults.
+
+Each helper should have a colocated test file. React components should stay focused: template picker, canvas toolbar, link card, document card, section frame, and selection action bar should be separate components rather than more branches inside `CanvasView`.
 
 ## Project Home Architecture
 
