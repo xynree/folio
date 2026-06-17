@@ -701,6 +701,16 @@ export function CanvasView({
     }
   }, [activeCanvas, addReferencesAtPosition, centerPositionForCurrentViewport]);
 
+  const openBoardFolder = useCallback(() => {
+    if (!activeCanvas) return;
+    const boardFolder = activeProject
+      ? `${activeProject.folderPath}/boards/${activeCanvas.id}`
+      : `references/${activeCanvas.id}`;
+    void window.folio.openInFinder(boardFolder).catch((error) => {
+      console.error(error);
+    });
+  }, [activeCanvas, activeProject]);
+
   const handleReferenceDrop = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -984,6 +994,7 @@ export function CanvasView({
           onImportImages={importToBoard}
           onImportReferences={importReferencesToBoard}
           onMinimize={onMinimize}
+          onOpenBoardFolder={openBoardFolder}
           onSaveBoardSettings={saveBoardSettingsForCanvas}
           onToggleBoardTools={() => setBoardToolsOpen((current) => !current)}
           onUndoStroke={undoLastStroke}

@@ -275,7 +275,15 @@ button svg {
   white-space: nowrap;
 }
 
-.project-open-button {
+.project-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-self: start;
+}
+
+.project-open-button,
+.project-open-folder-button {
   justify-self: start;
 }
 
@@ -497,6 +505,30 @@ button svg {
   border: 1px solid #ded2c1;
   border-radius: 7px;
   -webkit-app-region: no-drag;
+}
+
+.project-folder-actions {
+  position: absolute;
+  left: min(590px, calc(100vw - 300px));
+  display: inline-flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.project-folder-actions .icon-button {
+  width: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.project-folder-actions .icon-button:hover,
+.project-folder-actions .icon-button:focus-visible {
+  background: rgba(56, 93, 86, 0.16);
+  transform: none;
 }
 
 .project-surface-tabs button {

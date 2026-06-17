@@ -6,6 +6,7 @@ import { makeCanvas, makeData, makeItem, makeProject } from "../test/fixtures";
 
 const electronMocks = vi.hoisted(() => ({
   homePath: "",
+  openPath: vi.fn(),
   showItemInFolder: vi.fn(),
   trashItem: vi.fn(),
 }));
@@ -34,6 +35,7 @@ vi.mock("electron", () => ({
     handle: vi.fn(),
   },
   shell: {
+    openPath: electronMocks.openPath,
     showItemInFolder: electronMocks.showItemInFolder,
     trashItem: electronMocks.trashItem,
   },
@@ -139,6 +141,18 @@ describe("FolioManager project Works", () => {
         ],
       }),
     );
+    await expect(
+      fs.stat(
+        path.join(
+          folioRoot,
+          "projects",
+          "color-study",
+          "boards",
+          "board-1",
+          "references",
+        ),
+      ),
+    ).resolves.toBeTruthy();
 
     const references = await manager.copyReference("board-1", [sourcePath]);
 
@@ -149,5 +163,25 @@ describe("FolioManager project Works", () => {
     await expect(
       fs.readFile(path.join(folioRoot, references[0].path), "utf-8"),
     ).resolves.toBe("reference bytes");
+  });
+
+  it("opens folders directly and reveals files in Finder", async () => {
+    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "folio-manager-"));
+    electronMocks.homePath = tempHome;
+    electronMocks.openPath.mockResolvedValue("");
+
+    const folioRoot = path.join(tempHome, "Documents", "Folio");
+    const folderPath = path.join(folioRoot, "projects", "color-study");
+    const filePath = path.join(folderPath, "image.png");
+    await fs.mkdir(folderPath, { recursive: true });
+    await fs.writeFile(filePath, "image bytes");
+
+    const manager = new FolioManager();
+
+    await manager.openInFinder("projects/color-study");
+    await manager.openInFinder("projects/color-study/image.png");
+
+    expect(electronMocks.openPath).toHaveBeenCalledWith(folderPath);
+    expect(electronMocks.showItemInFolder).toHaveBeenCalledWith(filePath);
   });
 });

@@ -10,10 +10,13 @@ import {
   ChevronDown,
   ChevronUp,
   Columns2,
+  FolderOpen,
   Grid3X3,
+  Images,
   PanelLeft,
   PanelRight,
   Rows3,
+  Star,
   Upload,
 } from "lucide-react";
 import type {
@@ -515,6 +518,20 @@ export function AppShell() {
     setDetailItemId(null);
     clearSelection();
   }, [clearSelection]);
+
+  const openFolioPath = useCallback((relativePath: string) => {
+    void window.folio.openInFinder(relativePath).catch((error) => {
+      console.error(error);
+      setToast("Folder could not be opened");
+    });
+  }, []);
+
+  const openProjectFolder = useCallback(
+    (project: Project) => {
+      openFolioPath(project.folderPath);
+    },
+    [openFolioPath],
+  );
 
   const createProjectFromHome = useCallback(
     async (title: string) => {
@@ -1146,6 +1163,35 @@ export function AppShell() {
             Projects
           </button>
           <strong className="active-project-title">{activeProject.title}</strong>
+          <div className="project-folder-actions" aria-label="Project folders">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Open project folder"
+              title="Open project folder"
+              onClick={() => openFolioPath(activeProject.folderPath)}
+            >
+              <ButtonIcon icon={FolderOpen} />
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Open project images folder"
+              title="Open project images folder"
+              onClick={() => openFolioPath(`${activeProject.folderPath}/images`)}
+            >
+              <ButtonIcon icon={Images} />
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Open project Works folder"
+              title="Open project Works folder"
+              onClick={() => openFolioPath(`${activeProject.folderPath}/works`)}
+            >
+              <ButtonIcon icon={Star} />
+            </button>
+          </div>
           <div className="project-surface-tabs" aria-label="Project surface">
             <button
               className={projectSurface === "images" ? "active" : ""}
@@ -1461,6 +1507,7 @@ export function AppShell() {
           data={data}
           busy={busy}
           onCreateProject={createProjectFromHome}
+          onOpenFolder={openProjectFolder}
           onOpenProject={openProject}
         />
       )}

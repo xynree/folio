@@ -177,6 +177,7 @@ describe("canvas components", () => {
           onImportImages={vi.fn()}
           onImportReferences={vi.fn()}
           onMinimize={vi.fn()}
+          onOpenBoardFolder={vi.fn()}
           onSaveBoardSettings={vi.fn()}
           onToggleBoardTools={vi.fn()}
           onUndoStroke={vi.fn()}

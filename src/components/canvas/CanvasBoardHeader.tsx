@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Edit3,
   Eraser,
+  FolderOpen,
   ImagePlus,
   Minimize2,
   Paperclip,
@@ -47,6 +48,7 @@ type CanvasBoardHeaderProps = {
   onImportImages: () => void;
   onImportReferences: () => void;
   onMinimize: () => void;
+  onOpenBoardFolder: () => void;
   onSaveBoardSettings: (canvas: Canvas) => void;
   onToggleBoardTools: () => void;
   onUndoStroke: () => void;
@@ -68,6 +70,7 @@ export function CanvasBoardHeader({
   onImportImages,
   onImportReferences,
   onMinimize,
+  onOpenBoardFolder,
   onSaveBoardSettings,
   onToggleBoardTools,
   onUndoStroke,
@@ -165,6 +168,15 @@ export function CanvasBoardHeader({
           onClick={() => toggleTool("text")}
         >
           <ButtonIcon icon={Type} />
+        </button>
+        <button
+          className="canvas-board-action-button"
+          type="button"
+          aria-label="Open board folder"
+          title="Open board folder"
+          onClick={onOpenBoardFolder}
+        >
+          <ButtonIcon icon={FolderOpen} />
         </button>
         <button
           className="canvas-board-action-button"

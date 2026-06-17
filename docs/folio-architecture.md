@@ -543,9 +543,9 @@ Export should be modeled as one-way artifact generation:
 
 Folder access should use existing main-process shell capabilities:
 
-- `openInFinder(filePath)` already opens an individual item.
-- Add project-level actions that reveal `~/Documents/Folio/projects/<project-slug-or-id>/`.
-- Add scoped actions for project `images/`, `works/`, and `boards/<board-id>/`.
+- `openInFinder(filePath)` opens individual items and opens directory paths directly.
+- Project-level actions reveal `~/Documents/Folio/projects/<project-slug-or-id>/`.
+- Scoped actions open project `images/`, `works/`, and `boards/<board-id>/` folders.
 - If a legacy project spans old archive month folders, show a file list or migrate/copy into the project folder before relying on Finder folder access.
 
 No persistent collaborator, comment, permission, or shared-review schema is needed for these flows.

@@ -5,6 +5,7 @@ Folio is a local-first Electron app for collecting visual work, browsing it by t
 ## Current Features
 
 - Archive import from drag and drop, the floating Import action, Finder file selection, and the macOS Photos picker helper.
+- Projects as the first screen, with readable project folders, project-scoped image lists, Works, boards, and Finder folder shortcuts.
 - Strip and grid archive views with most-recent-first sorting, tag filtering, multi-select, and a 50%-200% UI scale control.
 - A persistent bottom heatmap inspired by GitHub activity grids, with upload intensity capped at 8 items per day.
 - A resizable tags sidebar with per-tag counts and thumbnail previews.
@@ -15,6 +16,7 @@ Folio is a local-first Electron app for collecting visual work, browsing it by t
 - Freehand pen strokes on boards with an eraser and Cmd+Z undo.
 - Resizable board text boxes for quick labels, headings, and questions, with small, medium, and large sizing.
 - Board settings for title, color, delete, and board member dots on archive cards.
+- Project board references are stored under the owning project board folder when a board belongs to a project.
 - Small generated thumbnails for archive cards, board previews, and canvas references so the UI does not load full source images for normal browsing.
 - Local reconciliation for files renamed, moved, or deleted in Finder.
 
@@ -42,6 +44,16 @@ The app manages a folder at `~/Documents/Folio`:
     2026/
       06_june/
         example.png
+  projects/
+    <project-slug>/
+      images/
+        project-image.png
+      works/
+        promoted-work-link-or-copy.png
+      boards/
+        <board-id>/
+          references/
+            reference-image.png
   references/
     <board-id>/
       reference-image.png
@@ -49,12 +61,13 @@ The app manages a folder at `~/Documents/Folio`:
     folio.json
     tags.json
     canvases.json
+    projects.json
     thumbs/
       <item-id>-small.jpg
       reference-<reference-id>-small.jpg
 ```
 
-`items/` and `references/` are user-readable media folders. `.folio/` stores app metadata and a regenerable thumbnail cache.
+`projects/`, `items/`, and `references/` are user-readable media folders. `.folio/` stores app metadata and a regenerable thumbnail cache.
 
 ## Project Organization
 

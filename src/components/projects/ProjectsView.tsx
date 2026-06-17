@@ -39,11 +39,13 @@ export function ProjectsView({
   data,
   busy,
   onCreateProject,
+  onOpenFolder,
   onOpenProject,
 }: {
   data: FolioData;
   busy: boolean;
   onCreateProject: (title: string) => Promise<void>;
+  onOpenFolder: (project: Project) => void;
   onOpenProject: (projectId: string) => void;
 }) {
   const [titleDraft, setTitleDraft] = useState("");
@@ -118,14 +120,24 @@ export function ProjectsView({
                   </span>
                   <span>{project.folderPath}</span>
                 </div>
-                <button
-                  className="secondary-action project-open-button"
-                  type="button"
-                  onClick={() => onOpenProject(project.id)}
-                >
-                  <ButtonIcon icon={FolderOpen} />
-                  Open project
-                </button>
+                <div className="project-card-actions">
+                  <button
+                    className="secondary-action project-open-folder-button"
+                    type="button"
+                    onClick={() => onOpenFolder(project)}
+                  >
+                    <ButtonIcon icon={FolderOpen} />
+                    Open folder
+                  </button>
+                  <button
+                    className="secondary-action project-open-button"
+                    type="button"
+                    onClick={() => onOpenProject(project.id)}
+                  >
+                    <ButtonIcon icon={FolderOpen} />
+                    Open project
+                  </button>
+                </div>
               </article>
             );
           })}

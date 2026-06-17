@@ -349,6 +349,8 @@ export class FolioManager implements FolioManagerInterface {
     this.canvases = data.canvases;
     this.projects = data.projects;
 
+    await Promise.all(this.projects.map((project) => this.ensureProjectDirectories(project)));
+
     await Promise.all([
       this.archiveManager.save(this.version),
       this.storageManager.saveTags(this.tagsPath, this.tags, this.version),
@@ -743,6 +745,19 @@ export class FolioManager implements FolioManagerInterface {
 
   async openInFinder(filePath: string): Promise<void> {
     const absolutePath = this.archiveManager.getAbsolutePath(filePath);
+    try {
+      const stats = await fs.stat(absolutePath);
+      if (stats.isDirectory()) {
+        const error = await shell.openPath(absolutePath);
+        if (error) throw new Error(error);
+        return;
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+
     shell.showItemInFolder(absolutePath);
   }
 
@@ -1059,6 +1074,11 @@ export class FolioManager implements FolioManagerInterface {
       fs.mkdir(path.join(projectRoot, "images"), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "works"), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "boards"), { recursive: true }),
+      ...project.boardIds.map((boardId) =>
+        fs.mkdir(path.join(projectRoot, "boards", boardId, "references"), {
+          recursive: true,
+        }),
+      ),
     ]);
   }
 

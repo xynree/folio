@@ -362,12 +362,12 @@ This phase turns the current archive and board system into a project-based creat
 
 ### 4.5 Local folder access and tracking
 
-- [ ] Add "Open project folder" from the Projects view and project workspace.
-- [ ] Add scoped folder actions for project Images, Works, and a specific board folder.
-- [ ] Ensure all project images, Works membership, and canvases are recoverable from local files plus `.folio/*.json`.
-- [ ] Keep source images readable in project folders and metadata inspectable in `.folio/projects.json`, `.folio/folio.json`, and `.folio/canvases.json`.
-- [ ] Keep file operations non-destructive; reconciliation should mark missing files and repair moved paths by hash where possible.
-- [ ] Preserve the legacy archive path as a migration and unsorted-import fallback, not the main product surface.
+- [x] Add "Open project folder" from the Projects view and project workspace.
+- [x] Add scoped folder actions for project Images, Works, and a specific board folder.
+- [x] Ensure all project images, Works membership, and canvases are recoverable from local files plus `.folio/*.json`.
+- [x] Keep source images readable in project folders and metadata inspectable in `.folio/projects.json`, `.folio/folio.json`, and `.folio/canvases.json`.
+- [x] Keep file operations non-destructive; reconciliation should mark missing files and repair moved paths by hash where possible.
+- [x] Preserve the legacy archive path as a migration and unsorted-import fallback, not the main product surface.
 
 ### 4.6 Project review, timeline, and output
 

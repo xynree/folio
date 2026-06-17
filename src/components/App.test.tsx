@@ -293,6 +293,33 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.getByText("projects/color-studies")).not.toBeNull();
   });
 
+  it("opens project folders from the home view and workspace", async () => {
+    setupFolio();
+    const user = userEvent.setup();
+
+    await screen.findByRole("heading", { name: /studio workspace/i });
+    await user.click(screen.getByRole("button", { name: /^open folder$/i }));
+
+    expect(window.folio.openInFinder).toHaveBeenCalledWith(
+      "projects/studio-archive",
+    );
+
+    await waitForArchive();
+    await user.click(screen.getByLabelText("Open project folder"));
+    await user.click(screen.getByLabelText("Open project images folder"));
+    await user.click(screen.getByLabelText("Open project Works folder"));
+
+    expect(window.folio.openInFinder).toHaveBeenCalledWith(
+      "projects/studio-archive",
+    );
+    expect(window.folio.openInFinder).toHaveBeenCalledWith(
+      "projects/studio-archive/images",
+    );
+    expect(window.folio.openInFinder).toHaveBeenCalledWith(
+      "projects/studio-archive/works",
+    );
+  });
+
   it("loads archive data, thumbnails, status counts, and the docked board panel", async () => {
     setupFolio();
     const user = userEvent.setup();
@@ -1228,6 +1255,10 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await waitForArchive();
     await openActiveBoardCanvas(user);
+    await user.click(screen.getByLabelText("Open board folder"));
+    expect(window.folio.openInFinder).toHaveBeenCalledWith(
+      "projects/studio-archive/boards/board-1",
+    );
     expect(
       screen.getByRole("button", { name: /add note/i }).closest(".canvas-board-actions"),
     ).not.toBeNull();
