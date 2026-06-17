@@ -1,6 +1,6 @@
 # Folio
 
-Folio is a local-first Electron app for collecting visual work, organizing it into projects, reviewing Works over time, and arranging project images on spatial canvas boards. The app is built for a single-user desktop studio archive: files stay readable in `~/Documents/Folio`, app state is stored beside them as JSON, and the UI works without a backend.
+Folio is a local-first Electron app for collecting visual work, organizing it into projects, reviewing Works over time, and arranging project assets on spatial canvas boards. The app is built for a single-user desktop studio archive: files stay readable in `~/Documents/Folio`, app state is stored beside them as JSON, and the UI works without a backend.
 
 ## Current Features
 
@@ -10,14 +10,17 @@ Folio is a local-first Electron app for collecting visual work, organizing it in
 - Strip and grid views for All Images and Works, with most-recent-first sorting, tag filtering, multi-select, and a 50%-200% UI scale control.
 - A Works-only bottom heatmap shown only in the Works view, with work activity capped at 8 items per day.
 - A compact tags rail that starts auto-collapsed, expands on demand, and still supports per-tag counts and thumbnail previews.
-- A Boards sidebar view that opens to a project board browser or a focused canvas board, with a scrollable project-image tray for adding existing project images to the open board.
-- Canvas boards with image-only draggable and resizable project image cards, notes, and text; image cards default to the source image's proportions.
+- A Boards sidebar view that opens to a project board browser or a focused canvas board, with built-in board templates and a scrollable project asset tray for adding existing images and documents.
+- Canvas boards with draggable and resizable image cards, document cards, link cards, section frames, notes, and text; image cards default to the source image's proportions.
+- Canvas selection tools for selecting multiple objects, moving them together, aligning, distributing, tidying into a grid, arranging by date/type, duplicating editable objects, deleting selected objects, and organizing a selection into a section.
+- Board search highlights matching image titles, document names, links, notes, text, section names, and edge labels. Large boards show a minimap when content meaningfully exceeds the viewport.
 - Double-clicking an image or Work opens the item editor with a large source preview on the left and editable metadata on the right.
 - Board headers show when each board was created and when it was last saved.
-- Side-node connection edges between canvas items, notes, and board text, with inline labels and direction modes.
-- Canvas relationships can be marked as related, inspired by, or version of.
+- Side-node connection edges between canvas items, documents, notes, text, links, and sections, with inline labels, direction modes, and relationship types.
+- Canvas relationships can be marked as related, inspired by, uses, variant of, version of, response to, or part of.
 - Freehand pen strokes on boards with an eraser and Cmd+Z undo.
 - Resizable board text boxes for quick labels, headings, and questions, with small, medium, and large sizing.
+- Board viewport state is saved, with zoom controls, reset zoom, fit-to-content, and keyboard zoom-to-selection.
 - Board settings for title, color, delete, and board member dots on archive cards.
 - Small generated thumbnails for archive cards and board previews so the UI does not load full source images for normal browsing.
 - Local reconciliation for files renamed, moved, or deleted in Finder.
@@ -46,6 +49,8 @@ The app manages a folder at `~/Documents/Folio`:
     <project-slug>/
       images/
         example.png
+      documents/
+        brief.md
       works/
         promoted-work-link-or-copy.png
       reviews/
@@ -61,7 +66,7 @@ The app manages a folder at `~/Documents/Folio`:
       <item-id>-small.jpg
 ```
 
-Each project owns its own `images/`, `works/`, `boards/`, and `reviews/` folders. `.folio/` stores app metadata and a regenerable thumbnail cache. Legacy `items/` and root-level media folders are migrated into the owning project at launch when Folio can match them to metadata.
+Each project owns its own `images/`, `documents/`, `works/`, `boards/`, and `reviews/` folders. `.folio/` stores app metadata and a regenerable thumbnail cache. Legacy `items/` and root-level media folders are migrated into the owning project at launch when Folio can match them to metadata.
 
 ## Project Organization
 
@@ -69,7 +74,7 @@ Each project owns its own `images/`, `works/`, `boards/`, and `reviews/` folders
 src/
   main/                 Electron main-process managers
   components/archive/   Strip, grid, heatmap, item cards, and tags sidebar
-  components/canvas/    Board browser, canvas viewport, cards, notes, text
+  components/canvas/    Board browser, canvas viewport, canvas cards, templates, selection, arrangement
   components/details/   Item details modal
   components/folio/     Renderer model helpers, constants, and import helpers
   components/layout/    Selection bar, status bar, reconciliation notice
@@ -113,4 +118,4 @@ npm run package
 - The archive is intentionally offline-first and has no backend.
 - The JSON files are small, readable, and portable.
 - Thumbnails are cache files and can be regenerated from source media.
-- Current canvas boards support spatial arrangement, notes, text elements, connection edges, and freehand strokes.
+- Current canvas boards support spatial arrangement, project assets, notes, text elements, link cards, sections, connection edges, search, minimap, templates, and freehand strokes.

@@ -6,9 +6,22 @@ import type {
   CanvasPosition,
 } from "../../types";
 
-export type CanvasObjectKind = "item" | "note" | "text";
+export type CanvasObjectKind =
+  | "item"
+  | "document"
+  | "note"
+  | "text"
+  | "link"
+  | "section";
 
-export type CanvasTool = "select" | "pen" | "eraser" | "text";
+export type CanvasTool =
+  | "select"
+  | "connect"
+  | "pen"
+  | "eraser"
+  | "text"
+  | "link"
+  | "section";
 
 export type CanvasObjectLayout = {
   id: string;

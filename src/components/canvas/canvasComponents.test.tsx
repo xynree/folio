@@ -7,15 +7,20 @@ import { BoardEditDialog } from "./BoardEditDialog";
 import { CanvasBoardHeader } from "./CanvasBoardHeader";
 import {
   CanvasItemCard,
+  CanvasLinkCard,
   CanvasNoteCard,
+  CanvasSectionFrame,
   CanvasTextCard,
 } from "./CanvasCards";
 import { CanvasEdgeLabels } from "./CanvasEdgeLabels";
 import { CanvasInkLayer } from "./CanvasInkLayer";
+import { CanvasMinimap } from "./CanvasMinimap";
 import { CanvasObjectLayer } from "./CanvasObjectLayer";
+import { CanvasSelectionBar } from "./CanvasSelectionBar";
 import { CanvasToolCursor } from "./CanvasToolCursor";
 import { CanvasViewport } from "./CanvasViewport";
 import { edgeRenderModelsFromLayouts, objectLayoutFromPosition } from "./canvasGeometry";
+import type { CanvasTool } from "./canvasTypes";
 
 const item = makeItem("alpha", { title: "Alpha" });
 const thumbUrls: ThumbnailUrls = { alpha: "folio://thumb/alpha.jpg" };
@@ -100,12 +105,15 @@ describe("canvas components", () => {
       />,
     );
 
+    fireEvent.change(screen.getByLabelText("Template"), {
+      target: { value: "moodboard" },
+    });
     fireEvent.click(screen.getByText("New board"));
     fireEvent.click(screen.getByLabelText(/Open Board/));
     fireEvent.click(screen.getByText("Edit"));
     fireEvent.click(screen.getByText("Delete"));
 
-    expect(onCreateBoard).toHaveBeenCalledTimes(1);
+    expect(onCreateBoard).toHaveBeenCalledWith("moodboard");
     expect(onOpenCanvas).toHaveBeenCalledWith("board-1");
     expect(onEditCanvas).toHaveBeenCalledWith("board-1");
     expect(onDeleteBoardById).toHaveBeenCalledWith("board-1");
@@ -144,32 +152,42 @@ describe("canvas components", () => {
   });
 
   it("dispatches board header tool and action callbacks", () => {
+    const onFitContent = vi.fn();
+    const onResetZoom = vi.fn();
+    const onZoomIn = vi.fn();
+    const onZoomOut = vi.fn();
+
     function Harness() {
-      const [activeTool, setActiveTool] = useState<"select" | "pen" | "eraser" | "text">(
-        "select",
-      );
+      const [activeTool, setActiveTool] = useState<CanvasTool>("select");
       return (
         <CanvasBoardHeader
           activeCanvas={board}
           activeStrokeCount={1}
           activeTool={activeTool}
           boardColorDraft="#385d56"
+          boardSearchQuery=""
           boardTitleDraft="Board"
           boardToolsOpen
+          canvasZoom={0.75}
           projectImageCount={3}
           projectImagePickerOpen
           onActiveToolChange={setActiveTool}
           onAddNote={vi.fn()}
           onBackToBoards={vi.fn()}
           onBoardColorDraftChange={vi.fn()}
+          onBoardSearchQueryChange={vi.fn()}
           onBoardTitleDraftChange={vi.fn()}
           onDeleteBoard={vi.fn()}
+          onFitContent={onFitContent}
           onImportImages={vi.fn()}
           onOpenBoardFolder={vi.fn()}
+          onResetZoom={onResetZoom}
           onSaveBoardSettings={vi.fn()}
           onToggleBoardTools={vi.fn()}
           onToggleProjectImages={vi.fn()}
           onUndoStroke={vi.fn()}
+          onZoomIn={onZoomIn}
+          onZoomOut={onZoomOut}
         />
       );
     }
@@ -181,6 +199,26 @@ describe("canvas components", () => {
     expect(screen.getByLabelText("Pen tool").getAttribute("aria-pressed")).toBe(
       "true",
     );
+    fireEvent.click(screen.getByLabelText("Connect tool"));
+    expect(screen.getByLabelText("Connect tool").getAttribute("aria-pressed"))
+      .toBe("true");
+    fireEvent.click(screen.getByLabelText("Link tool"));
+    expect(screen.getByLabelText("Link tool").getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    fireEvent.click(screen.getByLabelText("Section tool"));
+    expect(screen.getByLabelText("Section tool").getAttribute("aria-pressed"))
+      .toBe("true");
+    fireEvent.click(screen.getByLabelText("Zoom out"));
+    fireEvent.click(screen.getByLabelText("Reset zoom"));
+    fireEvent.click(screen.getByLabelText("Zoom in"));
+    fireEvent.click(screen.getByLabelText("Fit content"));
+    expect(screen.getByLabelText("Reset zoom").textContent).toBe("75%");
+    expect(screen.getByLabelText("Search board")).not.toBeNull();
+    expect(onZoomOut).toHaveBeenCalledTimes(1);
+    expect(onResetZoom).toHaveBeenCalledTimes(1);
+    expect(onZoomIn).toHaveBeenCalledTimes(1);
+    expect(onFitContent).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("dialog", { name: "Edit board" })).not.toBeNull();
   });
 
@@ -375,6 +413,122 @@ describe("canvas components", () => {
     expect(itemCard.style.width).toBe("240px");
   });
 
+  it("handles document, link, and section canvas cards", () => {
+    const onOpen = vi.fn();
+    const onRemove = vi.fn();
+    const onConnector = vi.fn();
+    const onResizePointerDown = vi.fn();
+    const onLinkChange = vi.fn();
+    const onLinkDelete = vi.fn();
+    const onSectionChange = vi.fn();
+    const onSectionDelete = vi.fn();
+    const documentItem = makeItem("brief", {
+      title: "Brief",
+      type: "text",
+      path: "projects/studio-archive/documents/brief.md",
+    });
+
+    const { rerender } = render(
+      <CanvasItemCard
+        item={documentItem}
+        kind="document"
+        position={{ x: 1, y: 2, width: 190, height: 116 }}
+        thumbUrls={{}}
+        setThumbUrls={vi.fn()}
+        onOpen={onOpen}
+        onRemove={onRemove}
+        onConnectorPointerDown={onConnector}
+        onPointerDown={vi.fn()}
+        onResizePointerDown={onResizePointerDown}
+        onClickCapture={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Brief"));
+    fireEvent.pointerDown(screen.getByTitle("Resize Brief"));
+    fireEvent.click(screen.getByLabelText("Remove Brief from board"));
+
+    expect(screen.getByText("MD")).not.toBeNull();
+    expect(onOpen).toHaveBeenCalledWith("brief");
+    expect(onRemove).toHaveBeenCalledWith("brief");
+    expect(onResizePointerDown).toHaveBeenCalledWith(expect.any(Object));
+
+    rerender(
+      <CanvasLinkCard
+        link={{
+          id: "link-1",
+          title: "Example",
+          description: "",
+          sourceDomain: "example.com",
+          url: "https://example.com/",
+          capturedAt: "2026-06-17T08:00:00.000Z",
+          x: 10,
+          y: 20,
+        }}
+        onChange={onLinkChange}
+        onDelete={onLinkDelete}
+        onConnectorPointerDown={onConnector}
+        onPointerDown={vi.fn()}
+        onResizePointerDown={onResizePointerDown}
+        onClickCapture={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Link title"), {
+      target: { value: "Research" },
+    });
+    fireEvent.blur(screen.getByLabelText("Link title"));
+    fireEvent.change(screen.getByLabelText("Link description"), {
+      target: { value: "Primary source" },
+    });
+    fireEvent.blur(screen.getByLabelText("Link description"));
+    fireEvent.click(screen.getByLabelText("Delete link"));
+
+    expect(screen.getByRole("link", { name: /open/i }).getAttribute("href"))
+      .toBe("https://example.com/");
+    expect(onLinkChange).toHaveBeenCalledWith("link-1", {
+      title: "Research",
+      description: undefined,
+    });
+    expect(onLinkChange).toHaveBeenCalledWith("link-1", {
+      title: "Research",
+      description: "Primary source",
+    });
+    expect(onLinkDelete).toHaveBeenCalledWith("link-1");
+
+    rerender(
+      <CanvasSectionFrame
+        section={{
+          id: "section-1",
+          title: "Research",
+          color: "#385d56",
+          collapsed: false,
+          x: 20,
+          y: 30,
+          width: 500,
+          height: 300,
+        }}
+        onChange={onSectionChange}
+        onDelete={onSectionDelete}
+        onConnectorPointerDown={onConnector}
+        onPointerDown={vi.fn()}
+        onResizePointerDown={onResizePointerDown}
+        onClickCapture={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Section title"), {
+      target: { value: "Sources" },
+    });
+    fireEvent.blur(screen.getByLabelText("Section title"));
+    fireEvent.click(screen.getByLabelText("Collapse section"));
+    fireEvent.click(screen.getByLabelText("Delete section"));
+
+    expect(onSectionChange).toHaveBeenCalledWith("section-1", { title: "Sources" });
+    expect(onSectionChange).toHaveBeenCalledWith("section-1", { collapsed: true });
+    expect(onSectionDelete).toHaveBeenCalledWith("section-1");
+  });
+
   it("saves note drafts on blur and text drafts after debounce", () => {
     vi.useFakeTimers();
     const onChange = vi.fn();
@@ -445,6 +599,7 @@ describe("canvas components", () => {
 
   it("renders object layer and forwards object interactions", () => {
     const onOpenItem = vi.fn();
+    const onSelectObject = vi.fn();
     const onStartDrag = vi.fn();
     const onStartResize = vi.fn();
     const onSuppressClickAfterDrag = vi.fn();
@@ -452,22 +607,44 @@ describe("canvas components", () => {
     render(
       <CanvasObjectLayer
         activeItems={[item]}
+        activeLinks={[
+          {
+            id: "link-1",
+            title: "Example",
+            url: "https://example.com/",
+            capturedAt: "2026-06-17T08:00:00.000Z",
+            x: 80,
+            y: 90,
+          },
+        ]}
         activeNotes={board.notes}
+        activeSections={[
+          { id: "section-1", title: "Research", x: 0, y: 0, width: 500, height: 300 },
+        ]}
         activeTexts={board.texts ?? []}
+        matchedObjectKeys={new Set(["link:link-1"])}
+        selectedObjectKeys={new Set(["section:section-1", "text:text-1"])}
         thumbUrls={thumbUrls}
         setThumbUrls={vi.fn()}
         positionForItem={() => ({ x: 1, y: 2, width: 210, height: 246 })}
+        positionForLink={(link) => ({ x: link.x, y: link.y })}
         positionForNote={(note) => ({ x: note.x, y: note.y })}
+        positionForSection={(section) => ({ x: section.x, y: section.y })}
         positionForText={(textElement) => ({ x: textElement.x, y: textElement.y })}
+        onDeleteLink={vi.fn()}
         onDeleteNote={vi.fn()}
+        onDeleteSection={vi.fn()}
         onDeleteTextElement={vi.fn()}
         onOpenItem={onOpenItem}
         onRemoveItem={vi.fn()}
+        onSelectObject={onSelectObject}
         onStartConnectorDrag={vi.fn()}
         onStartDrag={onStartDrag}
         onStartResize={onStartResize}
         onSuppressClickAfterDrag={onSuppressClickAfterDrag}
+        onUpdateLink={vi.fn()}
         onUpdateNote={vi.fn()}
+        onUpdateSection={vi.fn()}
         onUpdateTextElement={vi.fn()}
         onUpdateTextElementSize={vi.fn()}
       />,
@@ -483,6 +660,18 @@ describe("canvas components", () => {
     fireEvent.pointerDown(itemCard);
     fireEvent.pointerDown(resizeCorner);
     fireEvent.click(itemCard);
+    fireEvent.pointerDown(
+      document.querySelector('[data-canvas-object-id="link-1"]') as HTMLElement,
+    );
+    fireEvent.pointerDown(
+      document.querySelector('[data-canvas-object-id="note-1"]') as HTMLElement,
+    );
+    fireEvent.pointerDown(
+      document.querySelector('[data-canvas-object-id="section-1"]') as HTMLElement,
+    );
+    fireEvent.pointerDown(
+      document.querySelector('[data-canvas-object-id="text-1"]') as HTMLElement,
+    );
 
     expect(onStartDrag).toHaveBeenCalledWith(
       expect.any(Object),
@@ -497,11 +686,100 @@ describe("canvas components", () => {
       { x: 1, y: 2, width: 210, height: 246 },
     );
     expect(onOpenItem).toHaveBeenCalledWith("alpha");
+    expect(document.querySelector('[data-canvas-object-id="link-1"]')).not.toBeNull();
+    expect(document.querySelector('[data-canvas-object-id="section-1"]')).not.toBeNull();
+    expect(onSelectObject).toHaveBeenCalledWith(expect.any(Object), "link", "link-1");
+    expect(onSelectObject).toHaveBeenCalledWith(expect.any(Object), "note", "note-1");
+    expect(onSelectObject).toHaveBeenCalledWith(
+      expect.any(Object),
+      "section",
+      "section-1",
+    );
+    expect(onSelectObject).toHaveBeenCalledWith(expect.any(Object), "text", "text-1");
+    expect(
+      document.querySelector('[data-canvas-object-id="link-1"]')?.className,
+    ).toContain("canvas-object-search-match");
+    expect(
+      document.querySelector('[data-canvas-object-id="section-1"]')?.className,
+    ).toContain("canvas-object-selected");
+  });
+
+  it("renders selection bar actions and a minimap when content overflows", () => {
+    const onAlignLeft = vi.fn();
+    const scroll = document.createElement("div");
+    Object.defineProperties(scroll, {
+      clientHeight: { configurable: true, value: 180 },
+      clientWidth: { configurable: true, value: 220 },
+      scrollLeft: { configurable: true, value: 20, writable: true },
+      scrollTop: { configurable: true, value: 30, writable: true },
+    });
+    scroll.getBoundingClientRect = () =>
+      ({
+        bottom: 180,
+        height: 180,
+        left: 0,
+        right: 220,
+        top: 0,
+        width: 220,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    const scrollRef = { current: scroll };
+
+    render(
+      <>
+        <CanvasSelectionBar
+          selectedCount={2}
+          onAlignCenter={vi.fn()}
+          onAlignLeft={onAlignLeft}
+          onAlignTop={vi.fn()}
+          onArrangeByDate={vi.fn()}
+          onArrangeByType={vi.fn()}
+          onDelete={vi.fn()}
+          onDistributeHorizontal={vi.fn()}
+          onDistributeVertical={vi.fn()}
+          onDuplicate={vi.fn()}
+          onOrganizeIntoSection={vi.fn()}
+          onTidyGrid={vi.fn()}
+        />
+        <CanvasMinimap
+          objectViews={[
+            {
+              id: "alpha",
+              kind: "item",
+              title: "Alpha",
+              geometry: { x: 0, y: 0, width: 120, height: 120 },
+              connectable: true,
+              selectable: true,
+            },
+            {
+              id: "section-1",
+              kind: "section",
+              title: "Research",
+              geometry: { x: 640, y: 420, width: 360, height: 240 },
+              connectable: true,
+              selectable: true,
+            },
+          ]}
+          scrollRef={scrollRef}
+          zoom={1}
+          onFocusViewport={vi.fn()}
+        />
+      </>,
+    );
+
+    fireEvent.click(screen.getByLabelText("Align left"));
+
+    expect(screen.getByText("2 selected")).not.toBeNull();
+    expect(screen.getByLabelText("Minimap")).not.toBeNull();
+    expect(onAlignLeft).toHaveBeenCalledTimes(1);
   });
 
   it("zooms and pans the canvas viewport", () => {
     const zoomRef = { current: 1 };
     const onZoomChange = vi.fn();
+    const onViewportChange = vi.fn();
 
     function ViewportHarness() {
       const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -515,6 +793,7 @@ describe("canvas components", () => {
           surfaceRef={surfaceRef}
           onDrop={vi.fn()}
           onDragOver={vi.fn()}
+          onViewportChange={onViewportChange}
         >
           <span>Canvas child</span>
         </CanvasViewport>
@@ -550,6 +829,7 @@ describe("canvas components", () => {
     fireEvent.pointerUp(window);
 
     expect(onZoomChange).toHaveBeenCalled();
+    expect(onViewportChange).toHaveBeenCalled();
     expect(screen.getByText("Canvas child")).not.toBeNull();
   });
 });

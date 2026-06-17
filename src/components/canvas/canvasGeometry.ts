@@ -16,14 +16,20 @@ import type {
 
 export const CANVAS_OBJECT_SIZES: Record<CanvasObjectKind, CanvasObjectSize> = {
   item: { width: 162, height: 190 },
+  document: { width: 190, height: 116 },
   note: { width: 220, height: 150 },
   text: { width: 220, height: 96 },
+  link: { width: 240, height: 132 },
+  section: { width: 520, height: 340 },
 };
 
 export const CANVAS_OBJECT_MIN_SIZES: Record<CanvasObjectKind, CanvasObjectSize> = {
   item: { width: 118, height: 138 },
+  document: { width: 150, height: 88 },
   note: { width: 150, height: 104 },
   text: { width: 132, height: 60 },
+  link: { width: 180, height: 96 },
+  section: { width: 260, height: 180 },
 };
 
 export const CANVAS_IMAGE_DEFAULT_LONG_EDGE = 190;

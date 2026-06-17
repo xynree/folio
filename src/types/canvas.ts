@@ -24,7 +24,14 @@ export type CanvasConnectionSide = "top" | "right" | "bottom" | "left";
 
 export type CanvasEdgeDirection = "none" | "forward" | "bidirectional";
 
-export type CanvasRelationshipType = "related" | "inspired-by" | "version-of";
+export type CanvasRelationshipType =
+  | "related"
+  | "inspired-by"
+  | "uses"
+  | "variant-of"
+  | "version-of"
+  | "response-to"
+  | "part-of";
 
 export type CanvasTextSize = "sm" | "md" | "large";
 
@@ -71,6 +78,38 @@ export interface CanvasTextElement extends CanvasObjectGeometry {
   id: string;
   text: string;
   size?: CanvasTextSize;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** A named frame used to organize canvas objects spatially */
+export interface CanvasSection extends CanvasObjectGeometry {
+  id: string;
+  title: string;
+  color?: string;
+  collapsed?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** A lightweight outside-link card placed directly on the canvas */
+export interface CanvasLink extends CanvasObjectGeometry {
+  id: string;
+  url: string;
+  title: string;
+  description?: string;
+  sourceDomain?: string;
+  faviconUrl?: string;
+  capturedAt: string;
+  updatedAt?: string;
+}
+
+/** Last useful board viewport for returning to a large canvas */
+export interface CanvasViewportState {
+  x: number;
+  y: number;
+  zoom: number;
+  updatedAt: string;
 }
 
 /** A named thinking surface with positioned items and annotations */
@@ -95,4 +134,8 @@ export interface Canvas {
   edges: CanvasEdge[];
   strokes?: CanvasStroke[];
   texts?: CanvasTextElement[];
+  sections?: CanvasSection[];
+  links?: CanvasLink[];
+  viewport?: CanvasViewportState;
+  createdFromTemplate?: string;
 }

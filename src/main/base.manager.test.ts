@@ -199,6 +199,14 @@ describe("FolioManager project Works", () => {
     await fs.mkdir(path.dirname(legacyItemPath), { recursive: true });
     await fs.mkdir(dotFolio, { recursive: true });
     await fs.writeFile(legacyItemPath, "image bytes");
+    const legacyNotePath = path.join(
+      folioRoot,
+      "items",
+      "2026",
+      "06_june",
+      "field-note.txt",
+    );
+    await fs.writeFile(legacyNotePath, "note bytes");
     const legacyCanvas = {
       ...makeCanvas("board-1", {
         projectId: "project-1",
@@ -224,13 +232,19 @@ describe("FolioManager project Works", () => {
             path: "items/2026/06_june/alpha.png",
             projectId: "project-1",
           }),
+          makeItem("note", {
+            title: "Field Note",
+            path: "items/2026/06_june/field-note.txt",
+            type: "text",
+            projectId: "project-1",
+          }),
         ],
         canvases: [legacyCanvas],
         projects: [
           makeProject("project-1", {
             title: "Color Study",
             folderPath: "projects/color-study",
-            imageIds: ["alpha"],
+            imageIds: ["alpha", "note"],
             workItemIds: ["alpha"],
             boardIds: ["board-1"],
           }),
@@ -241,6 +255,7 @@ describe("FolioManager project Works", () => {
     const data = await manager.loadData();
 
     expect(data.items[0].path).toBe("projects/color-study/images/alpha.png");
+    expect(data.items[1].path).toBe("projects/color-study/documents/field-note.txt");
     expect("references" in data.canvases[0]).toBe(false);
     await expect(
       fs.readFile(
@@ -250,11 +265,18 @@ describe("FolioManager project Works", () => {
     ).resolves.toBe("image bytes");
     await expect(
       fs.readFile(
+        path.join(folioRoot, "projects", "color-study", "documents", "field-note.txt"),
+        "utf-8",
+      ),
+    ).resolves.toBe("note bytes");
+    await expect(
+      fs.readFile(
         path.join(folioRoot, "projects", "color-study", "works", "alpha-alpha.png"),
         "utf-8",
       ),
     ).resolves.toBe("image bytes");
     await expect(fs.stat(path.join(folioRoot, "items"))).rejects.toThrow();
+    await expect(fs.stat(legacyNotePath)).rejects.toThrow();
     await expect(fs.stat(path.join(folioRoot, "images"))).rejects.toThrow();
     await expect(fs.stat(path.join(folioRoot, "works"))).rejects.toThrow();
   });
@@ -377,6 +399,9 @@ describe("FolioManager project Works", () => {
       fs.stat(path.join(folioRoot, "projects", "color-study-2", "images")),
     ).resolves.toBeTruthy();
     await expect(
+      fs.stat(path.join(folioRoot, "projects", "color-study-2", "documents")),
+    ).resolves.toBeTruthy();
+    await expect(
       fs.stat(path.join(folioRoot, "projects", "color-study-2", "works")),
     ).resolves.toBeTruthy();
 
@@ -422,13 +447,24 @@ describe("FolioManager project Works", () => {
         ext: ".png",
         data: Buffer.from("image bytes"),
       },
+      {
+        kind: "buffer",
+        filename: "Process Note",
+        ext: ".md",
+        data: Buffer.from("# Process"),
+      },
     ]);
 
-    expect(imported).toHaveLength(1);
+    expect(imported).toHaveLength(2);
     expect(imported[0]).toMatchObject({
       title: "Paint Study",
       projectId: "project-1",
       path: "projects/color-study/images/paint-study.png",
+    });
+    expect(imported[1]).toMatchObject({
+      title: "Process Note",
+      projectId: "project-1",
+      path: "projects/color-study/documents/process-note.md",
     });
     await expect(
       fs.readFile(
@@ -436,6 +472,12 @@ describe("FolioManager project Works", () => {
         "utf-8",
       ),
     ).resolves.toBe("image bytes");
+    await expect(
+      fs.readFile(
+        path.join(folioRoot, "projects", "color-study", "documents", "process-note.md"),
+        "utf-8",
+      ),
+    ).resolves.toBe("# Process");
     await expect(
       fs.readFile(
         path.join(
@@ -450,7 +492,7 @@ describe("FolioManager project Works", () => {
     ).resolves.toBe("# Week 1\n\nGood start.");
 
     const data = await manager.loadData();
-    expect(data.projects[0].imageIds).toEqual([imported[0].id]);
+    expect(data.projects[0].imageIds).toEqual(imported.map((item) => item.id));
   });
 
   it("imports selected files into the default project when no project exists", async () => {
@@ -648,12 +690,13 @@ describe("FolioManager project Works", () => {
     );
   });
 
-  it("registers project image additions and removals from the filesystem watcher", async () => {
+  it("registers project media additions and removals from the filesystem watcher", async () => {
     vi.useFakeTimers();
     try {
       const { folioRoot } = await makeTempFolioHome();
       const projectFolder = path.join(folioRoot, "projects", "color-study");
       const imagePath = path.join(projectFolder, "images", "new-file.png");
+      const notePath = path.join(projectFolder, "documents", "new-note.md");
       const mainWindow = {
         webContents: {
           send: vi.fn(),
@@ -677,7 +720,9 @@ describe("FolioManager project Works", () => {
 
       manager.startWatcher(mainWindow as never);
       await fs.writeFile(imagePath, "image bytes");
+      await fs.writeFile(notePath, "# note");
       chokidarMocks.events.add(imagePath);
+      chokidarMocks.events.add(notePath);
       await (
         manager as unknown as {
           flushWatcherAdds(window: typeof mainWindow): Promise<void>;
@@ -690,12 +735,15 @@ describe("FolioManager project Works", () => {
       );
       expect(mainWindow.webContents.send).toHaveBeenCalledWith(
         "folio:files-added",
-        [expect.objectContaining({ path: "projects/color-study/images/new-file.png" })],
+        expect.arrayContaining([
+          expect.objectContaining({ path: "projects/color-study/images/new-file.png" }),
+          expect.objectContaining({ path: "projects/color-study/documents/new-note.md" }),
+        ]),
       );
 
       const addedData = await manager.loadData();
       const addedItem = addedData.items[0];
-      expect(addedData.projects[0].imageIds).toEqual([addedItem.id]);
+      expect(addedData.projects[0].imageIds).toHaveLength(2);
 
       await fs.rm(imagePath);
       await chokidarMocks.events.unlink(imagePath);

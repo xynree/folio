@@ -35,6 +35,10 @@ import { GridView } from "./archive/GridView";
 import { ArchiveHeatmap } from "./archive/HeatmapView";
 import { TagsSidebar } from "./archive/TagsSidebar";
 import { CanvasView } from "./canvas/CanvasView";
+import {
+  createCanvasFromTemplate,
+  type CanvasTemplateId,
+} from "./canvas/canvasTemplates";
 import { DetailDrawer } from "./details/DetailDrawer";
 import {
   EMPTY_DATA,
@@ -1004,17 +1008,19 @@ export function AppShell() {
     [activeCanvasId, activeProjectId, commitData],
   );
 
-  const createBoard = useCallback(() => {
+  const createBoard = useCallback((templateId: CanvasTemplateId = "blank") => {
     let boardId: string | null = null;
 
     commitData(
       (current) => {
         const savedAt = new Date().toISOString();
         const board = markCanvasSaved(
-          {
-            ...createCanvas(current.canvases.length),
+          createCanvasFromTemplate({
+            index: current.canvases.length,
             projectId: activeProjectId ?? undefined,
-          },
+            templateId,
+            createId,
+          }),
           savedAt,
         );
         boardId = board.id;

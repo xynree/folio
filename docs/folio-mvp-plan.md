@@ -379,22 +379,22 @@ Phase 5 should be implemented as an additive evolution of the current board syst
 
 ### 5.1 Product scope and non-goals
 
-- [ ] Define Phase 5 acceptance criteria before implementation:
+- [x] Define Phase 5 acceptance criteria before implementation:
   - A user can create a blank board or choose a template.
   - A user can drop project images, external image files, documents, text snippets, and URLs directly onto a board.
   - Dropped external files are imported into the active project before being placed on the board.
   - A user can connect any supported board object to any other supported board object.
   - A user can select multiple objects, move them together, align them, distribute them, and tidy them into a grid.
   - A user can save, close, and reopen a board with object positions, sections, links, documents, edges, and viewport restored.
-- [ ] Keep collaboration out of scope: no shared cursors, comments, assignments, permissions, or live multiplayer state.
-- [ ] Keep a full database out of scope unless JSON persistence becomes a measured bottleneck.
-- [ ] Keep templates editable after creation; templates should seed content, not lock board structure.
+- [x] Keep collaboration out of scope: no shared cursors, comments, assignments, permissions, or live multiplayer state.
+- [x] Keep a full database out of scope unless JSON persistence becomes a measured bottleneck.
+- [x] Keep templates editable after creation; templates should seed content, not lock board structure.
 
 ### 5.2 Storage and schema foundation
 
-- [ ] Add a schema migration plan before changing persisted board data.
-- [ ] Keep `Canvas.itemIds`, `Canvas.positions`, `Canvas.notes`, `Canvas.texts`, `Canvas.edges`, and `Canvas.strokes` readable for old boards.
-- [ ] Add `Canvas.sections?: CanvasSection[]` for section/frame nodes:
+- [x] Add a schema migration plan before changing persisted board data.
+- [x] Keep `Canvas.itemIds`, `Canvas.positions`, `Canvas.notes`, `Canvas.texts`, `Canvas.edges`, and `Canvas.strokes` readable for old boards.
+- [x] Add `Canvas.sections?: CanvasSection[]` for section/frame nodes:
 
 ```ts
 interface CanvasSection extends CanvasObjectGeometry {
@@ -407,7 +407,7 @@ interface CanvasSection extends CanvasObjectGeometry {
 }
 ```
 
-- [ ] Add `Canvas.links?: CanvasLink[]` for outside-link cards:
+- [x] Add `Canvas.links?: CanvasLink[]` for outside-link cards:
 
 ```ts
 interface CanvasLink extends CanvasObjectGeometry {
@@ -422,20 +422,20 @@ interface CanvasLink extends CanvasObjectGeometry {
 }
 ```
 
-- [ ] Treat documents as normal `FolioItem` records so they can be reused across boards and details:
+- [x] Treat documents as normal `FolioItem` records so they can be reused across boards and details:
   - Add or formalize a per-project `documents/` folder for imported PDF, Markdown, text, RTF, and office files.
   - Continue storing visual images in `projects/<project>/images/`.
   - Keep `works/` as a readable generated representation of Works membership, not a separate import location.
-- [ ] Decide whether Phase 5 renames `Project.imageIds` to `Project.itemIds` or keeps the current field as a compatibility alias:
+- [x] Decide whether Phase 5 renames `Project.imageIds` to `Project.itemIds` or keeps the current field as a compatibility alias:
   - Preferred long-term shape: `itemIds` for all project assets and a derived image filter for the All Images view.
   - If renaming is too disruptive, keep `imageIds` for now and document that it is a legacy project-asset list.
-- [ ] Add `createdAt` and `updatedAt` timestamps to all new canvas objects.
-- [ ] Keep edge paths derived from object geometry; do not persist SVG path data unless manual bend points are designed later.
+- [x] Add `createdAt` and `updatedAt` timestamps to all new canvas objects.
+- [x] Keep edge paths derived from object geometry; do not persist SVG path data unless manual bend points are designed later.
 
 ### 5.3 Canvas object model refactor
 
-- [ ] Add a colocated canvas-object helper module, for example `src/components/canvas/canvasObjects.ts`.
-- [ ] Introduce a renderer view model over all board objects:
+- [x] Add a colocated canvas-object helper module, for example `src/components/canvas/canvasObjects.ts`.
+- [x] Introduce a renderer view model over all board objects:
 
 ```ts
 type CanvasObjectKind =
@@ -456,9 +456,9 @@ interface CanvasObjectView {
 }
 ```
 
-- [ ] Use this view model for selection, dragging, resizing, connector handles, edge endpoint calculation, keyboard delete, and hit testing.
-- [ ] Keep persisted data in existing arrays until the view model proves stable.
-- [ ] Extract canvas mutations into named helpers near `CanvasView`:
+- [x] Use this view model for selection, dragging, resizing, connector handles, edge endpoint calculation, keyboard delete, and hit testing.
+- [x] Keep persisted data in existing arrays until the view model proves stable.
+- [x] Extract canvas mutations into named helpers near `CanvasView`:
   - `addItemsToCanvas`
   - `addDocumentToCanvas`
   - `addLinkToCanvas`
@@ -467,11 +467,11 @@ interface CanvasObjectView {
   - `resizeCanvasObject`
   - `deleteCanvasObjects`
   - `duplicateCanvasObjects`
-- [ ] Add unit tests for every canvas mutation helper before wiring the UI.
+- [x] Add unit tests for every canvas mutation helper before wiring the UI.
 
 ### 5.4 Node creation and capture flows
 
-- [ ] Replace the current board header tool cluster with a compact canvas toolbar:
+- [x] Replace the current board header tool cluster with a compact canvas toolbar:
   - Select
   - Connect
   - Image
@@ -482,26 +482,26 @@ interface CanvasObjectView {
   - Section
   - Pen
   - Eraser
-- [ ] Keep tool buttons icon-first with tooltips and clear active states.
-- [ ] Add paste support:
+- [x] Keep tool buttons icon-first with tooltips and clear active states.
+- [x] Add paste support:
   - image clipboard data imports into project `images/`, then places an image card on the board
   - copied files import into the correct project folder, then place cards on the board
   - URL text creates a link card
   - plain text creates a note or text element depending on active tool
-- [ ] Add drag/drop support:
+- [x] Add drag/drop support:
   - image files import into `images/`
   - document files import into `documents/`
   - URLs create link cards
   - project-image tray cards can still be clicked to add existing images
-- [ ] Add a link card creation popover with URL, title, optional description, and source domain.
-- [ ] Add document cards that show filename, extension/type, and an open-in-Finder or preview action.
-- [ ] Add text nodes that can behave as headings, labels, or paragraph notes without becoming oversized cards.
+- [ ] Add a link card creation popover with URL, title, optional description, and source domain. The current implementation uses a prompt plus editable link card fields.
+- [x] Add document cards that show filename, extension/type, and route to the item details drawer for preview/Finder actions.
+- [x] Add text nodes that can behave as headings, labels, or paragraph notes without becoming oversized cards.
 
 ### 5.5 Connections and graph behavior
 
-- [ ] Keep visible side connector handles for all connectable object kinds.
-- [ ] Add a dedicated Connect tool in addition to Shift-drag so the feature is discoverable.
-- [ ] Extend relationship types to:
+- [x] Keep visible side connector handles for all connectable object kinds.
+- [x] Add a dedicated Connect tool in addition to Shift-drag so the feature is discoverable.
+- [x] Extend relationship types to:
   - `related`
   - `inspired-by`
   - `uses`
@@ -509,33 +509,34 @@ interface CanvasObjectView {
   - `version-of`
   - `response-to`
   - `part-of`
-- [ ] Keep optional freeform edge labels in addition to relationship type.
-- [ ] Add a quick relationship menu after creating an edge.
-- [ ] Add inline edge label editing on double-click.
-- [ ] Keep edge direction controls: none, forward, bidirectional.
+- [x] Keep optional freeform edge labels in addition to relationship type.
+- [x] Add a quick relationship menu after creating an edge.
+- [x] Add inline edge label editing on double-click.
+- [x] Keep edge direction controls: none, forward, bidirectional.
 - [ ] Add "Connected to" backlinks in item/document/link details, grouped by relationship type.
 - [ ] Add "Appears on" project and board backlinks in item/document details.
-- [ ] Add tests for edge creation, deletion, label editing, type changes, direction changes, and endpoint recalculation after object movement.
+- [x] Add tests for edge creation, deletion, label editing, type changes, direction changes, and endpoint recalculation after object movement.
 
 ### 5.6 Sections, frames, and organization
 
-- [ ] Add section/frame nodes with title, color, bounds, and collapsed state.
-- [ ] Let cards be dragged into sections while preserving absolute canvas positions.
-- [ ] Render section headers as lightweight board structure, not decorative cards.
-- [ ] Add section actions: rename, recolor, collapse/expand, duplicate, delete.
-- [ ] Add marquee/lasso selection on the canvas.
-- [ ] Allow moving multiple selected objects together.
-- [ ] Add align left, align top, align center, distribute horizontal, distribute vertical, and tidy grid actions.
-- [ ] Add "organize selected into section" from the selection action bar.
-- [ ] Add "arrange by date" and "arrange by type" for selected project items.
-- [ ] Add keyboard shortcuts for delete, escape, duplicate, zoom reset, fit to content, and zoom to selection.
+- [x] Add section/frame nodes with title, color, bounds, and collapsed state.
+- [x] Let cards be dragged into sections while preserving absolute canvas positions.
+- [x] Render section headers as lightweight board structure, not decorative cards.
+- [x] Add section actions: rename, collapse/expand, duplicate, delete.
+- [ ] Add a dedicated section recolor control. Sections already persist color, and templates/new sections apply the board color.
+- [x] Add marquee/lasso selection on the canvas.
+- [x] Allow moving multiple selected objects together.
+- [x] Add align left, align top, align center, distribute horizontal, distribute vertical, and tidy grid actions.
+- [x] Add "organize selected into section" from the selection action bar.
+- [x] Add "arrange by date" and "arrange by type" for selected project items.
+- [x] Add keyboard shortcuts for delete, escape, duplicate, zoom reset, fit to content, and zoom to selection.
 
 ### 5.7 Built-in templates
 
-- [ ] Add a new-board template picker before creating a board.
-- [ ] Store templates as TypeScript definitions, not persisted records. Applying a template creates normal sections, notes, text elements, and optional starter links.
-- [ ] Keep `createdFromTemplate?: string` on `Canvas` only as optional provenance.
-- [ ] Include these first templates:
+- [x] Add a new-board template picker before creating a board.
+- [x] Store templates as TypeScript definitions, not persisted records. Applying a template creates normal sections, notes, text elements, and optional starter links.
+- [x] Keep `createdFromTemplate?: string` on `Canvas` only as optional provenance.
+- [x] Include these first templates:
   - **Blank board**: empty spatial canvas.
   - **Project planning**: Brief, References, Work in progress, Final pieces, Open questions.
   - **Moodboard**: Visual references, Color/material, Type/tone, Patterns, Notes.
@@ -543,19 +544,19 @@ interface CanvasObjectView {
   - **Work review**: Current Works, Revisions, Feedback notes, Next experiments.
   - **Process timeline**: Early sketches, Iterations, Decisions, Final direction.
   - **Comparison board**: Option A, Option B, Shared patterns, Tradeoffs.
-- [ ] Template definitions should include:
+- [x] Template definitions should include:
   - board title suggestion
   - default color
   - sections with positions and sizes
   - starter text/note prompts
   - optional initial zoom/viewport
-- [ ] Add template unit tests that assert generated objects have stable IDs, valid bounds, no overlapping required sections, and complete timestamps.
+- [x] Add template unit tests that assert generated objects have stable IDs, valid bounds, no overlapping required sections, and complete timestamps.
 
 ### 5.8 Navigation, viewport, and performance
 
-- [ ] Add zoom controls in a corner overlay or board header.
-- [ ] Add fit-to-content and zoom-to-selection.
-- [ ] Add saved viewport per board:
+- [x] Add zoom controls in a corner overlay or board header.
+- [x] Add fit-to-content and zoom-to-selection.
+- [x] Add saved viewport per board:
 
 ```ts
 interface CanvasViewportState {
@@ -566,19 +567,19 @@ interface CanvasViewportState {
 }
 ```
 
-- [ ] Add minimap only after content exceeds the visible viewport by a meaningful threshold.
-- [ ] Add search-within-board that highlights matching image titles, document names, link titles, notes, text elements, section names, and edge labels.
+- [x] Add minimap only after content exceeds the visible viewport by a meaningful threshold.
+- [x] Add search-within-board that highlights matching image titles, document names, link titles, notes, text elements, section names, and edge labels.
 - [ ] Measure board performance with 100, 250, and 500 objects before adding virtualization.
-- [ ] Keep thumbnail usage for image cards and only load originals when editing or previewing.
+- [x] Keep thumbnail usage for image cards and only load originals when editing or previewing.
 
 ### 5.9 Testing and verification plan
 
-- [ ] Add model tests next to every new helper:
+- [x] Add model tests next to every new helper:
   - `canvasObjects.test.ts`
   - `canvasTemplates.test.ts`
   - `canvasArrangement.test.ts`
   - `canvasLinks.test.ts`
-- [ ] Add React tests for:
+- [x] Add React tests for:
   - template picker
   - toolbar active states
   - document card rendering
@@ -586,18 +587,18 @@ interface CanvasViewportState {
   - section collapse/expand
   - multi-select and selection action bar
   - connect tool and quick relationship menu
-- [ ] Add main-process tests for:
+- [x] Add main-process tests for:
   - document import into `documents/`
   - image import into `images/`
   - dropped URL metadata persistence
   - schema migration for old canvases
   - folder reconciliation with new document assets
-- [ ] Run before considering Phase 5 complete:
+- [x] Run before considering Phase 5 complete:
   - `npm test`
   - `npm run test:coverage`
   - `npm run lint`
   - `npm run package`
-- [ ] Preserve the repository coverage bar above 85% for statements, functions, and lines.
+- [x] Preserve the repository coverage bar above 85% for statements, functions, and lines.
 
 ### 5.10 Implementation order
 

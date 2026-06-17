@@ -20,6 +20,7 @@ type CanvasViewportProps = {
   onSurfacePointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
   onSurfacePointerMove?: (event: React.PointerEvent<HTMLDivElement>) => void;
   onSurfacePointerLeave?: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onViewportChange?: (viewport: { x: number; y: number; zoom: number }) => void;
   children: React.ReactNode;
 };
 
@@ -43,6 +44,7 @@ export function CanvasViewport({
   onSurfacePointerDown,
   onSurfacePointerMove,
   onSurfacePointerLeave,
+  onViewportChange,
   children,
 }: CanvasViewportProps) {
   const backgroundRef = useRef<HTMLCanvasElement | null>(null);
@@ -108,6 +110,17 @@ export function CanvasViewport({
     });
   }, [drawBackground]);
 
+  const emitViewportChange = useCallback(() => {
+    const scroll = scrollRef.current;
+    if (!scroll || !onViewportChange) return;
+    const currentZoom = zoomRef.current;
+    onViewportChange({
+      x: scroll.scrollLeft / currentZoom,
+      y: scroll.scrollTop / currentZoom,
+      zoom: currentZoom,
+    });
+  }, [onViewportChange, scrollRef, zoomRef]);
+
   useEffect(() => {
     return () => {
       if (drawFrameRef.current !== null) {
@@ -125,8 +138,13 @@ export function CanvasViewport({
     const scroll = scrollRef.current;
     if (!scroll) return undefined;
 
+    const handleScroll = () => {
+      scheduleBackgroundDraw();
+      emitViewportChange();
+    };
+
     scheduleBackgroundDraw();
-    scroll.addEventListener("scroll", scheduleBackgroundDraw, { passive: true });
+    scroll.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("resize", scheduleBackgroundDraw);
 
     let resizeObserver: ResizeObserver | null = null;
@@ -136,11 +154,11 @@ export function CanvasViewport({
     }
 
     return () => {
-      scroll.removeEventListener("scroll", scheduleBackgroundDraw);
+      scroll.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", scheduleBackgroundDraw);
       resizeObserver?.disconnect();
     };
-  }, [scheduleBackgroundDraw, scrollRef]);
+  }, [emitViewportChange, scheduleBackgroundDraw, scrollRef]);
 
   useEffect(() => {
     const scroll = scrollRef.current;
@@ -196,13 +214,14 @@ export function CanvasViewport({
       scroll.scrollLeft = logicalX * nextZoom - pointerX;
       scroll.scrollTop = logicalY * nextZoom - pointerY;
       scheduleBackgroundDraw();
+      emitViewportChange();
     };
 
     scroll.addEventListener("wheel", handleWheel, { passive: false });
     return () => {
       scroll.removeEventListener("wheel", handleWheel);
     };
-  }, [onZoomChange, scheduleBackgroundDraw, scrollRef, zoomRef]);
+  }, [emitViewportChange, onZoomChange, scheduleBackgroundDraw, scrollRef, zoomRef]);
 
   const rememberZoomAnchor = useCallback(
     (clientX: number, clientY: number) => {
@@ -225,7 +244,7 @@ export function CanvasViewport({
       if (!(target instanceof Element)) return;
       if (
         target.closest(
-          ".canvas-card, .canvas-note, .canvas-text-card, button, input, textarea, select, [data-no-canvas-pan]",
+          ".canvas-card, .canvas-document-card, .canvas-link-card, .canvas-note, .canvas-section-frame, .canvas-text-card, button, input, textarea, select, [data-no-canvas-pan]",
         )
       ) {
         return;

@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { Edit3, Ellipsis, Plus, Trash2 } from "lucide-react";
 import type { Canvas, FolioItem, ThumbnailUrls } from "../../types";
 import { formatCount } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
 import { BoardEditDialog } from "./BoardEditDialog";
+import { CANVAS_TEMPLATES, type CanvasTemplateId } from "./canvasTemplates";
 
 const BOARD_BROWSER_PREVIEW_LIMIT = 3;
 
@@ -57,13 +58,16 @@ export function BoardBrowser({
   ) => void;
   onBoardTitleDraftChange: (title: string) => void;
   onCloseBrowserEditCanvas: () => void;
-  onCreateBoard: () => void;
+  onCreateBoard: (templateId?: CanvasTemplateId) => void;
   onDeleteBoardById: (canvasId: string) => void;
   onEditCanvas: (canvasId: string) => void;
   onOpenCanvas: (canvasId: string) => void;
   onSaveBoardSettings: (canvas: Canvas) => void;
   onToggleBoardMenu: (canvasId: string) => void;
 }) {
+  const [selectedTemplateId, setSelectedTemplateId] =
+    useState<CanvasTemplateId>("blank");
+
   return (
     <section className="canvas-workspace canvas-board-browser">
       <header className="canvas-board-browser-header">
@@ -72,10 +76,25 @@ export function BoardBrowser({
           <span>{formatCount(canvases.length, "board")}</span>
         </div>
         <div className="canvas-board-browser-actions">
+          <label className="canvas-template-picker">
+            <span>Template</span>
+            <select
+              value={selectedTemplateId}
+              onChange={(event) =>
+                setSelectedTemplateId(event.target.value as CanvasTemplateId)
+              }
+            >
+              {CANVAS_TEMPLATES.map((template) => (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className="secondary-action canvas-board-new-button"
             type="button"
-            onClick={onCreateBoard}
+            onClick={() => onCreateBoard(selectedTemplateId)}
           >
             <ButtonIcon icon={Plus} />
             New board

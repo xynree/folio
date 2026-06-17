@@ -20,6 +20,7 @@ type CanvasEdgeLabelsProps = {
   edgeLabelDraft: string;
   edgeRenderModels: EdgeRenderModel[];
   editingEdgeId: string | null;
+  matchedEdgeIds?: Set<string>;
   selectedEdgeId: string | null;
   onDeleteEdge: (edgeId: string) => void;
   onEdgeLabelDraftChange: (label: string) => void;
@@ -42,6 +43,7 @@ export function CanvasEdgeLabels({
   edgeLabelDraft,
   edgeRenderModels,
   editingEdgeId,
+  matchedEdgeIds = new Set(),
   selectedEdgeId,
   onDeleteEdge,
   onEdgeLabelDraftChange,
@@ -61,6 +63,10 @@ export function CanvasEdgeLabels({
           <span
             className={`canvas-edge-label ${
               selectedEdgeId === model.edge.id ? "canvas-edge-label-selected" : ""
+            } ${
+              matchedEdgeIds.has(model.edge.id)
+                ? "canvas-edge-label-search-match"
+                : ""
             }`}
             key={model.edge.id}
             style={{
@@ -141,7 +147,11 @@ export function CanvasEdgeLabels({
                 >
                   <option value="related">Related</option>
                   <option value="inspired-by">Inspired by</option>
+                  <option value="uses">Uses</option>
+                  <option value="variant-of">Variant of</option>
                   <option value="version-of">Version of</option>
+                  <option value="response-to">Response to</option>
+                  <option value="part-of">Part of</option>
                 </select>
                 <span className="canvas-edge-action-divider" />
                 <button

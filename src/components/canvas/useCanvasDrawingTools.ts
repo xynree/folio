@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import type {
   Canvas,
   CanvasPosition,
+  CanvasSection,
   CanvasStroke,
   CanvasTextElement,
 } from "../../types";
@@ -13,15 +14,18 @@ import {
 } from "./canvasGeometry";
 import {
   addCanvasStroke,
+  addCanvasLink,
+  addCanvasSection,
   addCanvasTextElement,
   eraseCanvasStrokesAtPoint,
   removeLastCanvasStroke,
 } from "./canvasModel";
+import { createCanvasLinkFromUrl } from "./canvasLinks";
 import type { CanvasTool } from "./canvasTypes";
 
 const STROKE_POINT_MIN_DISTANCE = 2;
 const NON_DRAWING_TARGET_SELECTOR =
-  ".canvas-card, .canvas-note, .canvas-text-card, .canvas-edge-label, button, input, textarea, select";
+  ".canvas-card, .canvas-document-card, .canvas-note, .canvas-text-card, .canvas-link-card, .canvas-section-frame, .canvas-edge-label, button, input, textarea, select, a";
 
 type UpdateCanvasHandler = (
   canvasId: string,
@@ -131,9 +135,62 @@ export function useCanvasDrawingTools({
     [activeCanvas, updateCanvas],
   );
 
+  const addLinkAtPoint = useCallback(
+    (point: CanvasPosition) => {
+      if (!activeCanvas) return;
+      const rawUrl = window.prompt("Add a link to this board");
+      if (!rawUrl) {
+        setActiveTool("select");
+        return;
+      }
+
+      const link = createCanvasLinkFromUrl(rawUrl, {
+        x: point.x - CANVAS_WORLD_ORIGIN,
+        y: point.y - CANVAS_WORLD_ORIGIN,
+      });
+      if (!link) {
+        setActiveTool("select");
+        return;
+      }
+
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => addCanvasLink(canvas, link),
+        "Link added",
+      );
+      setActiveTool("select");
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const addSectionAtPoint = useCallback(
+    (point: CanvasPosition) => {
+      if (!activeCanvas) return;
+      const createdAt = new Date().toISOString();
+      const section: CanvasSection = {
+        id: createId("section"),
+        title: "Section",
+        color: activeCanvas.color ?? CANVAS_COLORS[0],
+        x: point.x - CANVAS_WORLD_ORIGIN,
+        y: point.y - CANVAS_WORLD_ORIGIN,
+        width: 520,
+        height: 340,
+        createdAt,
+        updatedAt: createdAt,
+      };
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => addCanvasSection(canvas, section),
+        "Section added",
+      );
+      setActiveTool("select");
+    },
+    [activeCanvas, updateCanvas],
+  );
+
   const handleSurfacePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (activeTool === "select" || !activeCanvas) return;
+      if (activeTool === "select" || activeTool === "connect" || !activeCanvas) return;
       if (event.button !== 0) return;
       const target = event.target;
       if (
@@ -149,6 +206,16 @@ export function useCanvasDrawingTools({
 
       if (activeTool === "text") {
         addTextAtPoint(surfacePointFromClient(event.clientX, event.clientY));
+        return;
+      }
+
+      if (activeTool === "link") {
+        addLinkAtPoint(surfacePointFromClient(event.clientX, event.clientY));
+        return;
+      }
+
+      if (activeTool === "section") {
+        addSectionAtPoint(surfacePointFromClient(event.clientX, event.clientY));
         return;
       }
 
@@ -174,6 +241,8 @@ export function useCanvasDrawingTools({
     [
       activeCanvas,
       activeTool,
+      addLinkAtPoint,
+      addSectionAtPoint,
       addTextAtPoint,
       eraseStrokesAtPoint,
       surfacePointFromClient,

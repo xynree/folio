@@ -40,6 +40,7 @@ const PLACEHOLDER_SVG_BY_TYPE: Record<ItemType, string> = {
 const THUMBNAIL_JPEG_QUALITY = 72;
 const THUMBNAIL_SIZE = 320;
 const IMAGES_DIR_NAME = "images";
+const DOCUMENTS_DIR_NAME = "documents";
 
 /**
  * ArchiveManager handles filesystem-level operations for the media archive:
@@ -79,13 +80,13 @@ export class ArchiveManager {
     const result = await this.importFilePaths(filePaths, {
       mode: "copy-external",
       destination: "archive",
-      destDir: this.projectImagesDirectory("projects/studio-archive"),
+      projectFolderPath: "projects/studio-archive",
     });
     return result.items;
   }
 
   /**
-   * Copy files into a project's flat images folder and tag them with that project.
+   * Copy files into a project's flat media folders and tag them with that project.
    */
   async copyToProject(
     projectId: string,
@@ -96,13 +97,13 @@ export class ArchiveManager {
       mode: "copy-external",
       destination: "project",
       projectId,
-      destDir: this.projectImagesDirectory(projectFolderPath),
+      projectFolderPath,
     });
     return result.items;
   }
 
   /**
-   * Track files that appeared directly in a project's images folder via Finder.
+   * Track files that appeared directly in a project's media folders via Finder.
    */
   async trackExistingFiles(
     filePaths: string[],
@@ -113,9 +114,7 @@ export class ArchiveManager {
       mode: "register-in-place",
       destination: projectId ? "project" : "archive",
       projectId,
-      destDir: projectFolderPath
-        ? this.projectImagesDirectory(projectFolderPath)
-        : undefined,
+      projectFolderPath,
     });
   }
 
@@ -123,12 +122,11 @@ export class ArchiveManager {
    * Legacy source-based import support for clipboard/buffer callers.
    */
   async importItems(sources: ImportSource[]): Promise<FolioItem[]> {
-    const destDir = this.projectImagesDirectory("projects/studio-archive");
-    await fs.mkdir(destDir, { recursive: true });
     const imported: FolioItem[] = [];
 
     for (const source of sources) {
       const { filename, ext } = this.resolveSourceMeta(source);
+      const destDir = this.projectMediaDirectory("projects/studio-archive", ext);
       const destPath = await this.saveToDirectory(source, filename, ext, destDir);
       const result = await this.registerArchivedFile(destPath, filename, true);
 
@@ -146,12 +144,11 @@ export class ArchiveManager {
     projectFolderPath: string,
     sources: ImportSource[],
   ): Promise<FolioItem[]> {
-    const destDir = this.projectImagesDirectory(projectFolderPath);
-    await fs.mkdir(destDir, { recursive: true });
     const imported: FolioItem[] = [];
 
     for (const source of sources) {
       const { filename, ext } = this.resolveSourceMeta(source);
+      const destDir = this.projectMediaDirectory(projectFolderPath, ext);
       const destPath = await this.saveToDirectory(source, filename, ext, destDir);
       const result = await this.registerArchivedFile(
         destPath,
@@ -288,7 +285,7 @@ export class ArchiveManager {
       : path.join(this.folioRoot, relativeOrAbsolutePath);
   }
 
-  public async migrateItemsToProjectImages(
+  public async migrateItemsToProjectMedia(
     projectFolderById: Map<string, string>,
     fallbackProjectId?: string,
   ): Promise<boolean> {
@@ -304,7 +301,7 @@ export class ArchiveManager {
       changed =
         (await this.moveItemToDirectory(
           item,
-          this.projectImagesDirectory(projectFolderPath),
+          this.projectMediaDirectoryForItem(projectFolderPath, item),
         )) || changed;
     }
 
@@ -323,7 +320,7 @@ export class ArchiveManager {
     options: {
       mode: "copy-external" | "register-in-place";
       destination: "archive" | "project";
-      destDir?: string;
+      projectFolderPath?: string;
       projectId?: string;
     },
   ): Promise<ImportResult> {
@@ -335,12 +332,15 @@ export class ArchiveManager {
       const originalSourceExt = path.extname(absoluteSource);
       const sourceExt = originalSourceExt.toLowerCase();
       const sourceFilename = path.basename(absoluteSource, originalSourceExt);
+      const destDir = options.projectFolderPath
+        ? this.projectMediaDirectory(options.projectFolderPath, sourceExt)
+        : this.projectMediaDirectory("projects/studio-archive", sourceExt);
       let archivedPath = absoluteSource;
       let copied = false;
 
       const sourceAlreadyInDestination =
-        options.destination === "project" && options.destDir
-          ? this.isInDirectory(absoluteSource, options.destDir)
+        options.projectFolderPath
+          ? this.isInDirectory(absoluteSource, destDir)
           : this.isInArchiveItems(absoluteSource);
 
       if (options.mode === "copy-external" && !sourceAlreadyInDestination) {
@@ -356,9 +356,9 @@ export class ArchiveManager {
         );
 
         if (duplicate && !duplicate.missing) {
-          if (options.destination === "project" && options.destDir) {
+          if (options.destination === "project") {
             changed =
-              (await this.moveItemToDirectory(duplicate, options.destDir)) ||
+              (await this.moveItemToDirectory(duplicate, destDir)) ||
               changed;
           }
           if (options.projectId && !duplicate.projectId) {
@@ -369,9 +369,6 @@ export class ArchiveManager {
           continue;
         }
 
-        const destDir =
-          options.destDir ??
-          this.projectImagesDirectory("projects/studio-archive");
         archivedPath = await this.saveToDirectory(
           { kind: "path", filePath: absoluteSource },
           sourceFilename,
@@ -506,8 +503,26 @@ export class ArchiveManager {
     setTimeout(() => this.recentlyCopied.delete(resolvedPath), 2000);
   }
 
-  private projectImagesDirectory(projectFolderPath: string): string {
-    return path.join(this.folioRoot, projectFolderPath, IMAGES_DIR_NAME);
+  private projectMediaDirectory(projectFolderPath: string, ext: string): string {
+    return this.projectDirectoryForItemType(projectFolderPath, inferItemType(ext));
+  }
+
+  private projectMediaDirectoryForItem(
+    projectFolderPath: string,
+    item: FolioItem,
+  ): string {
+    return this.projectDirectoryForItemType(projectFolderPath, item.type);
+  }
+
+  private projectDirectoryForItemType(
+    projectFolderPath: string,
+    itemType: ItemType,
+  ): string {
+    const directoryName =
+      itemType === "sketch" || itemType === "anim"
+        ? IMAGES_DIR_NAME
+        : DOCUMENTS_DIR_NAME;
+    return path.join(this.folioRoot, projectFolderPath, directoryName);
   }
 
   private isFlatFileInDirectory(filePath: string, directory: string): boolean {

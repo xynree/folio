@@ -27,8 +27,10 @@ const execFileAsync = promisify(execFile);
 const PHOTOS_PICKER_CANCELLED = "__FOLIO_PHOTOS_PICKER_CANCELLED__";
 const PHOTOS_PICKER_HELPER_NAME = "FolioPhotosPicker";
 const IMAGES_DIR_NAME = "images";
+const DOCUMENTS_DIR_NAME = "documents";
 const WORKS_DIR_NAME = "works";
 const LEGACY_REFERENCES_DIR_NAME = "references";
+const PROJECT_MEDIA_DIR_NAMES = [IMAGES_DIR_NAME, DOCUMENTS_DIR_NAME] as const;
 
 interface ImportFileSelection {
   filePaths: string[];
@@ -228,14 +230,14 @@ export class FolioManager implements FolioManagerInterface {
     });
 
     watcher.on("add", (filePath) => {
-      if (!this.getProjectForImageFilePath(filePath)) return;
+      if (!this.getProjectForMediaFilePath(filePath)) return;
       if (this.archiveManager.isRecentlyCopied(filePath)) return;
       this.pendingWatcherAdds.add(filePath);
       this.scheduleWatcherFlush(mainWindow);
     });
 
     watcher.on("unlink", async (filePath) => {
-      if (!this.getProjectForImageFilePath(filePath)) return;
+      if (!this.getProjectForMediaFilePath(filePath)) return;
       const item = this.archiveManager
         .getItems()
         .find(
@@ -427,12 +429,14 @@ export class FolioManager implements FolioManagerInterface {
     return project;
   }
 
-  private getProjectForImageFilePath(filePath: string): Project | undefined {
+  private getProjectForMediaFilePath(filePath: string): Project | undefined {
     const absolutePath = path.resolve(filePath);
     return this.projects.find((project) =>
-      this.isPathInsideDirectory(
-        absolutePath,
-        path.join(this.folioRoot, project.folderPath, IMAGES_DIR_NAME),
+      PROJECT_MEDIA_DIR_NAMES.some((directoryName) =>
+        this.isPathInsideDirectory(
+          absolutePath,
+          path.join(this.folioRoot, project.folderPath, directoryName),
+        ),
       ),
     );
   }
@@ -761,7 +765,7 @@ export class FolioManager implements FolioManagerInterface {
 
     const filesByProject = new Map<Project, string[]>();
     for (const filePath of filePaths) {
-      const project = this.getProjectForImageFilePath(filePath);
+      const project = this.getProjectForMediaFilePath(filePath);
       if (!project) continue;
       const projectFiles = filesByProject.get(project) ?? [];
       projectFiles.push(filePath);
@@ -865,8 +869,10 @@ export class FolioManager implements FolioManagerInterface {
     const roots = [
       path.join(folioRoot, IMAGES_DIR_NAME),
       path.join(folioRoot, "items"),
-      ...this.projects.map((project) =>
-        path.join(folioRoot, project.folderPath, IMAGES_DIR_NAME),
+      ...this.projects.flatMap((project) =>
+        PROJECT_MEDIA_DIR_NAMES.map((directoryName) =>
+          path.join(folioRoot, project.folderPath, directoryName),
+        ),
       ),
     ];
     const files: ReconciliationFile[] = [];
@@ -930,7 +936,7 @@ export class FolioManager implements FolioManagerInterface {
     const projectFolderById = new Map(
       this.projects.map((project) => [project.id, project.folderPath]),
     );
-    const itemsChanged = await this.archiveManager.migrateItemsToProjectImages(
+    const itemsChanged = await this.archiveManager.migrateItemsToProjectMedia(
       projectFolderById,
       this.projects[0]?.id,
     );
@@ -1268,6 +1274,7 @@ export class FolioManager implements FolioManagerInterface {
     const projectRoot = path.join(this.folioRoot, project.folderPath);
     await Promise.all([
       fs.mkdir(path.join(projectRoot, IMAGES_DIR_NAME), { recursive: true }),
+      fs.mkdir(path.join(projectRoot, DOCUMENTS_DIR_NAME), { recursive: true }),
       fs.mkdir(path.join(projectRoot, WORKS_DIR_NAME), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "boards"), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "reviews"), { recursive: true }),

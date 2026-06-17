@@ -6,7 +6,15 @@ import {
   FolderOpen,
   ImagePlus,
   Images,
+  Link as LinkIcon,
+  Maximize2,
+  Minus,
+  MousePointer2,
   PenLine,
+  Plus,
+  ScanLine,
+  Search,
+  SquareDashed,
   StickyNote,
   Type,
   Undo2,
@@ -36,22 +44,29 @@ type CanvasBoardHeaderProps = {
   activeStrokeCount: number;
   activeTool: CanvasTool;
   boardColorDraft: string;
+  boardSearchQuery: string;
   boardTitleDraft: string;
   boardToolsOpen: boolean;
+  canvasZoom: number;
   projectImageCount: number;
   projectImagePickerOpen: boolean;
   onActiveToolChange: React.Dispatch<React.SetStateAction<CanvasTool>>;
   onAddNote: () => void;
   onBackToBoards: () => void;
   onBoardColorDraftChange: (color: string) => void;
+  onBoardSearchQueryChange: (query: string) => void;
   onBoardTitleDraftChange: (title: string) => void;
   onDeleteBoard: () => void;
+  onFitContent: () => void;
   onImportImages: () => void;
   onOpenBoardFolder: () => void;
+  onResetZoom: () => void;
   onSaveBoardSettings: (canvas: Canvas) => void;
   onToggleBoardTools: () => void;
   onToggleProjectImages: () => void;
   onUndoStroke: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
 };
 
 export function CanvasBoardHeader({
@@ -59,22 +74,29 @@ export function CanvasBoardHeader({
   activeStrokeCount,
   activeTool,
   boardColorDraft,
+  boardSearchQuery,
   boardTitleDraft,
   boardToolsOpen,
+  canvasZoom,
   projectImageCount,
   projectImagePickerOpen,
   onActiveToolChange,
   onAddNote,
   onBackToBoards,
   onBoardColorDraftChange,
+  onBoardSearchQueryChange,
   onBoardTitleDraftChange,
   onDeleteBoard,
+  onFitContent,
   onImportImages,
   onOpenBoardFolder,
+  onResetZoom,
   onSaveBoardSettings,
   onToggleBoardTools,
   onToggleProjectImages,
   onUndoStroke,
+  onZoomIn,
+  onZoomOut,
 }: CanvasBoardHeaderProps) {
   const toggleTool = (tool: CanvasTool) => {
     onActiveToolChange((current) => (current === tool ? "select" : tool));
@@ -107,6 +129,16 @@ export function CanvasBoardHeader({
         </span>
       </div>
       <div className="canvas-board-actions">
+        <label className="canvas-board-search">
+          <ButtonIcon icon={Search} size={14} />
+          <span className="sr-only">Search board</span>
+          <input
+            aria-label="Search board"
+            placeholder="Search"
+            value={boardSearchQuery}
+            onChange={(event) => onBoardSearchQueryChange(event.currentTarget.value)}
+          />
+        </label>
         <button
           className="canvas-board-action-button"
           type="button"
@@ -139,11 +171,35 @@ export function CanvasBoardHeader({
         <button
           className="canvas-board-action-button"
           type="button"
-          aria-label="Import images"
-          title="Import images"
+          aria-label="Import images and files"
+          title="Import images and files"
           onClick={onImportImages}
         >
           <ButtonIcon icon={ImagePlus} />
+        </button>
+        <button
+          className={`canvas-board-action-button ${
+            activeTool === "select" ? "canvas-board-action-active" : ""
+          }`}
+          type="button"
+          aria-label="Select tool"
+          aria-pressed={activeTool === "select"}
+          title="Select tool"
+          onClick={() => onActiveToolChange("select")}
+        >
+          <ButtonIcon icon={MousePointer2} />
+        </button>
+        <button
+          className={`canvas-board-action-button ${
+            activeTool === "connect" ? "canvas-board-action-active" : ""
+          }`}
+          type="button"
+          aria-label="Connect tool"
+          aria-pressed={activeTool === "connect"}
+          title="Connect tool"
+          onClick={() => toggleTool("connect")}
+        >
+          <ButtonIcon icon={ScanLine} />
         </button>
         <button
           className={`canvas-board-action-button ${
@@ -181,6 +237,68 @@ export function CanvasBoardHeader({
         >
           <ButtonIcon icon={Type} />
         </button>
+        <button
+          className={`canvas-board-action-button ${
+            activeTool === "link" ? "canvas-board-action-active" : ""
+          }`}
+          type="button"
+          aria-label="Link tool"
+          aria-pressed={activeTool === "link"}
+          title="Link tool"
+          onClick={() => toggleTool("link")}
+        >
+          <ButtonIcon icon={LinkIcon} />
+        </button>
+        <button
+          className={`canvas-board-action-button ${
+            activeTool === "section" ? "canvas-board-action-active" : ""
+          }`}
+          type="button"
+          aria-label="Section tool"
+          aria-pressed={activeTool === "section"}
+          title="Section tool"
+          onClick={() => toggleTool("section")}
+        >
+          <ButtonIcon icon={SquareDashed} />
+        </button>
+        <span className="canvas-board-zoom-controls" aria-label="Canvas zoom">
+          <button
+            className="canvas-board-action-button"
+            type="button"
+            aria-label="Zoom out"
+            title="Zoom out"
+            onClick={onZoomOut}
+          >
+            <ButtonIcon icon={Minus} />
+          </button>
+          <button
+            className="canvas-board-action-button canvas-board-zoom-value"
+            type="button"
+            aria-label="Reset zoom"
+            title="Reset zoom"
+            onClick={onResetZoom}
+          >
+            {Math.round(canvasZoom * 100)}%
+          </button>
+          <button
+            className="canvas-board-action-button"
+            type="button"
+            aria-label="Zoom in"
+            title="Zoom in"
+            onClick={onZoomIn}
+          >
+            <ButtonIcon icon={Plus} />
+          </button>
+          <button
+            className="canvas-board-action-button"
+            type="button"
+            aria-label="Fit content"
+            title="Fit content"
+            onClick={onFitContent}
+          >
+            <ButtonIcon icon={Maximize2} />
+          </button>
+        </span>
         <button
           className="canvas-board-action-button"
           type="button"

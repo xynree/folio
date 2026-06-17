@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   Canvas,
+  CanvasLink,
   CanvasNote,
   CanvasObjectGeometry,
   CanvasPosition,
+  CanvasSection,
   CanvasTextElement,
   CanvasTextSize,
   FolioData,
@@ -12,8 +14,9 @@ import type {
 } from "../../types";
 import {
   CANVAS_COLORS,
+  CANVAS_MAX_ZOOM,
+  CANVAS_MIN_ZOOM,
   CANVAS_WORLD_ORIGIN,
-  IMAGE_FILE_PATTERN,
   ITEM_DRAG_MIME,
 } from "../folio/constants";
 import type { DataUpdater, ItemDetailsOpenHandler } from "../folio/types";
@@ -21,6 +24,7 @@ import {
   addItemToCanvas,
   addItemsToCanvas,
   basename,
+  clampNumber,
   createId,
   formatCount,
   markCanvasSaved,
@@ -32,29 +36,68 @@ import { BoardBrowser } from "./BoardBrowser";
 import { CanvasBoardHeader } from "./CanvasBoardHeader";
 import { CanvasEdgeLabels } from "./CanvasEdgeLabels";
 import { CanvasInkLayer } from "./CanvasInkLayer";
+import { CanvasMinimap } from "./CanvasMinimap";
 import { CanvasObjectLayer } from "./CanvasObjectLayer";
+import { CanvasSelectionBar } from "./CanvasSelectionBar";
 import { CanvasToolCursor } from "./CanvasToolCursor";
+import {
+  alignCanvasObjects,
+  canvasObjectBounds,
+  distributeCanvasObjects,
+  sectionAroundCanvasObjects,
+  tidyCanvasObjectsIntoGrid,
+  type ArrangeableCanvasObject,
+  type CanvasObjectMovePatch,
+} from "./canvasArrangement";
 import { edgeRenderModelsFromLayouts } from "./canvasGeometry";
 import {
   boardPreviewItemIds as collectBoardPreviewItemIds,
   buildCanvasObjectLayouts,
+  canvasKindForItem,
   itemsByIdFromItems,
   itemsForCanvas,
   positionForCanvasItem,
+  positionForCanvasLink,
   positionForCanvasNote,
+  positionForCanvasSection,
   positionForCanvasText,
 } from "./canvasLayout";
 import type { CanvasDragPreview } from "./canvasLayout";
 import {
+  addCanvasLink,
+  addCanvasSection,
+  addCanvasTextElement,
+  deleteCanvasObjects,
   deleteCanvasNote,
+  deleteCanvasLink,
+  deleteCanvasSection,
   deleteCanvasTextElement,
+  duplicateCanvasObjects,
+  moveCanvasObjects,
   removeItemFromCanvas,
+  updateCanvasLink,
   updateCanvasNoteText,
+  updateCanvasSection,
   updateCanvasTextElementSize,
   updateCanvasTextElementText,
+  updateCanvasViewport,
 } from "./canvasModel";
+import { canvasObjectViews } from "./canvasObjects";
+import { createCanvasLinkFromUrl, normalizeCanvasLinkUrl } from "./canvasLinks";
+import type { CanvasTemplateId } from "./canvasTemplates";
 import { CanvasViewport } from "./CanvasViewport";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
+import {
+  canvasObjectSelectionKey,
+  normalizedSelectionRectangle,
+  selectCanvasObjectsInRectangle,
+  selectionSetFromObjects,
+  toggleCanvasObjectSelection,
+} from "./canvasSelection";
+import type {
+  CanvasObjectSelection,
+  CanvasSelectionRectangle,
+} from "./canvasSelection";
 import { useCanvasDrawingTools } from "./useCanvasDrawingTools";
 import { useCanvasEdges } from "./useCanvasEdges";
 import { useCanvasObjectDrag } from "./useCanvasObjectDrag";
@@ -82,7 +125,7 @@ export function CanvasView({
   canvasDetailRequestId: number;
   setActiveCanvasId: React.Dispatch<React.SetStateAction<string | null>>;
   onOpenItem: ItemDetailsOpenHandler;
-  onCreateBoard: () => void;
+  onCreateBoard: (templateId?: CanvasTemplateId) => void;
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   commitData: (updater: DataUpdater, message?: string) => void;
@@ -134,15 +177,47 @@ export function CanvasView({
   const [boardTitleDraft, setBoardTitleDraft] = useState("");
   const [boardColorDraft, setBoardColorDraft] = useState(CANVAS_COLORS[0]);
   const [canvasZoom, setCanvasZoom] = useState(1);
+  const [boardSearchQuery, setBoardSearchQuery] = useState("");
+  const [selectedObjects, setSelectedObjects] = useState<CanvasObjectSelection[]>([]);
+  const [selectionMarquee, setSelectionMarquee] =
+    useState<CanvasSelectionRectangle | null>(null);
   const canvasZoomRef = useRef(1);
+  const viewportSaveTimerRef = useRef<number | null>(null);
+  const restoringViewportRef = useRef(false);
   const lastCanvasDetailRequestIdRef = useRef(canvasDetailRequestId);
 
-  const focusCanvasOrigin = useCallback(() => {
+  const focusCanvasView = useCallback((canvas: Canvas | null) => {
     const scroll = scrollRef.current;
     if (!scroll) return;
+
+    if (canvas?.viewport) {
+      const zoom = canvas.viewport.zoom;
+      restoringViewportRef.current = true;
+      canvasZoomRef.current = zoom;
+      setCanvasZoom(zoom);
+      scroll.scrollLeft = canvas.viewport.x * zoom;
+      scroll.scrollTop = canvas.viewport.y * zoom;
+      window.requestAnimationFrame(() => {
+        restoringViewportRef.current = false;
+      });
+      return;
+    }
+
     const zoom = canvasZoomRef.current;
+    restoringViewportRef.current = true;
     scroll.scrollLeft = CANVAS_WORLD_ORIGIN * zoom - 80 * zoom;
     scroll.scrollTop = CANVAS_WORLD_ORIGIN * zoom - 80 * zoom;
+    window.requestAnimationFrame(() => {
+      restoringViewportRef.current = false;
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (viewportSaveTimerRef.current !== null) {
+        window.clearTimeout(viewportSaveTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -155,6 +230,9 @@ export function CanvasView({
     setBoardTitleDraft(activeCanvas?.title ?? "");
     setBoardColorDraft(activeCanvas?.color ?? CANVAS_COLORS[0]);
     setBoardToolsOpen(false);
+    setBoardSearchQuery("");
+    setSelectedObjects([]);
+    setSelectionMarquee(null);
   }, [activeCanvas?.color, activeCanvas?.id, activeCanvas?.title]);
 
   useEffect(() => {
@@ -184,22 +262,22 @@ export function CanvasView({
     const frames: number[] = [];
     const timeouts: number[] = [];
 
-    focusCanvasOrigin();
-    frames.push(window.requestAnimationFrame(focusCanvasOrigin));
+    focusCanvasView(activeCanvas);
+    frames.push(window.requestAnimationFrame(() => focusCanvasView(activeCanvas)));
     frames.push(
       window.requestAnimationFrame(() => {
-        frames.push(window.requestAnimationFrame(focusCanvasOrigin));
+        frames.push(window.requestAnimationFrame(() => focusCanvasView(activeCanvas)));
       }),
     );
     [120, 280].forEach((delay) => {
-      timeouts.push(window.setTimeout(focusCanvasOrigin, delay));
+      timeouts.push(window.setTimeout(() => focusCanvasView(activeCanvas), delay));
     });
 
     return () => {
       frames.forEach((frame) => window.cancelAnimationFrame(frame));
       timeouts.forEach((timeout) => window.clearTimeout(timeout));
     };
-  }, [activeCanvas?.id, boardBrowserOpen, focusCanvasOrigin]);
+  }, [activeCanvas?.id, boardBrowserOpen, focusCanvasView]);
 
   const itemsById = useMemo(() => itemsByIdFromItems(data.items), [data.items]);
 
@@ -228,6 +306,8 @@ export function CanvasView({
   const activeEdges = activeCanvas?.edges ?? [];
   const activeStrokes = activeCanvas?.strokes ?? [];
   const activeTexts = activeCanvas?.texts ?? [];
+  const activeLinks = activeCanvas?.links ?? [];
+  const activeSections = activeCanvas?.sections ?? [];
 
   const browserEditCanvas =
     data.canvases.find((canvas) => canvas.id === browserEditCanvasId) ?? null;
@@ -277,6 +357,72 @@ export function CanvasView({
     },
     [commitData],
   );
+
+  const saveViewportState = useCallback(
+    (viewport: { x: number; y: number; zoom: number }) => {
+      if (!activeCanvas || boardBrowserOpen || restoringViewportRef.current) return;
+
+      if (viewportSaveTimerRef.current !== null) {
+        window.clearTimeout(viewportSaveTimerRef.current);
+      }
+
+      viewportSaveTimerRef.current = window.setTimeout(() => {
+        viewportSaveTimerRef.current = null;
+        updateCanvas(activeCanvas.id, (canvas) =>
+          updateCanvasViewport(canvas, {
+            ...viewport,
+            updatedAt: new Date().toISOString(),
+          }),
+        );
+      }, 450);
+    },
+    [activeCanvas, boardBrowserOpen, updateCanvas],
+  );
+
+  const applyCanvasZoom = useCallback(
+    (nextZoomValue: number) => {
+      const scroll = scrollRef.current;
+      const nextZoom = clampNumber(nextZoomValue, CANVAS_MIN_ZOOM, CANVAS_MAX_ZOOM);
+      const currentZoom = canvasZoomRef.current;
+
+      if (!scroll) {
+        canvasZoomRef.current = nextZoom;
+        setCanvasZoom(nextZoom);
+        return;
+      }
+
+      const rect = scroll.getBoundingClientRect();
+      const width = scroll.clientWidth || rect.width || 1;
+      const height = scroll.clientHeight || rect.height || 1;
+      const centerX = (scroll.scrollLeft + width / 2) / currentZoom;
+      const centerY = (scroll.scrollTop + height / 2) / currentZoom;
+
+      canvasZoomRef.current = nextZoom;
+      setCanvasZoom(nextZoom);
+      window.requestAnimationFrame(() => {
+        scroll.scrollLeft = centerX * nextZoom - width / 2;
+        scroll.scrollTop = centerY * nextZoom - height / 2;
+        saveViewportState({
+          x: scroll.scrollLeft / nextZoom,
+          y: scroll.scrollTop / nextZoom,
+          zoom: nextZoom,
+        });
+      });
+    },
+    [saveViewportState],
+  );
+
+  const zoomIn = useCallback(() => {
+    applyCanvasZoom(canvasZoomRef.current * 1.18);
+  }, [applyCanvasZoom]);
+
+  const zoomOut = useCallback(() => {
+    applyCanvasZoom(canvasZoomRef.current / 1.18);
+  }, [applyCanvasZoom]);
+
+  const resetZoom = useCallback(() => {
+    applyCanvasZoom(1);
+  }, [applyCanvasZoom]);
 
   const addDroppedItems = useCallback(
     (itemIds: string[], position: CanvasPosition) => {
@@ -450,6 +596,20 @@ export function CanvasView({
     [dragPreview],
   );
 
+  const positionForLink = useCallback(
+    (link: CanvasLink): CanvasObjectGeometry => {
+      return positionForCanvasLink(link, dragPreview);
+    },
+    [dragPreview],
+  );
+
+  const positionForSection = useCallback(
+    (section: CanvasSection): CanvasObjectGeometry => {
+      return positionForCanvasSection(section, dragPreview);
+    },
+    [dragPreview],
+  );
+
   const positionForText = useCallback(
     (textElement: CanvasTextElement): CanvasObjectGeometry => {
       return positionForCanvasText(textElement, dragPreview);
@@ -462,14 +622,18 @@ export function CanvasView({
       buildCanvasObjectLayouts({
         activeCanvas,
         activeItems,
+        activeLinks,
         activeNotes,
+        activeSections,
         activeTexts,
         dragPreview,
       }),
     [
       activeCanvas,
       activeItems,
+      activeLinks,
       activeNotes,
+      activeSections,
       activeTexts,
       dragPreview,
     ],
@@ -479,6 +643,306 @@ export function CanvasView({
     () => edgeRenderModelsFromLayouts(activeEdges, canvasObjectLayouts),
     [activeEdges, canvasObjectLayouts],
   );
+
+  const objectViews = useMemo(
+    () =>
+      canvasObjectViews({
+        canvas: activeCanvas,
+        items: activeItems,
+        links: activeLinks,
+        notes: activeNotes,
+        sections: activeSections,
+        texts: activeTexts,
+        dragPreview,
+      }),
+    [
+      activeCanvas,
+      activeItems,
+      activeLinks,
+      activeNotes,
+      activeSections,
+      activeTexts,
+      dragPreview,
+    ],
+  );
+
+  const selectedObjectKeySet = useMemo(
+    () => selectionSetFromObjects(selectedObjects),
+    [selectedObjects],
+  );
+
+  const selectedObjectPositions = useMemo(() => {
+    return new Map(
+      objectViews
+        .filter((object) => selectedObjectKeySet.has(canvasObjectSelectionKey(object)))
+        .map((object) => [canvasObjectSelectionKey(object), object.geometry]),
+    );
+  }, [objectViews, selectedObjectKeySet]);
+
+  const selectedArrangeableObjects = useMemo<ArrangeableCanvasObject[]>(() => {
+    return objectViews
+      .filter((object) => selectedObjectKeySet.has(canvasObjectSelectionKey(object)))
+      .map((object) => ({
+        id: object.id,
+        kind: object.kind,
+        geometry: object.geometry,
+      }));
+  }, [objectViews, selectedObjectKeySet]);
+
+  const matchedObjectKeys = useMemo(() => {
+    const query = boardSearchQuery.trim().toLowerCase();
+    if (!query) return new Set<string>();
+
+    return new Set(
+      objectViews
+        .filter((object) => object.title.toLowerCase().includes(query))
+        .map(canvasObjectSelectionKey),
+    );
+  }, [boardSearchQuery, objectViews]);
+
+  const matchedEdgeIds = useMemo(() => {
+    const query = boardSearchQuery.trim().toLowerCase();
+    if (!query) return new Set<string>();
+
+    return new Set(
+      activeEdges
+        .filter((edge) => (edge.label ?? "").toLowerCase().includes(query))
+        .map((edge) => edge.id),
+    );
+  }, [activeEdges, boardSearchQuery]);
+
+  const fitCanvasContent = useCallback(() => {
+    const scroll = scrollRef.current;
+    const layouts = Array.from(canvasObjectLayouts.values());
+    if (!scroll || !layouts.length) {
+      focusCanvasView(activeCanvas);
+      return;
+    }
+
+    const rect = scroll.getBoundingClientRect();
+    const viewportWidth = scroll.clientWidth || rect.width || 1;
+    const viewportHeight = scroll.clientHeight || rect.height || 1;
+    const padding = 72;
+    const minX = Math.min(
+      ...layouts.map((layout) => layout.center.x - layout.size.width / 2),
+    );
+    const maxX = Math.max(
+      ...layouts.map((layout) => layout.center.x + layout.size.width / 2),
+    );
+    const minY = Math.min(
+      ...layouts.map((layout) => layout.center.y - layout.size.height / 2),
+    );
+    const maxY = Math.max(
+      ...layouts.map((layout) => layout.center.y + layout.size.height / 2),
+    );
+    const contentWidth = Math.max(1, maxX - minX);
+    const contentHeight = Math.max(1, maxY - minY);
+    const nextZoom = clampNumber(
+      Math.min(
+        1,
+        (viewportWidth - padding) / contentWidth,
+        (viewportHeight - padding) / contentHeight,
+      ),
+      CANVAS_MIN_ZOOM,
+      CANVAS_MAX_ZOOM,
+    );
+
+    canvasZoomRef.current = nextZoom;
+    setCanvasZoom(nextZoom);
+    window.requestAnimationFrame(() => {
+      scroll.scrollLeft = minX * nextZoom - padding / 2;
+      scroll.scrollTop = minY * nextZoom - padding / 2;
+      saveViewportState({
+        x: scroll.scrollLeft / nextZoom,
+        y: scroll.scrollTop / nextZoom,
+        zoom: nextZoom,
+      });
+    });
+  }, [activeCanvas, canvasObjectLayouts, focusCanvasView, saveViewportState]);
+
+  const focusMinimapViewport = useCallback(
+    (x: number, y: number) => {
+      const scroll = scrollRef.current;
+      if (!scroll) return;
+      scroll.scrollLeft = x * canvasZoomRef.current;
+      scroll.scrollTop = y * canvasZoomRef.current;
+      saveViewportState({
+        x,
+        y,
+        zoom: canvasZoomRef.current,
+      });
+    },
+    [saveViewportState],
+  );
+
+  const applyMovePatches = useCallback(
+    (patches: CanvasObjectMovePatch[], message: string) => {
+      if (!activeCanvas || !patches.length) return;
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => moveCanvasObjects(canvas, patches),
+        message,
+      );
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const arrangeSelectedObjects = useCallback(
+    (patches: CanvasObjectMovePatch[], message: string) => {
+      applyMovePatches(patches, message);
+    },
+    [applyMovePatches],
+  );
+
+  const alignSelectedObjects = useCallback(
+    (alignment: "left" | "top" | "center-x") => {
+      arrangeSelectedObjects(
+        alignCanvasObjects(selectedArrangeableObjects, alignment),
+        "Selection aligned",
+      );
+    },
+    [arrangeSelectedObjects, selectedArrangeableObjects],
+  );
+
+  const distributeSelectedObjects = useCallback(
+    (direction: "horizontal" | "vertical") => {
+      arrangeSelectedObjects(
+        distributeCanvasObjects(selectedArrangeableObjects, direction),
+        "Selection distributed",
+      );
+    },
+    [arrangeSelectedObjects, selectedArrangeableObjects],
+  );
+
+  const tidySelectedObjects = useCallback(() => {
+    arrangeSelectedObjects(
+      tidyCanvasObjectsIntoGrid(selectedArrangeableObjects),
+      "Selection tidied",
+    );
+  }, [arrangeSelectedObjects, selectedArrangeableObjects]);
+
+  const selectedProjectItemsById = useMemo(() => {
+    return new Map(
+      selectedArrangeableObjects.flatMap((object) => {
+        if (object.kind !== "item" && object.kind !== "document") return [];
+        const item = itemsById.get(object.id);
+        return item ? [[object.id, item] as const] : [];
+      }),
+    );
+  }, [itemsById, selectedArrangeableObjects]);
+
+  const arrangeSelectedByDate = useCallback(() => {
+    const sortedObjects = [...selectedArrangeableObjects].sort((first, second) => {
+      const firstItem = selectedProjectItemsById.get(first.id);
+      const secondItem = selectedProjectItemsById.get(second.id);
+      if (!firstItem && !secondItem) return first.kind.localeCompare(second.kind);
+      if (!firstItem) return 1;
+      if (!secondItem) return -1;
+      return firstItem.date.localeCompare(secondItem.date);
+    });
+    arrangeSelectedObjects(
+      tidyCanvasObjectsIntoGrid(sortedObjects),
+      "Selection arranged by date",
+    );
+  }, [
+    arrangeSelectedObjects,
+    selectedArrangeableObjects,
+    selectedProjectItemsById,
+  ]);
+
+  const arrangeSelectedByType = useCallback(() => {
+    const sortedObjects = [...selectedArrangeableObjects].sort((first, second) => {
+      const firstItem = selectedProjectItemsById.get(first.id);
+      const secondItem = selectedProjectItemsById.get(second.id);
+      const firstLabel = firstItem
+        ? `${firstItem.type}:${firstItem.title || basename(firstItem.path)}`
+        : first.kind;
+      const secondLabel = secondItem
+        ? `${secondItem.type}:${secondItem.title || basename(secondItem.path)}`
+        : second.kind;
+      return firstLabel.localeCompare(secondLabel);
+    });
+    arrangeSelectedObjects(
+      tidyCanvasObjectsIntoGrid(sortedObjects),
+      "Selection arranged by type",
+    );
+  }, [
+    arrangeSelectedObjects,
+    selectedArrangeableObjects,
+    selectedProjectItemsById,
+  ]);
+
+  const organizeSelectedIntoSection = useCallback(() => {
+    if (!activeCanvas || !selectedArrangeableObjects.length) return;
+    const section = sectionAroundCanvasObjects(selectedArrangeableObjects, {
+      id: createId("section"),
+      title: "Selection",
+      color: activeCanvas.color ?? CANVAS_COLORS[0],
+    });
+    if (!section) return;
+
+    updateCanvas(
+      activeCanvas.id,
+      (canvas) => addCanvasSection(canvas, section),
+      "Section added",
+    );
+    setSelectedObjects([{ id: section.id, kind: "section" }]);
+  }, [activeCanvas, selectedArrangeableObjects, updateCanvas]);
+
+  const deleteSelectedObjects = useCallback(() => {
+    if (!activeCanvas || !selectedObjects.length) return;
+    updateCanvas(
+      activeCanvas.id,
+      (canvas) => deleteCanvasObjects(canvas, selectedObjects),
+      "Selection deleted",
+    );
+    setSelectedObjects([]);
+  }, [activeCanvas, selectedObjects, updateCanvas]);
+
+  const duplicateSelectedObjects = useCallback(() => {
+    if (!activeCanvas || !selectedObjects.length) return;
+    const result = duplicateCanvasObjects(
+      activeCanvas,
+      selectedObjects,
+      (kind) => createId(kind),
+    );
+    if (!result.duplicatedObjects.length) return;
+
+    updateCanvas(activeCanvas.id, () => result.canvas, "Selection duplicated");
+    setSelectedObjects(result.duplicatedObjects);
+  }, [activeCanvas, selectedObjects, updateCanvas]);
+
+  const zoomToSelection = useCallback(() => {
+    const scroll = scrollRef.current;
+    const bounds = canvasObjectBounds(selectedArrangeableObjects);
+    if (!scroll || !bounds) return;
+
+    const rect = scroll.getBoundingClientRect();
+    const viewportWidth = scroll.clientWidth || rect.width || 1;
+    const viewportHeight = scroll.clientHeight || rect.height || 1;
+    const padding = 96;
+    const nextZoom = clampNumber(
+      Math.min(
+        1.4,
+        (viewportWidth - padding) / Math.max(1, bounds.width),
+        (viewportHeight - padding) / Math.max(1, bounds.height),
+      ),
+      CANVAS_MIN_ZOOM,
+      CANVAS_MAX_ZOOM,
+    );
+
+    canvasZoomRef.current = nextZoom;
+    setCanvasZoom(nextZoom);
+    window.requestAnimationFrame(() => {
+      scroll.scrollLeft = bounds.x * nextZoom - padding / 2;
+      scroll.scrollTop = bounds.y * nextZoom - padding / 2;
+      saveViewportState({
+        x: scroll.scrollLeft / nextZoom,
+        y: scroll.scrollTop / nextZoom,
+        zoom: nextZoom,
+      });
+    });
+  }, [saveViewportState, selectedArrangeableObjects]);
 
   const surfacePointFromClient = useCallback(
     (clientX: number, clientY: number): CanvasPosition => {
@@ -534,9 +998,12 @@ export function CanvasView({
 
   const { startDrag, suppressClickAfterDrag } = useCanvasObjectDrag({
     activeCanvas,
+    activeTool,
     canvasZoom,
     data,
     saveData,
+    selectedObjectPositions,
+    selectedObjects,
     setDragPreview,
     startEdgeDrag,
   });
@@ -548,6 +1015,118 @@ export function CanvasView({
     saveData,
     setDragPreview,
   });
+
+  const relativeCanvasPointFromClient = useCallback(
+    (clientX: number, clientY: number) => {
+      const point = surfacePointFromClient(clientX, clientY);
+      return {
+        x: point.x - CANVAS_WORLD_ORIGIN,
+        y: point.y - CANVAS_WORLD_ORIGIN,
+      };
+    },
+    [surfacePointFromClient],
+  );
+
+  const selectCanvasObject = useCallback(
+    (event: React.PointerEvent, kind: CanvasObjectSelection["kind"], id: string) => {
+      if (activeTool !== "select" || event.button !== 0) return;
+      const target = event.target;
+      if (
+        target instanceof Element
+        && target.closest("button, input, textarea, select, a")
+      ) {
+        return;
+      }
+
+      const selection = { id, kind };
+      setSelectedEdgeId(null);
+      setSelectedObjects((current) =>
+        event.metaKey || event.ctrlKey || event.shiftKey
+          ? toggleCanvasObjectSelection(current, selection)
+          : [selection],
+      );
+    },
+    [activeTool, setSelectedEdgeId],
+  );
+
+  const startMarqueeSelection = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return false;
+      const target = event.target;
+      if (target !== surfaceRef.current) return false;
+
+      event.preventDefault();
+      event.stopPropagation();
+      const startPoint = relativeCanvasPointFromClient(event.clientX, event.clientY);
+      const appendSelection = event.metaKey || event.ctrlKey;
+      setSelectionMarquee({ x: startPoint.x, y: startPoint.y, width: 0, height: 0 });
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        moveEvent.preventDefault();
+        const currentPoint = relativeCanvasPointFromClient(
+          moveEvent.clientX,
+          moveEvent.clientY,
+        );
+        setSelectionMarquee(
+          normalizedSelectionRectangle(startPoint, currentPoint),
+        );
+      };
+
+      const onPointerUp = (upEvent: PointerEvent) => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        const currentPoint = relativeCanvasPointFromClient(
+          upEvent.clientX,
+          upEvent.clientY,
+        );
+        const rectangle = normalizedSelectionRectangle(startPoint, currentPoint);
+        const objectsInRectangle = selectCanvasObjectsInRectangle(
+          objectViews.filter((object) => object.selectable),
+          rectangle,
+        );
+
+        setSelectionMarquee(null);
+        setSelectedEdgeId(null);
+        setSelectedObjects((current) => {
+          if (!appendSelection) return objectsInRectangle;
+          const currentKeys = selectionSetFromObjects(current);
+          const appended = objectsInRectangle.filter(
+            (selection) => !currentKeys.has(canvasObjectSelectionKey(selection)),
+          );
+          return [...current, ...appended];
+        });
+      };
+
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+      return true;
+    },
+    [objectViews, relativeCanvasPointFromClient, setSelectedEdgeId],
+  );
+
+  const handleCanvasSurfacePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (activeTool === "select") {
+        const target = event.target;
+        if (target === surfaceRef.current) {
+          if (event.shiftKey || event.metaKey || event.ctrlKey) {
+            if (startMarqueeSelection(event)) return;
+          } else {
+            setSelectedObjects([]);
+            setSelectedEdgeId(null);
+          }
+        }
+      }
+
+      handleSurfacePointerDown(event);
+    },
+    [
+      activeTool,
+      handleSurfacePointerDown,
+      setSelectedEdgeId,
+      startMarqueeSelection,
+    ],
+  );
 
   const centerPositionForCurrentViewport = useCallback((): CanvasPosition => {
     const scroll = scrollRef.current;
@@ -576,6 +1155,50 @@ export function CanvasView({
     [activeCanvas, centerPositionForCurrentViewport, updateCanvas],
   );
 
+  const addLinkAtPosition = useCallback(
+    (rawUrl: string, point: CanvasPosition) => {
+      if (!activeCanvas) return false;
+      const link = createCanvasLinkFromUrl(rawUrl, point);
+      if (!link) return false;
+
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => addCanvasLink(canvas, link),
+        "Link added to board",
+      );
+      return true;
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const addTextAtPosition = useCallback(
+    (text: string, point: CanvasPosition) => {
+      if (!activeCanvas) return false;
+      const trimmedText = text.trim();
+      if (!trimmedText) return false;
+      const now = new Date().toISOString();
+
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) =>
+          addCanvasTextElement(canvas, {
+            id: createId("text"),
+            text: trimmedText,
+            size: "md",
+            x: point.x,
+            y: point.y,
+            width: 280,
+            height: 140,
+            createdAt: now,
+            updatedAt: now,
+          }),
+        "Text added to board",
+      );
+      return true;
+    },
+    [activeCanvas, updateCanvas],
+  );
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
@@ -589,6 +1212,50 @@ export function CanvasView({
           event.preventDefault();
           undoLastStroke();
         }
+        return;
+      }
+
+      if (event.key === "Escape") {
+        setActiveTool("select");
+        setSelectedObjects([]);
+        setSelectedEdgeId(null);
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d") {
+        if (selectedObjects.length) {
+          event.preventDefault();
+          duplicateSelectedObjects();
+        }
+        return;
+      }
+
+      if (event.key === "0") {
+        event.preventDefault();
+        resetZoom();
+        return;
+      }
+
+      if (event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        fitCanvasContent();
+        return;
+      }
+
+      if (event.key.toLowerCase() === "s" && selectedObjects.length) {
+        event.preventDefault();
+        zoomToSelection();
+        return;
+      }
+
+      if (
+        selectedObjects.length
+        && !editingEdgeId
+        && activeCanvas
+        && (event.key === "Delete" || event.key === "Backspace")
+      ) {
+        event.preventDefault();
+        deleteSelectedObjects();
         return;
       }
 
@@ -611,9 +1278,17 @@ export function CanvasView({
     activeCanvas,
     activeStrokes.length,
     deleteEdge,
+    deleteSelectedObjects,
+    duplicateSelectedObjects,
     editingEdgeId,
+    fitCanvasContent,
+    resetZoom,
+    selectedObjects.length,
     selectedEdgeId,
+    setActiveTool,
+    setSelectedEdgeId,
     undoLastStroke,
+    zoomToSelection,
   ]);
 
   const canvasPointFromEvent = useCallback((event: React.DragEvent) => {
@@ -626,16 +1301,13 @@ export function CanvasView({
     };
   }, [canvasZoom]);
 
-  const addProjectImagesAtPosition = useCallback(
+  const addProjectFilesAtPosition = useCallback(
     async (filePaths: string[], point: CanvasPosition) => {
       if (!activeCanvas || !activeProjectId || !window.folio.copyToProject) return false;
       const uniquePaths = Array.from(new Set(filePaths.filter(Boolean)));
-      const imagePaths = uniquePaths.filter((filePath) =>
-        IMAGE_FILE_PATTERN.test(filePath),
-      );
-      if (!imagePaths.length || imagePaths.length !== uniquePaths.length) return false;
+      if (!uniquePaths.length) return false;
 
-      const imported = await window.folio.copyToProject(activeProjectId, imagePaths);
+      const imported = await window.folio.copyToProject(activeProjectId, uniquePaths);
       if (!imported.length) return true;
 
       const dataWithImports = mergeImportedItemsIntoProject(
@@ -694,19 +1366,30 @@ export function CanvasView({
         return;
       }
 
+      const uriList = event.dataTransfer
+        .getData("text/uri-list")
+        .split(/\r?\n/)
+        .find((line) => line.trim() && !line.startsWith("#"));
+      const plainText = event.dataTransfer.getData("text/plain");
+      const droppedText = uriList || plainText;
+      if (droppedText && addLinkAtPosition(droppedText, canvasPointFromEvent(event))) {
+        return;
+      }
+
       const filePaths = Array.from(event.dataTransfer.files)
         .map((file) => window.folio.getPathForFile(file))
         .filter(Boolean);
       if (!filePaths.length) return;
 
-      if (await addProjectImagesAtPosition(filePaths, canvasPointFromEvent(event))) {
+      if (await addProjectFilesAtPosition(filePaths, canvasPointFromEvent(event))) {
         return;
       }
     },
     [
       activeCanvas,
       addDroppedItems,
-      addProjectImagesAtPosition,
+      addLinkAtPosition,
+      addProjectFilesAtPosition,
       canvasPointFromEvent,
       clearDragState,
     ],
@@ -717,11 +1400,108 @@ export function CanvasView({
     event.stopPropagation();
   }, []);
 
+  useEffect(() => {
+    if (!activeCanvas || boardBrowserOpen) return undefined;
+
+    const handlePaste = (event: ClipboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        Boolean(target.closest("input, textarea, select, [contenteditable='true']"))
+      ) {
+        return;
+      }
+
+      const point = centerPositionForCurrentViewport();
+      const filePaths = Array.from(event.clipboardData?.files ?? [])
+        .map((file) => window.folio.getPathForFile(file))
+        .filter(Boolean);
+
+      if (filePaths.length) {
+        event.preventDefault();
+        void addProjectFilesAtPosition(filePaths, point);
+        return;
+      }
+
+      const text = event.clipboardData?.getData("text/plain")?.trim();
+      if (!text) return;
+
+      if (normalizeCanvasLinkUrl(text)) {
+        event.preventDefault();
+        addLinkAtPosition(text, point);
+        return;
+      }
+
+      event.preventDefault();
+      addTextAtPosition(text, point);
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [
+    activeCanvas,
+    addLinkAtPosition,
+    addProjectFilesAtPosition,
+    addTextAtPosition,
+    boardBrowserOpen,
+    centerPositionForCurrentViewport,
+  ]);
+
   const updateNote = useCallback(
     (noteId: string, text: string) => {
       if (!activeCanvas) return;
       updateCanvas(activeCanvas.id, (canvas) =>
         updateCanvasNoteText(canvas, noteId, text),
+      );
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const updateLink = useCallback(
+    (
+      linkId: string,
+      patch: Partial<Pick<CanvasLink, "title" | "description" | "url">>,
+    ) => {
+      if (!activeCanvas) return;
+      updateCanvas(activeCanvas.id, (canvas) =>
+        updateCanvasLink(canvas, linkId, patch),
+      );
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const deleteLink = useCallback(
+    (linkId: string) => {
+      if (!activeCanvas) return;
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => deleteCanvasLink(canvas, linkId),
+        "Link deleted",
+      );
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const updateSection = useCallback(
+    (
+      sectionId: string,
+      patch: Partial<Pick<CanvasSection, "title" | "color" | "collapsed">>,
+    ) => {
+      if (!activeCanvas) return;
+      updateCanvas(activeCanvas.id, (canvas) =>
+        updateCanvasSection(canvas, sectionId, patch),
+      );
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const deleteSection = useCallback(
+    (sectionId: string) => {
+      if (!activeCanvas) return;
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => deleteCanvasSection(canvas, sectionId),
+        "Section deleted",
       );
     },
     [activeCanvas, updateCanvas],
@@ -818,8 +1598,8 @@ export function CanvasView({
     [scopedCanvases],
   );
 
-  const createBoardFromBrowser = useCallback(() => {
-    onCreateBoard();
+  const createBoardFromBrowser = useCallback((templateId?: CanvasTemplateId) => {
+    onCreateBoard(templateId);
     setBoardBrowserOpen(false);
   }, [onCreateBoard]);
 
@@ -933,24 +1713,31 @@ export function CanvasView({
             activeStrokeCount={activeStrokes.length}
             activeTool={activeTool}
             boardColorDraft={boardColorDraft}
+            boardSearchQuery={boardSearchQuery}
             boardTitleDraft={boardTitleDraft}
             boardToolsOpen={boardToolsOpen}
+            canvasZoom={canvasZoom}
             projectImageCount={projectImages.length}
             projectImagePickerOpen={projectImagePickerOpen}
             onActiveToolChange={setActiveTool}
             onAddNote={addNote}
             onBackToBoards={() => setBoardBrowserOpen(true)}
             onBoardColorDraftChange={setBoardColorDraft}
+            onBoardSearchQueryChange={setBoardSearchQuery}
             onBoardTitleDraftChange={setBoardTitleDraft}
             onDeleteBoard={deleteBoard}
+            onFitContent={fitCanvasContent}
             onImportImages={importToBoard}
             onOpenBoardFolder={openBoardFolder}
+            onResetZoom={resetZoom}
             onSaveBoardSettings={saveBoardSettingsForCanvas}
             onToggleBoardTools={() => setBoardToolsOpen((current) => !current)}
             onToggleProjectImages={() =>
               setProjectImagePickerOpen((current) => !current)
             }
             onUndoStroke={undoLastStroke}
+            onZoomIn={zoomIn}
+            onZoomOut={zoomOut}
           />
 
           {projectImagePickerOpen ? (
@@ -964,6 +1751,7 @@ export function CanvasView({
                   {projectImages.map((item) => {
                     const itemTitle = item.title || basename(item.path);
                     const alreadyAdded = activeCanvasItemIds.has(item.id);
+                    const itemKind = canvasKindForItem(item);
                     const actionLabel = alreadyAdded
                       ? `${itemTitle} is already on this board`
                       : item.missing
@@ -994,6 +1782,9 @@ export function CanvasView({
                             thumbUrls={thumbUrls}
                             setThumbUrls={setThumbUrls}
                           />
+                          {itemKind === "document" ? (
+                            <span className="canvas-project-image-type">Doc</span>
+                          ) : null}
                         </button>
                       </article>
                     );
@@ -1001,12 +1792,27 @@ export function CanvasView({
                 </div>
               ) : (
                 <p className="canvas-project-image-empty">
-                  Import images to this project to add them to boards.
+                  Import files to this project to add them to boards.
                 </p>
               )}
             </section>
           ) : null}
         </div>
+
+        <CanvasSelectionBar
+          selectedCount={selectedObjects.length}
+          onAlignCenter={() => alignSelectedObjects("center-x")}
+          onAlignLeft={() => alignSelectedObjects("left")}
+          onAlignTop={() => alignSelectedObjects("top")}
+          onArrangeByDate={arrangeSelectedByDate}
+          onArrangeByType={arrangeSelectedByType}
+          onDelete={deleteSelectedObjects}
+          onDistributeHorizontal={() => distributeSelectedObjects("horizontal")}
+          onDistributeVertical={() => distributeSelectedObjects("vertical")}
+          onDuplicate={duplicateSelectedObjects}
+          onOrganizeIntoSection={organizeSelectedIntoSection}
+          onTidyGrid={tidySelectedObjects}
+        />
 
         <CanvasViewport
           zoom={canvasZoom}
@@ -1021,9 +1827,10 @@ export function CanvasView({
           }
           onDrop={handleBoardDrop}
           onDragOver={handleBoardDragOver}
-          onSurfacePointerDown={handleSurfacePointerDown}
+          onSurfacePointerDown={handleCanvasSurfacePointerDown}
           onSurfacePointerMove={handleSurfacePointerMove}
           onSurfacePointerLeave={hideToolCursor}
+          onViewportChange={saveViewportState}
         >
           <CanvasInkLayer
             activeStrokes={activeStrokes}
@@ -1041,6 +1848,7 @@ export function CanvasView({
             edgeLabelDraft={edgeLabelDraft}
             edgeRenderModels={edgeRenderModels}
             editingEdgeId={editingEdgeId}
+            matchedEdgeIds={matchedEdgeIds}
             selectedEdgeId={selectedEdgeId}
             onDeleteEdge={deleteEdge}
             onEdgeLabelDraftChange={setEdgeLabelDraft}
@@ -1058,28 +1866,60 @@ export function CanvasView({
             position={toolCursorPosition}
           />
 
+          {selectionMarquee ? (
+            <div
+              className="canvas-selection-marquee"
+              style={{
+                height: selectionMarquee.height,
+                transform: `translate(${
+                  selectionMarquee.x + CANVAS_WORLD_ORIGIN
+                }px, ${selectionMarquee.y + CANVAS_WORLD_ORIGIN}px)`,
+                width: selectionMarquee.width,
+              }}
+            />
+          ) : null}
+
           <CanvasObjectLayer
             activeItems={activeItems}
+            activeLinks={activeLinks}
             activeNotes={activeNotes}
+            activeSections={activeSections}
             activeTexts={activeTexts}
+            matchedObjectKeys={matchedObjectKeys}
+            selectedObjectKeys={selectedObjectKeySet}
             thumbUrls={thumbUrls}
             setThumbUrls={setThumbUrls}
+            positionForLink={positionForLink}
             positionForItem={positionForItem}
             positionForNote={positionForNote}
+            positionForSection={positionForSection}
             positionForText={positionForText}
+            onDeleteLink={deleteLink}
             onDeleteNote={deleteNote}
+            onDeleteSection={deleteSection}
             onDeleteTextElement={deleteTextElement}
             onOpenItem={onOpenItem}
             onRemoveItem={removeItem}
+            onSelectObject={selectCanvasObject}
             onStartConnectorDrag={startConnectorDrag}
             onStartDrag={startDrag}
             onStartResize={startResize}
             onSuppressClickAfterDrag={suppressClickAfterDrag}
+            onUpdateLink={updateLink}
             onUpdateNote={updateNote}
+            onUpdateSection={updateSection}
             onUpdateTextElement={updateTextElement}
             onUpdateTextElementSize={updateTextElementSize}
           />
+
         </CanvasViewport>
+
+        <CanvasMinimap
+          objectViews={objectViews}
+          scrollRef={scrollRef}
+          zoom={canvasZoom}
+          onFocusViewport={focusMinimapViewport}
+        />
       </div>
     </section>
   );

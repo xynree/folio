@@ -86,8 +86,8 @@ describe("ArchiveManager project imports", () => {
     );
 
     expect(imported.map((item) => item.path)).toEqual([
-      "projects/color-study/images/field-note.txt",
-      "projects/color-study/images/field-note_2.txt",
+      "projects/color-study/documents/field-note.txt",
+      "projects/color-study/documents/field-note_2.txt",
     ]);
     expect(imported[0]).toMatchObject({
       projectId: "project-1",
@@ -181,7 +181,7 @@ describe("ArchiveManager project imports", () => {
     ).rejects.toThrow();
   });
 
-  it("imports legacy buffered items into the default project images folder", async () => {
+  it("imports legacy buffered items into the default project documents folder", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-project-"));
     const dotFolio = path.join(tempDir, ".folio");
     await fs.mkdir(dotFolio, { recursive: true });
@@ -203,7 +203,7 @@ describe("ArchiveManager project imports", () => {
     expect(imported[0]).toMatchObject({
       title: "Clipboard Note",
       type: "text",
-      path: "projects/studio-archive/images/clipboard-note.md",
+      path: "projects/studio-archive/documents/clipboard-note.md",
       missing: false,
     });
     expect(imported[0].projectId).toBeUndefined();
@@ -240,17 +240,17 @@ describe("ArchiveManager project imports", () => {
   it("repairs missing flags while creating placeholder thumbnails", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-project-"));
     const dotFolio = path.join(tempDir, ".folio");
-    const imagesDir = path.join(tempDir, "projects", "color-study", "images");
+    const documentsDir = path.join(tempDir, "projects", "color-study", "documents");
     await fs.mkdir(dotFolio, { recursive: true });
-    await fs.mkdir(imagesDir, { recursive: true });
+    await fs.mkdir(documentsDir, { recursive: true });
     const dbPath = path.join(dotFolio, "folio.json");
-    const notePath = path.join(imagesDir, "note.txt");
+    const notePath = path.join(documentsDir, "note.txt");
     await fs.writeFile(notePath, "notes");
 
     const manager = new ArchiveManager(tempDir, dbPath);
     manager.setItems([
       makeItem("note", {
-        path: "projects/color-study/images/note.txt",
+        path: "projects/color-study/documents/note.txt",
         type: "text",
         title: "Note",
         missing: true,
@@ -307,11 +307,13 @@ describe("ArchiveManager project imports", () => {
     expect(manager.getItems()[1].mediaWidth).toBeUndefined();
   });
 
-  it("migrates legacy item paths into project images folders", async () => {
+  it("migrates legacy item paths into project media folders by item type", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-project-"));
     const legacyPath = path.join(tempDir, "items", "2026", "06_june", "alpha.PNG");
     await fs.mkdir(path.dirname(legacyPath), { recursive: true });
     await fs.writeFile(legacyPath, "image bytes");
+    const legacyNotePath = path.join(tempDir, "items", "2026", "06_june", "note.txt");
+    await fs.writeFile(legacyNotePath, "note bytes");
     const dbPath = path.join(tempDir, ".folio", "folio.json");
 
     const manager = new ArchiveManager(tempDir, dbPath);
@@ -325,9 +327,15 @@ describe("ArchiveManager project imports", () => {
         path: "items/2026/06_june/bravo.PNG",
         title: "Bravo Study",
       }),
+      makeItem("note", {
+        path: "items/2026/06_june/note.txt",
+        title: "Field Note",
+        type: "text",
+        projectId: "project-1",
+      }),
     ]);
 
-    const changed = await manager.migrateItemsToProjectImages(
+    const changed = await manager.migrateItemsToProjectMedia(
       new Map([["project-1", "projects/color-study"]]),
     );
 
@@ -336,9 +344,16 @@ describe("ArchiveManager project imports", () => {
       "projects/color-study/images/alpha-study.png",
     );
     expect(manager.getItems()[1].path).toBe("items/2026/06_june/bravo.PNG");
+    expect(manager.getItems()[2].path).toBe(
+      "projects/color-study/documents/field-note.txt",
+    );
     await expect(
       fs.readFile(path.join(tempDir, manager.getItems()[0].path), "utf-8"),
     ).resolves.toBe("image bytes");
+    await expect(
+      fs.readFile(path.join(tempDir, manager.getItems()[2].path), "utf-8"),
+    ).resolves.toBe("note bytes");
     await expect(fs.stat(legacyPath)).rejects.toThrow();
+    await expect(fs.stat(legacyNotePath)).rejects.toThrow();
   });
 });

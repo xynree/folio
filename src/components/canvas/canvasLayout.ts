@@ -1,7 +1,9 @@
 import type {
   Canvas,
+  CanvasLink,
   CanvasNote,
   CanvasObjectGeometry,
+  CanvasSection,
   CanvasTextElement,
   FolioItem,
 } from "../../types";
@@ -16,6 +18,10 @@ export type CanvasDragPreview = {
   kind: CanvasObjectKind;
   position: CanvasObjectGeometry;
 };
+
+export function canvasKindForItem(item: FolioItem): Extract<CanvasObjectKind, "item" | "document"> {
+  return ["sketch", "anim"].includes(item.type) ? "item" : "document";
+}
 
 export function itemsByIdFromItems(items: FolioItem[]): Map<string, FolioItem> {
   return new Map(items.map((item) => [item.id, item]));
@@ -48,7 +54,11 @@ export function positionForCanvasItem(
   canvas: Canvas | null,
   dragPreview: CanvasDragPreview | null,
 ): CanvasObjectGeometry {
-  if (dragPreview?.kind === "item" && dragPreview.id === item.id) {
+  const kind = canvasKindForItem(item);
+  if (
+    (dragPreview?.kind === "item" || dragPreview?.kind === "document")
+    && dragPreview.id === item.id
+  ) {
     return dragPreview.position;
   }
 
@@ -56,15 +66,50 @@ export function positionForCanvasItem(
     x: 80 + (index % 4) * 190,
     y: 90 + Math.floor(index / 4) * 230,
   };
-  const size = sizeForCanvasImageObject("item", savedPosition, {
-    width: item.mediaWidth,
-    height: item.mediaHeight,
-  });
+  const size =
+    kind === "item"
+      ? sizeForCanvasImageObject("item", savedPosition, {
+          width: item.mediaWidth,
+          height: item.mediaHeight,
+        })
+      : objectLayoutFromPosition(item.id, "document", savedPosition).size;
 
   return {
     ...savedPosition,
     width: size.width,
     height: size.height,
+  };
+}
+
+export function positionForCanvasLink(
+  link: CanvasLink,
+  dragPreview: CanvasDragPreview | null,
+): CanvasObjectGeometry {
+  if (dragPreview?.kind === "link" && dragPreview.id === link.id) {
+    return dragPreview.position;
+  }
+
+  return {
+    x: link.x,
+    y: link.y,
+    width: link.width,
+    height: link.height,
+  };
+}
+
+export function positionForCanvasSection(
+  section: CanvasSection,
+  dragPreview: CanvasDragPreview | null,
+): CanvasObjectGeometry {
+  if (dragPreview?.kind === "section" && dragPreview.id === section.id) {
+    return dragPreview.position;
+  }
+
+  return {
+    x: section.x,
+    y: section.y,
+    width: section.width,
+    height: section.height,
   };
 }
 
@@ -99,12 +144,16 @@ export function buildCanvasObjectLayouts({
   activeCanvas,
   activeItems,
   activeNotes,
+  activeLinks,
+  activeSections,
   activeTexts,
   dragPreview,
 }: {
   activeCanvas: Canvas | null;
   activeItems: FolioItem[];
   activeNotes: CanvasNote[];
+  activeLinks: CanvasLink[];
+  activeSections: CanvasSection[];
   activeTexts: CanvasTextElement[];
   dragPreview: CanvasDragPreview | null;
 }): Map<string, CanvasObjectLayout> {
@@ -115,7 +164,7 @@ export function buildCanvasObjectLayouts({
       item.id,
       objectLayoutFromPosition(
         item.id,
-        "item",
+        canvasKindForItem(item),
         positionForCanvasItem(item, index, activeCanvas, dragPreview),
       ),
     );
@@ -139,6 +188,28 @@ export function buildCanvasObjectLayouts({
         textElement.id,
         "text",
         positionForCanvasText(textElement, dragPreview),
+      ),
+    );
+  });
+
+  activeLinks.forEach((link) => {
+    layouts.set(
+      link.id,
+      objectLayoutFromPosition(
+        link.id,
+        "link",
+        positionForCanvasLink(link, dragPreview),
+      ),
+    );
+  });
+
+  activeSections.forEach((section) => {
+    layouts.set(
+      section.id,
+      objectLayoutFromPosition(
+        section.id,
+        "section",
+        positionForCanvasSection(section, dragPreview),
       ),
     );
   });
