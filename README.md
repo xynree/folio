@@ -10,6 +10,8 @@ Folio is a local-first Electron app for collecting visual work, browsing it by t
 - A resizable tags sidebar with per-tag counts and thumbnail previews.
 - A right-side board dock that opens to a board browser or a focused canvas board.
 - Canvas boards with draggable archive cards, reference images, and text notes.
+- Shift-drag connection edges between canvas items, references, and notes, with inline edge labels.
+- Freehand pen strokes on boards with Cmd+Z undo.
 - Board settings for title, color, delete, and board member dots on archive cards.
 - Small generated thumbnails for archive cards, board previews, and canvas references so the UI does not load full source images for normal browsing.
 - Local reconciliation for files renamed, moved, or deleted in Finder.
@@ -107,4 +109,4 @@ npm run package
 - The archive is intentionally offline-first and has no backend.
 - The JSON files are small, readable, and portable.
 - Thumbnails are cache files and can be regenerated from source media.
-- Current canvas boards support spatial arrangement, notes, and references; edge drawing and freehand strokes remain planned work.
+- Current canvas boards support spatial arrangement, notes, references, connection edges, and freehand strokes.

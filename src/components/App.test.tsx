@@ -1278,6 +1278,170 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     );
   });
 
+  it("imports reference images from the focused board toolbar", async () => {
+    const app = setupFolio({
+      dialogPaths: ["/tmp/reference-a.png", "/tmp/reference-b.png"],
+    });
+    vi.mocked(window.folio.copyReference).mockResolvedValueOnce([
+      {
+        id: "ref-a",
+        filename: "reference-a.png",
+        path: "references/board-1/reference-a.png",
+        x: 0,
+        y: 0,
+      },
+      {
+        id: "ref-b",
+        filename: "reference-b.png",
+        path: "references/board-1/reference-b.png",
+        x: 0,
+        y: 0,
+      },
+    ]);
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openActiveBoardCanvas(user);
+    const scroll = document.querySelector(".canvas-scroll") as HTMLElement;
+    scroll.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: 400,
+        bottom: 300,
+        width: 400,
+        height: 300,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    scroll.scrollLeft = CANVAS_WORLD_ORIGIN - 40;
+    scroll.scrollTop = CANVAS_WORLD_ORIGIN - 20;
+
+    await user.click(screen.getByRole("button", { name: /add reference/i }));
+
+    await waitFor(() => {
+      expect(window.folio.openFileDialog).toHaveBeenCalledTimes(1);
+      expect(window.folio.copyReference).toHaveBeenCalledWith("board-1", [
+        "/tmp/reference-a.png",
+        "/tmp/reference-b.png",
+      ]);
+      expect(app.data.canvases[0].references).toHaveLength(2);
+    });
+    expect(app.data.canvases[0].references[0]).toMatchObject({
+      id: "ref-a",
+      x: 160,
+      y: 130,
+    });
+    expect(app.data.canvases[0].references[1]).toMatchObject({
+      id: "ref-b",
+      x: 188,
+      y: 158,
+    });
+  });
+
+  it("draws, labels, and deletes edges between canvas objects", async () => {
+    const app = setupFolio({
+      data: makeData({
+        canvases: [
+          makeData().canvases[0],
+        ].map((canvas) => ({
+          ...canvas,
+          itemIds: ["alpha", "bravo"],
+          positions: {
+            alpha: { x: 80, y: 90 },
+            bravo: { x: 320, y: 120 },
+          },
+        })),
+      }),
+    });
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openActiveBoardCanvas(user);
+    const alphaCard = document.querySelector(
+      '[data-canvas-object-id="alpha"]',
+    ) as HTMLElement;
+    const bravoCard = document.querySelector(
+      '[data-canvas-object-id="bravo"]',
+    ) as HTMLElement;
+    expect(alphaCard).not.toBeNull();
+    expect(bravoCard).not.toBeNull();
+
+    fireEvent.pointerDown(alphaCard, {
+      button: 0,
+      shiftKey: true,
+      clientX: 100,
+      clientY: 100,
+    });
+    fireEvent.pointerMove(window, { clientX: 320, clientY: 140 });
+    fireEvent.pointerUp(bravoCard, { clientX: 320, clientY: 140 });
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].edges).toHaveLength(1);
+    });
+    expect(document.querySelector(".canvas-edge-path")).not.toBeNull();
+
+    const edgeLabelButton = await screen.findByRole("button", {
+      name: /edge label: link/i,
+    });
+    fireEvent.doubleClick(edgeLabelButton);
+    const labelInput = await screen.findByLabelText(/edge label/i);
+    await user.type(labelInput, "Inspired by{Enter}");
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].edges[0].label).toBe("Inspired by");
+    });
+    const updatedLabel = await screen.findByRole("button", {
+      name: /edge label: inspired by/i,
+    });
+    await user.click(updatedLabel);
+    fireEvent.keyDown(window, { key: "Delete" });
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].edges).toHaveLength(0);
+    });
+  });
+
+  it("draws freehand canvas strokes and supports stroke undo", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openActiveBoardCanvas(user);
+    const surface = document.querySelector(".canvas-surface") as HTMLElement;
+    expect(surface).not.toBeNull();
+    surface.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: CANVAS_WORLD_ORIGIN * 2,
+        bottom: CANVAS_WORLD_ORIGIN * 2,
+        width: CANVAS_WORLD_ORIGIN * 2,
+        height: CANVAS_WORLD_ORIGIN * 2,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    await user.click(screen.getByRole("button", { name: /pen tool/i }));
+    fireEvent.pointerDown(surface, { button: 0, clientX: 20110, clientY: 20120 });
+    fireEvent.pointerMove(window, { clientX: 20130, clientY: 20144 });
+    fireEvent.pointerMove(window, { clientX: 20160, clientY: 20170 });
+    fireEvent.pointerUp(window, { clientX: 20160, clientY: 20170 });
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].strokes).toHaveLength(1);
+      expect(app.data.canvases[0].strokes?.[0].path).toContain("M 20110 20120");
+    });
+    expect(document.querySelector(".canvas-stroke-path")).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: "z", metaKey: true });
+    await waitFor(() => {
+      expect(app.data.canvases[0].strokes).toHaveLength(0);
+    });
+  });
+
   it("drags canvas cards from their image content without turning drags into clicks", async () => {
     const app = setupFolio();
     const user = userEvent.setup();

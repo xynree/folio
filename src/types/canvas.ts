@@ -17,6 +17,13 @@ export interface CanvasEdge {
   label?: string; // Optional text shown on the edge
 }
 
+/** A freehand annotation path drawn directly on the canvas */
+export interface CanvasStroke {
+  id: string;
+  path: string;
+  color: string;
+}
+
 /** A text card placed directly on the canvas surface */
 export interface CanvasNote extends CanvasPosition {
   id: string;
@@ -41,4 +48,5 @@ export interface Canvas {
   notes: CanvasNote[];
   edges: CanvasEdge[];
   references: CanvasReference[];
+  strokes?: CanvasStroke[];
 }

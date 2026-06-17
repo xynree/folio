@@ -34,6 +34,8 @@ export function CanvasItemCard({
   return (
     <div
       className="canvas-card"
+      data-canvas-object-id={item.id}
+      data-canvas-object-kind="item"
       style={{
         transform: `translate(${position.x + CANVAS_WORLD_ORIGIN}px, ${
           position.y + CANVAS_WORLD_ORIGIN
@@ -100,6 +102,8 @@ export function ReferenceCard({
   return (
     <div
       className="canvas-card reference-card"
+      data-canvas-object-id={reference.id}
+      data-canvas-object-kind="reference"
       style={{
         transform: `translate(${position.x + CANVAS_WORLD_ORIGIN}px, ${
           position.y + CANVAS_WORLD_ORIGIN
@@ -157,6 +161,8 @@ export function CanvasNoteCard({
   return (
     <div
       className="canvas-note"
+      data-canvas-object-id={note.id}
+      data-canvas-object-kind="note"
       style={{
         transform: `translate(${note.x + CANVAS_WORLD_ORIGIN}px, ${
           note.y + CANVAS_WORLD_ORIGIN

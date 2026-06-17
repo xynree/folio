@@ -485,10 +485,16 @@ Likely future JSON files, only if needed:
 
 ## Roadmap
 
+Completed MVP foundation:
+
+- Board-local reference capture from drag/drop and file dialog.
+- SVG edge rendering and editing for item, reference, and note connections.
+- Freehand canvas strokes with board-color ink and Cmd+Z undo.
+- Local archive import, board membership, notes, thumbnails, tags, and reconciliation.
+
 Near-term roadmap:
 
-- Finish board-local reference capture from file dialog, clipboard paste, and URLs.
-- Render and edit `CanvasEdge` relationships between items, references, and notes.
+- Add clipboard paste and URL capture for references.
 - Add item stages so sketches, WIP, final pieces, output, and references are distinct.
 - Add project-like board metadata: kind, status, brief, outcome, and dates.
 - Add Studio Wall home view from derived renderer selectors.

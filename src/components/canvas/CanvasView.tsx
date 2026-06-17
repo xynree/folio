@@ -4,25 +4,33 @@ import {
   Edit3,
   Ellipsis,
   ImagePlus,
+  Link2,
   Minimize2,
+  Paperclip,
+  PenLine,
   Plus,
   Save,
   StickyNote,
   Trash2,
+  Undo2,
   X,
 } from "lucide-react";
 import type {
   Canvas,
+  CanvasEdge,
   CanvasNote,
   CanvasPosition,
   CanvasReference,
+  CanvasStroke,
   FolioData,
   FolioItem,
   ThumbnailUrls,
 } from "../../types";
 import {
   CANVAS_COLORS,
+  CANVAS_WORLD_HEIGHT,
   CANVAS_WORLD_ORIGIN,
+  CANVAS_WORLD_WIDTH,
   ITEM_DRAG_MIME,
 } from "../folio/constants";
 import type { DataUpdater, ItemDetailsOpenHandler } from "../folio/types";
@@ -42,6 +50,82 @@ import { CanvasViewport } from "./CanvasViewport";
 type CanvasDragKind = "item" | "reference" | "note";
 const CANVAS_OBJECT_DRAG_THRESHOLD = 4;
 const BOARD_BROWSER_PREVIEW_LIMIT = 3;
+const STROKE_POINT_MIN_DISTANCE = 2;
+
+const CANVAS_OBJECT_SIZES: Record<
+  CanvasDragKind,
+  { width: number; height: number }
+> = {
+  item: { width: 162, height: 190 },
+  reference: { width: 162, height: 214 },
+  note: { width: 220, height: 150 },
+};
+
+type CanvasObjectLayout = {
+  id: string;
+  kind: CanvasDragKind;
+  center: CanvasPosition;
+};
+
+type EdgeRenderModel = {
+  edge: CanvasEdge;
+  path: string;
+  labelPosition: CanvasPosition;
+};
+
+function buildPolylinePath(points: CanvasPosition[]) {
+  if (!points.length) return "";
+  const [first, ...rest] = points;
+  return [
+    `M ${Math.round(first.x)} ${Math.round(first.y)}`,
+    ...rest.map((point) => `L ${Math.round(point.x)} ${Math.round(point.y)}`),
+  ].join(" ");
+}
+
+function buildEdgePath(from: CanvasPosition, to: CanvasPosition) {
+  const deltaX = to.x - from.x;
+  const direction = deltaX >= 0 ? 1 : -1;
+  const controlOffset = Math.max(48, Math.abs(deltaX) * 0.45) * direction;
+  return [
+    `M ${Math.round(from.x)} ${Math.round(from.y)}`,
+    `C ${Math.round(from.x + controlOffset)} ${Math.round(from.y)}`,
+    `${Math.round(to.x - controlOffset)} ${Math.round(to.y)}`,
+    `${Math.round(to.x)} ${Math.round(to.y)}`,
+  ].join(" ");
+}
+
+function edgeLabelPosition(from: CanvasPosition, to: CanvasPosition) {
+  return {
+    x: (from.x + to.x) / 2,
+    y: (from.y + to.y) / 2,
+  };
+}
+
+function objectTargetFromEvent(event: PointerEvent) {
+  const directTarget = event.target instanceof Element ? event.target : null;
+  const directObject = directTarget?.closest<HTMLElement>(
+    "[data-canvas-object-id]",
+  );
+  if (directObject?.dataset.canvasObjectId) {
+    return {
+      id: directObject.dataset.canvasObjectId,
+      kind: directObject.dataset.canvasObjectKind as CanvasDragKind,
+    };
+  }
+
+  const elementAtPoint = document.elementFromPoint(
+    event.clientX,
+    event.clientY,
+  );
+  const pointedObject = elementAtPoint?.closest<HTMLElement>(
+    "[data-canvas-object-id]",
+  );
+  if (!pointedObject?.dataset.canvasObjectId) return null;
+  return {
+    id: pointedObject.dataset.canvasObjectId,
+    kind: pointedObject.dataset.canvasObjectKind as CanvasDragKind,
+  };
+}
 
 export function CanvasView({
   data,
@@ -81,6 +165,15 @@ export function CanvasView({
     kind: CanvasDragKind;
     position: CanvasPosition;
   } | null>(null);
+  const [edgeDraft, setEdgeDraft] = useState<{
+    fromId: string;
+    toPoint: CanvasPosition;
+  } | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
+  const [edgeLabelDraft, setEdgeLabelDraft] = useState("");
+  const [penMode, setPenMode] = useState(false);
+  const [strokePreview, setStrokePreview] = useState<CanvasStroke | null>(null);
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
   const [boardBrowserOpen, setBoardBrowserOpen] = useState(true);
   const [boardMenuCanvasId, setBoardMenuCanvasId] = useState<string | null>(null);
@@ -115,6 +208,10 @@ export function CanvasView({
     setBoardTitleDraft(activeCanvas?.title ?? "");
     setBoardColorDraft(activeCanvas?.color ?? CANVAS_COLORS[0]);
     setBoardToolsOpen(false);
+    setEdgeDraft(null);
+    setSelectedEdgeId(null);
+    setEditingEdgeId(null);
+    setStrokePreview(null);
   }, [activeCanvas?.color, activeCanvas?.id, activeCanvas?.title]);
 
   useEffect(() => {
@@ -175,6 +272,10 @@ export function CanvasView({
         : [],
     [activeCanvas, itemsById],
   );
+  const activeReferences = activeCanvas?.references ?? [];
+  const activeNotes = activeCanvas?.notes ?? [];
+  const activeEdges = activeCanvas?.edges ?? [];
+  const activeStrokes = activeCanvas?.strokes ?? [];
 
   const browserEditCanvas =
     data.canvases.find((canvas) => canvas.id === browserEditCanvasId) ?? null;
@@ -388,6 +489,313 @@ export function CanvasView({
     [dragPreview],
   );
 
+  const canvasObjectLayouts = useMemo(() => {
+    const layouts = new Map<string, CanvasObjectLayout>();
+
+    activeItems.forEach((item, index) => {
+      const position = positionForItem(item, index);
+      const size = CANVAS_OBJECT_SIZES.item;
+      layouts.set(item.id, {
+        id: item.id,
+        kind: "item",
+        center: {
+          x: position.x + CANVAS_WORLD_ORIGIN + size.width / 2,
+          y: position.y + CANVAS_WORLD_ORIGIN + size.height / 2,
+        },
+      });
+    });
+
+    activeReferences.forEach((reference) => {
+      const position = positionForReference(reference);
+      const size = CANVAS_OBJECT_SIZES.reference;
+      layouts.set(reference.id, {
+        id: reference.id,
+        kind: "reference",
+        center: {
+          x: position.x + CANVAS_WORLD_ORIGIN + size.width / 2,
+          y: position.y + CANVAS_WORLD_ORIGIN + size.height / 2,
+        },
+      });
+    });
+
+    activeNotes.forEach((note) => {
+      const position = positionForNote(note);
+      const size = CANVAS_OBJECT_SIZES.note;
+      layouts.set(note.id, {
+        id: note.id,
+        kind: "note",
+        center: {
+          x: position.x + CANVAS_WORLD_ORIGIN + size.width / 2,
+          y: position.y + CANVAS_WORLD_ORIGIN + size.height / 2,
+        },
+      });
+    });
+
+    return layouts;
+  }, [
+    activeItems,
+    activeNotes,
+    activeReferences,
+    positionForItem,
+    positionForNote,
+    positionForReference,
+  ]);
+
+  const edgeRenderModels = useMemo(
+    () =>
+      activeEdges
+        .map((edge): EdgeRenderModel | null => {
+          const from = canvasObjectLayouts.get(edge.fromId);
+          const to = canvasObjectLayouts.get(edge.toId);
+          if (!from || !to) return null;
+          return {
+            edge,
+            path: buildEdgePath(from.center, to.center),
+            labelPosition: edgeLabelPosition(from.center, to.center),
+          };
+        })
+        .filter(Boolean) as EdgeRenderModel[],
+    [activeEdges, canvasObjectLayouts],
+  );
+
+  const surfacePointFromClient = useCallback(
+    (clientX: number, clientY: number): CanvasPosition => {
+      const surface = surfaceRef.current;
+      if (!surface) return { x: CANVAS_WORLD_ORIGIN + 120, y: CANVAS_WORLD_ORIGIN + 120 };
+      const rect = surface.getBoundingClientRect();
+      return {
+        x: (clientX - rect.left) / canvasZoom,
+        y: (clientY - rect.top) / canvasZoom,
+      };
+    },
+    [canvasZoom],
+  );
+
+  const centerPositionForCurrentViewport = useCallback((): CanvasPosition => {
+    const scroll = scrollRef.current;
+    if (!scroll) return { x: 120, y: 120 };
+    const rect = scroll.getBoundingClientRect();
+    const width = scroll.clientWidth || rect.width;
+    const height = scroll.clientHeight || rect.height;
+    if (!width || !height) return { x: 120, y: 120 };
+    return {
+      x: (scroll.scrollLeft + width / 2) / canvasZoom - CANVAS_WORLD_ORIGIN,
+      y: (scroll.scrollTop + height / 2) / canvasZoom - CANVAS_WORLD_ORIGIN,
+    };
+  }, [canvasZoom]);
+
+  const saveEdgeLabel = useCallback(() => {
+    if (!activeCanvas || !editingEdgeId) return;
+    const trimmed = edgeLabelDraft.trim();
+    updateCanvas(activeCanvas.id, (canvas) => ({
+      ...canvas,
+      edges: (canvas.edges ?? []).map((edge) =>
+        edge.id === editingEdgeId
+          ? { ...edge, label: trimmed || undefined }
+          : edge,
+      ),
+    }), "Edge updated");
+    setEditingEdgeId(null);
+    setEdgeLabelDraft("");
+  }, [activeCanvas, edgeLabelDraft, editingEdgeId, updateCanvas]);
+
+  const startEdgeLabelEdit = useCallback((edge: CanvasEdge) => {
+    setSelectedEdgeId(edge.id);
+    setEditingEdgeId(edge.id);
+    setEdgeLabelDraft(edge.label ?? "");
+  }, []);
+
+  const startEdgeDrag = useCallback(
+    (
+      event: React.PointerEvent,
+      kind: CanvasDragKind,
+      objectId: string,
+    ) => {
+      if (!activeCanvas) return;
+      if (event.button !== 0) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const source = canvasObjectLayouts.get(objectId);
+      const startPoint =
+        source?.center ?? surfacePointFromClient(event.clientX, event.clientY);
+      const previousCursor = document.body.style.cursor;
+      const previousUserSelect = document.body.style.userSelect;
+      document.body.style.cursor = "crosshair";
+      document.body.style.userSelect = "none";
+      setSelectedEdgeId(null);
+      setEditingEdgeId(null);
+      setEdgeDraft({ fromId: objectId, toPoint: startPoint });
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        moveEvent.preventDefault();
+        setEdgeDraft({
+          fromId: objectId,
+          toPoint: surfacePointFromClient(moveEvent.clientX, moveEvent.clientY),
+        });
+      };
+
+      const onPointerUp = (upEvent: PointerEvent) => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousUserSelect;
+        setEdgeDraft(null);
+
+        const target = objectTargetFromEvent(upEvent);
+        if (!target || target.id === objectId || !canvasObjectLayouts.has(target.id)) {
+          return;
+        }
+
+        const edgeId = createId("edge");
+        updateCanvas(
+          activeCanvas.id,
+          (canvas) => {
+            const edges = canvas.edges ?? [];
+            const alreadyConnected = edges.some(
+              (edge) =>
+                (edge.fromId === objectId && edge.toId === target.id)
+                || (edge.fromId === target.id && edge.toId === objectId),
+            );
+            if (alreadyConnected) return canvas;
+            return {
+              ...canvas,
+              edges: [...edges, { id: edgeId, fromId: objectId, toId: target.id }],
+            };
+          },
+          `${kind === "reference" ? "Reference" : "Card"} linked`,
+        );
+        setSelectedEdgeId(edgeId);
+      };
+
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+    },
+    [activeCanvas, canvasObjectLayouts, surfacePointFromClient, updateCanvas],
+  );
+
+  const undoLastStroke = useCallback(() => {
+    if (!activeCanvas || !activeStrokes.length) return;
+    updateCanvas(activeCanvas.id, (canvas) => ({
+      ...canvas,
+      strokes: (canvas.strokes ?? []).slice(0, -1),
+    }), "Stroke removed");
+  }, [activeCanvas, activeStrokes.length, updateCanvas]);
+
+  const handleSurfacePointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!penMode || !activeCanvas) return;
+      if (event.button !== 0) return;
+      const target = event.target;
+      if (
+        target instanceof Element
+        && target.closest(
+          ".canvas-card, .canvas-note, .canvas-edge-label, button, input, textarea, select",
+        )
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const strokeId = createId("stroke");
+      const color = activeCanvas.color ?? CANVAS_COLORS[0];
+      const points = [surfacePointFromClient(event.clientX, event.clientY)];
+      const previousCursor = document.body.style.cursor;
+      const previousUserSelect = document.body.style.userSelect;
+      document.body.style.cursor = "crosshair";
+      document.body.style.userSelect = "none";
+      setStrokePreview({ id: strokeId, path: buildPolylinePath(points), color });
+
+      const onPointerMove = (moveEvent: PointerEvent) => {
+        moveEvent.preventDefault();
+        const point = surfacePointFromClient(moveEvent.clientX, moveEvent.clientY);
+        const lastPoint = points[points.length - 1];
+        if (
+          Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y)
+          < STROKE_POINT_MIN_DISTANCE
+        ) {
+          return;
+        }
+        points.push(point);
+        setStrokePreview({
+          id: strokeId,
+          path: buildPolylinePath(points),
+          color,
+        });
+      };
+
+      const onPointerUp = () => {
+        window.removeEventListener("pointermove", onPointerMove);
+        window.removeEventListener("pointerup", onPointerUp);
+        document.body.style.cursor = previousCursor;
+        document.body.style.userSelect = previousUserSelect;
+        setStrokePreview(null);
+        if (points.length < 2) return;
+
+        const stroke: CanvasStroke = {
+          id: strokeId,
+          path: buildPolylinePath(points),
+          color,
+        };
+        updateCanvas(activeCanvas.id, (canvas) => ({
+          ...canvas,
+          strokes: [...(canvas.strokes ?? []), stroke],
+        }), "Stroke added");
+      };
+
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
+    },
+    [activeCanvas, penMode, surfacePointFromClient, updateCanvas],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      const editingText =
+        target instanceof Element
+        && Boolean(target.closest("input, textarea, select"));
+      if (editingText) return;
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+        if (activeStrokes.length) {
+          event.preventDefault();
+          undoLastStroke();
+        }
+        return;
+      }
+
+      if (
+        !selectedEdgeId
+        || editingEdgeId
+        || (event.key !== "Delete" && event.key !== "Backspace")
+        || !activeCanvas
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      updateCanvas(activeCanvas.id, (canvas) => ({
+        ...canvas,
+        edges: (canvas.edges ?? []).filter((edge) => edge.id !== selectedEdgeId),
+      }), "Edge deleted");
+      setSelectedEdgeId(null);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    activeCanvas,
+    activeStrokes.length,
+    editingEdgeId,
+    selectedEdgeId,
+    undoLastStroke,
+    updateCanvas,
+  ]);
+
   const startDrag = useCallback(
     (
       event: React.PointerEvent,
@@ -397,6 +805,10 @@ export function CanvasView({
     ) => {
       if (!activeCanvas) return;
       if (event.button !== 0) return;
+      if (event.shiftKey) {
+        startEdgeDrag(event, kind, objectId);
+        return;
+      }
 
       const startPointer = { x: event.clientX, y: event.clientY };
       const previousCursor = document.body.style.cursor;
@@ -489,7 +901,7 @@ export function CanvasView({
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
     },
-    [activeCanvas, canvasZoom, data, saveData],
+    [activeCanvas, canvasZoom, data, saveData, startEdgeDrag],
   );
 
   const suppressClickAfterDrag = useCallback(
@@ -522,6 +934,62 @@ export function CanvasView({
     };
   }, [canvasZoom]);
 
+  const addReferencesAtPosition = useCallback(
+    async (
+      filePaths: string[],
+      point: CanvasPosition,
+      message = "Reference added",
+    ) => {
+      if (!activeCanvas) return;
+      const uniquePaths = Array.from(new Set(filePaths.filter(Boolean)));
+      if (!uniquePaths.length) return;
+
+      try {
+        const references = await window.folio.copyReference(
+          activeCanvas.id,
+          uniquePaths,
+        );
+        const placed = references.map((reference, index) => ({
+          ...reference,
+          x: point.x + index * 28,
+          y: point.y + index * 28,
+        }));
+
+        commitData(
+          (current) => ({
+            ...current,
+            canvases: current.canvases.map((canvas) =>
+              canvas.id === activeCanvas.id
+                ? {
+                    ...canvas,
+                    references: [...(canvas.references ?? []), ...placed],
+                  }
+                : canvas,
+            ),
+          }),
+          message,
+        );
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [activeCanvas, commitData],
+  );
+
+  const importReferencesToBoard = useCallback(async () => {
+    if (!activeCanvas) return;
+    try {
+      const filePaths = await window.folio.openFileDialog();
+      await addReferencesAtPosition(
+        filePaths,
+        centerPositionForCurrentViewport(),
+        `${formatCount(filePaths.length, "reference")} added`,
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  }, [activeCanvas, addReferencesAtPosition, centerPositionForCurrentViewport]);
+
   const handleReferenceDrop = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -545,31 +1013,15 @@ export function CanvasView({
         .filter(Boolean);
       if (!filePaths.length) return;
 
-      const point = canvasPointFromEvent(event);
-      try {
-        const references = await window.folio.copyReference(activeCanvas.id, filePaths);
-        const placed = references.map((reference, index) => ({
-          ...reference,
-          x: point.x + index * 28,
-          y: point.y + index * 28,
-        }));
-
-        commitData(
-          (current) => ({
-            ...current,
-            canvases: current.canvases.map((canvas) =>
-              canvas.id === activeCanvas.id
-                ? { ...canvas, references: [...canvas.references, ...placed] }
-                : canvas,
-            ),
-          }),
-          "Reference added",
-        );
-      } catch (error) {
-        console.error(error);
-      }
+      await addReferencesAtPosition(filePaths, canvasPointFromEvent(event));
     },
-    [activeCanvas, addDroppedItems, canvasPointFromEvent, clearDragState, commitData],
+    [
+      activeCanvas,
+      addDroppedItems,
+      addReferencesAtPosition,
+      canvasPointFromEvent,
+      clearDragState,
+    ],
   );
 
   const handleReferenceDragOver = useCallback((event: React.DragEvent) => {
@@ -596,6 +1048,9 @@ export function CanvasView({
       updateCanvas(activeCanvas.id, (canvas) => ({
         ...canvas,
         notes: canvas.notes.filter((note) => note.id !== noteId),
+        edges: (canvas.edges ?? []).filter(
+          (edge) => edge.fromId !== noteId && edge.toId !== noteId,
+        ),
       }), "Note deleted");
     },
     [activeCanvas, updateCanvas],
@@ -608,6 +1063,9 @@ export function CanvasView({
         ...canvas,
         references: canvas.references.filter(
           (reference) => reference.id !== referenceId,
+        ),
+        edges: (canvas.edges ?? []).filter(
+          (edge) => edge.fromId !== referenceId && edge.toId !== referenceId,
         ),
       }), "Reference removed");
     },
@@ -1027,11 +1485,42 @@ export function CanvasView({
             <button
               className="canvas-board-action-button"
               type="button"
+              aria-label="Add reference"
+              title="Add reference"
+              onClick={importReferencesToBoard}
+            >
+              <ButtonIcon icon={Paperclip} />
+            </button>
+            <button
+              className="canvas-board-action-button"
+              type="button"
               aria-label="Import images"
               title="Import images"
               onClick={importToBoard}
             >
               <ButtonIcon icon={ImagePlus} />
+            </button>
+            <button
+              className={`canvas-board-action-button ${
+                penMode ? "canvas-board-action-active" : ""
+              }`}
+              type="button"
+              aria-label="Pen tool"
+              aria-pressed={penMode}
+              title="Pen tool"
+              onClick={() => setPenMode((current) => !current)}
+            >
+              <ButtonIcon icon={PenLine} />
+            </button>
+            <button
+              className="canvas-board-action-button"
+              type="button"
+              aria-label="Undo stroke"
+              title="Undo stroke"
+              disabled={!activeStrokes.length}
+              onClick={undoLastStroke}
+            >
+              <ButtonIcon icon={Undo2} />
             </button>
             <button
               className="canvas-board-edit-button"
@@ -1069,7 +1558,121 @@ export function CanvasView({
           surfaceRef={surfaceRef}
           onDrop={handleReferenceDrop}
           onDragOver={handleReferenceDragOver}
+          onSurfacePointerDown={handleSurfacePointerDown}
         >
+          <svg
+            className="canvas-ink-layer"
+            width={CANVAS_WORLD_WIDTH}
+            height={CANVAS_WORLD_HEIGHT}
+            viewBox={`0 0 ${CANVAS_WORLD_WIDTH} ${CANVAS_WORLD_HEIGHT}`}
+            aria-hidden="true"
+          >
+            {activeStrokes.map((stroke) => (
+              <path
+                className="canvas-stroke-path"
+                d={stroke.path}
+                key={stroke.id}
+                stroke={stroke.color}
+              />
+            ))}
+            {strokePreview ? (
+              <path
+                className="canvas-stroke-path canvas-stroke-preview"
+                d={strokePreview.path}
+                stroke={strokePreview.color}
+              />
+            ) : null}
+            {edgeRenderModels.map((model) => (
+              <g
+                className={`canvas-edge ${
+                  selectedEdgeId === model.edge.id ? "canvas-edge-selected" : ""
+                }`}
+                data-edge-id={model.edge.id}
+                key={model.edge.id}
+              >
+                <path
+                  className="canvas-edge-hit-area"
+                  d={model.path}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelectedEdgeId(model.edge.id);
+                  }}
+                  onDoubleClick={(event) => {
+                    event.stopPropagation();
+                    startEdgeLabelEdit(model.edge);
+                  }}
+                />
+                <path className="canvas-edge-path" d={model.path} />
+              </g>
+            ))}
+            {edgeDraft && canvasObjectLayouts.get(edgeDraft.fromId) ? (
+              <path
+                className="canvas-edge-path canvas-edge-draft"
+                d={buildEdgePath(
+                  canvasObjectLayouts.get(edgeDraft.fromId)?.center
+                    ?? edgeDraft.toPoint,
+                  edgeDraft.toPoint,
+                )}
+              />
+            ) : null}
+          </svg>
+
+          <div className="canvas-edge-label-layer" aria-live="polite">
+            {edgeRenderModels.map((model) => {
+              const editing = editingEdgeId === model.edge.id;
+              return (
+                <span
+                  className={`canvas-edge-label ${
+                    selectedEdgeId === model.edge.id
+                      ? "canvas-edge-label-selected"
+                      : ""
+                  }`}
+                  key={model.edge.id}
+                  style={{
+                    transform: `translate(${model.labelPosition.x}px, ${model.labelPosition.y}px)`,
+                  }}
+                >
+                  {editing ? (
+                    <input
+                      aria-label="Edge label"
+                      autoFocus
+                      value={edgeLabelDraft}
+                      onBlur={saveEdgeLabel}
+                      onChange={(event) => setEdgeLabelDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          saveEdgeLabel();
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          setEditingEdgeId(null);
+                          setEdgeLabelDraft("");
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={`Edge label: ${model.edge.label || "Link"}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedEdgeId(model.edge.id);
+                      }}
+                      onDoubleClick={(event) => {
+                        event.stopPropagation();
+                        startEdgeLabelEdit(model.edge);
+                      }}
+                    >
+                      <ButtonIcon icon={Link2} size={12} />
+                      <span>{model.edge.label || "Link"}</span>
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+
           {activeItems.map((item, index) => {
             const position = positionForItem(item, index);
             return (
@@ -1091,7 +1694,7 @@ export function CanvasView({
             );
           })}
 
-          {activeCanvas.references.map((reference) => {
+          {activeReferences.map((reference) => {
             const position = positionForReference(reference);
             return (
               <ReferenceCard
@@ -1109,7 +1712,7 @@ export function CanvasView({
             );
           })}
 
-          {activeCanvas.notes.map((note) => (
+          {activeNotes.map((note) => (
             <CanvasNoteCard
               key={note.id}
               note={{ ...note, ...positionForNote(note) }}

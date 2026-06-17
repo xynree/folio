@@ -16,6 +16,7 @@ type CanvasViewportProps = {
   surfaceRef: React.RefObject<HTMLDivElement | null>;
   onDrop: (event: React.DragEvent<HTMLDivElement>) => void;
   onDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
+  onSurfacePointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
   children: React.ReactNode;
 };
 
@@ -35,6 +36,7 @@ export function CanvasViewport({
   surfaceRef,
   onDrop,
   onDragOver,
+  onSurfacePointerDown,
   children,
 }: CanvasViewportProps) {
   const backgroundRef = useRef<HTMLCanvasElement | null>(null);
@@ -289,6 +291,7 @@ export function CanvasViewport({
             }}
             onDrop={onDrop}
             onDragOver={onDragOver}
+            onPointerDown={onSurfacePointerDown}
           >
             {children}
           </div>

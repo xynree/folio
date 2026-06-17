@@ -2434,6 +2434,18 @@ button svg {
   background: #fff8eb;
 }
 
+.canvas-board-action-active {
+  color: #fffaf0;
+  border-color: #385d56;
+  background: #385d56;
+}
+
+.canvas-board-action-button:disabled {
+  opacity: 0.42;
+  cursor: default;
+  transform: none;
+}
+
 .board-edit-popover {
   position: absolute;
   top: calc(100% + 8px);
@@ -2614,11 +2626,129 @@ button svg {
   will-change: transform;
 }
 
+.canvas-ink-layer,
+.canvas-edge-label-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.canvas-ink-layer {
+  z-index: 0;
+  overflow: visible;
+}
+
+.canvas-stroke-path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-opacity: 0.82;
+  stroke-width: 5;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas-stroke-preview {
+  stroke-dasharray: 8 7;
+}
+
+.canvas-edge {
+  pointer-events: auto;
+}
+
+.canvas-edge-hit-area {
+  fill: none;
+  stroke: transparent;
+  stroke-linecap: round;
+  stroke-width: 18;
+  cursor: pointer;
+  pointer-events: stroke;
+}
+
+.canvas-edge-path {
+  fill: none;
+  stroke: #8a6a4d;
+  stroke-linecap: round;
+  stroke-width: 2.4;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas-edge-selected .canvas-edge-path,
+.canvas-edge-draft {
+  stroke: #385d56;
+  stroke-width: 3;
+}
+
+.canvas-edge-draft {
+  stroke-dasharray: 8 7;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas-edge-label-layer {
+  z-index: 3;
+}
+
+.canvas-edge-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  min-width: 0;
+  transform-origin: center;
+  pointer-events: auto;
+}
+
+.canvas-edge-label button,
+.canvas-edge-label input {
+  transform: translate(-50%, -50%);
+}
+
+.canvas-edge-label button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 146px;
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid rgba(202, 185, 161, 0.92);
+  border-radius: 999px;
+  color: #5e4a38;
+  background: rgba(255, 253, 248, 0.94);
+  box-shadow: 0 4px 14px rgba(56, 40, 24, 0.1);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.canvas-edge-label button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-edge-label-selected button {
+  color: #fffaf0;
+  border-color: #385d56;
+  background: #385d56;
+}
+
+.canvas-edge-label input {
+  width: 132px;
+  min-height: 28px;
+  padding: 4px 7px;
+  border-radius: 7px;
+  font-size: 11px;
+  box-shadow: 0 8px 24px rgba(56, 40, 24, 0.14);
+}
+
 .canvas-card,
 .canvas-note {
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 2;
   width: 162px;
   border: 1px solid #d6c8b5;
   border-radius: 8px;

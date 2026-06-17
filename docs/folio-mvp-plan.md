@@ -276,29 +276,29 @@ Reference images belong to a canvas, not to items. They are first-class position
 
 - [x] Drop image files directly onto the canvas to add a reference at the drop position
 - [x] Import images button in the focused board header imports archive items directly onto the active board
-- [ ] Browse reference button: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)` — drops new reference at a default position near the centre of the current viewport
+- [x] Browse reference button: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)` — drops new reference at a default position near the centre of the current viewport
 - [x] References copy to `~/Documents/Folio/references/<board-id>/` on disk, never into the main archive
 - [x] Reference card on canvas: generated small thumbnail, pinned remove button, and drag-anywhere behavior
 - [x] Reference cards can be moved freely like item cards — position saved to `canvas.references[].x/y`
-- [ ] Edges can connect reference cards to item cards (same `CanvasEdge` mechanism — `fromId`/`toId` can point to either)
+- [x] Edges can connect reference cards to item cards (same `CanvasEdge` mechanism — `fromId`/`toId` can point to either)
 
 ### 3.5 Edges (connections between items)
 
-- [ ] Hold Shift and drag from one item card to another to draw a connection edge
-- [ ] Edge renders as a curved line between the two cards, with an optional label
-- [ ] Click an edge to select it; double-click to edit the label inline
-- [ ] Delete selected edge with Backspace/Delete
-- [ ] Edges stored as `{ id, fromId, toId, label? }` in `canvas.edges[]`
-- [ ] Edges update position dynamically as cards are dragged
+- [x] Hold Shift and drag from one item, note, or reference card to another to draw a connection edge
+- [x] Edge renders as a curved line between the two cards, with an optional label
+- [x] Click an edge to select it; double-click to edit the label inline
+- [x] Delete selected edge with Backspace/Delete
+- [x] Edges stored as `{ id, fromId, toId, label? }` in `canvas.edges[]`
+- [x] Edges update position dynamically as cards are dragged
 
 ### 3.6 Freehand strokes
 
-- [ ] Pen tool in canvas toolbar toggles freehand drawing mode
-- [ ] Draw directly on the canvas surface — to circle items, annotate, sketch quick marks
-- [ ] Strokes render as SVG paths overlaid on the canvas
-- [ ] Stroke color inherits canvas color by default, picker available in toolbar
-- [ ] Strokes stored as `{ id, path, color }` in `canvas.strokes[]`
-- [ ] Undo (⌘Z) removes last stroke
+- [x] Pen tool in canvas toolbar toggles freehand drawing mode
+- [x] Draw directly on the canvas surface — to circle items, annotate, sketch quick marks
+- [x] Strokes render as SVG paths overlaid on the canvas
+- [x] Stroke color inherits canvas color by default
+- [x] Strokes stored as `{ id, path, color }` in `canvas.strokes[]`
+- [x] Undo (⌘Z) removes last stroke
 
 ---
 

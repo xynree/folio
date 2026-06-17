@@ -123,6 +123,7 @@ export function createCanvas(
     notes: [],
     edges: [],
     references: [],
+    strokes: [],
   };
 }
 
