@@ -24,7 +24,6 @@ import type {
   FolioData,
   FolioItem,
   ImportSource,
-  ProjectReviewDocument,
   ReconciliationResult,
   ThumbnailUrls,
 } from "../types";
@@ -77,6 +76,7 @@ import { StatusBar } from "./layout/StatusBar";
 import { ProjectReviewEditorPage } from "./projects/ProjectReviewEditorPage";
 import { ProjectReviewView } from "./projects/ProjectReviewView";
 import { ProjectsView } from "./projects/ProjectsView";
+import { useProjectReviews } from "./projects/useProjectReviews";
 import { ButtonIcon } from "./shared/ButtonIcon";
 import { useTagsSidebarResize } from "./useTagsSidebarResize";
 
@@ -382,101 +382,13 @@ export function AppShell() {
     });
   }, []);
 
-  const createProjectReview = useCallback((): ProjectReviewDocument => {
-    if (!activeProject) {
-      throw new Error("No active project is open.");
-    }
-
-    const now = new Date().toISOString();
-    const review: ProjectReviewDocument = {
-      id: createId("review"),
-      title: `Review ${(activeProject.reviews ?? []).length + 1}`,
-      markdown: `# ${activeProject.title} review\n\n`,
-      workItemIds: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    commitData(
-      (current) => ({
-        ...current,
-        projects: current.projects.map((project) =>
-          project.id === activeProject.id
-            ? {
-                ...project,
-                reviews: [review, ...(project.reviews ?? [])],
-                updatedAt: now,
-              }
-            : project,
-        ),
-      }),
-      "Review created",
-    );
-
-    setActiveReviewId(review.id);
-
-    return review;
-  }, [activeProject, commitData]);
-
-  const updateProjectReview = useCallback(
-    (reviewId: string, patch: Partial<ProjectReviewDocument>) => {
-      if (!activeProject) return;
-      const savedAt = new Date().toISOString();
-
-      commitData((current) => ({
-        ...current,
-        projects: current.projects.map((project) =>
-          project.id === activeProject.id
-            ? {
-                ...project,
-                reviews: (project.reviews ?? []).map((review) =>
-                  review.id === reviewId
-                    ? {
-                        ...review,
-                        ...patch,
-                        title: patch.title?.trim() || review.title,
-                        updatedAt: savedAt,
-                      }
-                    : review,
-                ),
-                updatedAt: savedAt,
-              }
-            : project,
-        ),
-      }));
-    },
-    [activeProject, commitData],
-  );
-
-  const deleteProjectReview = useCallback(
-    (reviewId: string) => {
-      if (!activeProject) return;
-      const savedAt = new Date().toISOString();
-
-      commitData(
-        (current) => ({
-          ...current,
-          projects: current.projects.map((project) =>
-            project.id === activeProject.id
-              ? {
-                  ...project,
-                  reviews: (project.reviews ?? []).filter(
-                    (review) => review.id !== reviewId,
-                  ),
-                  updatedAt: savedAt,
-                }
-              : project,
-          ),
-        }),
-        "Review deleted",
-      );
-
-      if (activeReviewId === reviewId) {
-        setActiveReviewId(null);
-      }
-    },
-    [activeProject, activeReviewId, commitData],
-  );
+  const { createProjectReview, updateProjectReview, deleteProjectReview } =
+    useProjectReviews({
+      activeProject,
+      commitData,
+      activeReviewId,
+      setActiveReviewId,
+    });
 
   const createProjectFromHome = useCallback(
     async (title: string) => {
