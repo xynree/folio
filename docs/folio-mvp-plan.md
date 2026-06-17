@@ -371,15 +371,15 @@ This phase turns the current archive and board system into a project-based creat
 
 ### 4.6 Project review, timeline, and output
 
-- [ ] Add a project detail/timeline view from the owning `Project`, not from a single board.
-- [ ] Timeline should combine project images, Works, board references, notes, output snapshots, and relationship changes in chronological order.
-- [ ] Group timeline entries by day, week, or milestone depending on density.
-- [ ] Add project recap metadata: image count, Works count, board count, reference count, output count, active days, first image date, latest saved date.
-- [ ] Expand heatmap meaning from upload volume only to project activity where appropriate.
-- [ ] Add "open on board" from any timeline entry that has board placement.
-- [ ] Add relationship type `version-of` or a dedicated `ItemRevisionGroup` to connect iterations of the same work.
-- [ ] Add "promote to output" action from item card, detail modal, and board card.
-- [ ] Let a project have multiple outputs, not just one final piece.
+- [x] Add a project detail/timeline view from the owning `Project`, not from a single board.
+- [x] Timeline should combine project images, Works, board references, notes, output snapshots, and relationship changes in chronological order.
+- [x] Group timeline entries by day, week, or milestone depending on density.
+- [x] Add project recap metadata: image count, Works count, board count, reference count, output count, active days, first image date, latest saved date.
+- [x] Expand heatmap meaning from upload volume only to project activity where appropriate.
+- [x] Add "open on board" from any timeline entry that has board placement.
+- [x] Add relationship type `version-of` or a dedicated `ItemRevisionGroup` to connect iterations of the same work.
+- [x] Add "promote to output" action from item card, detail modal, and board card.
+- [x] Let a project have multiple outputs, not just one final piece.
 
 ---
 

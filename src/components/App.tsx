@@ -71,6 +71,7 @@ import {
 import { ReconciliationNotice } from "./layout/ReconciliationNotice";
 import { SelectionBar } from "./layout/SelectionBar";
 import { StatusBar } from "./layout/StatusBar";
+import { ProjectReviewView } from "./projects/ProjectReviewView";
 import { ProjectsView } from "./projects/ProjectsView";
 import { ButtonIcon } from "./shared/ButtonIcon";
 
@@ -81,7 +82,7 @@ const TAGS_SIDEBAR_DEFAULT_WIDTH = 176;
 const TAGS_SIDEBAR_MIN_WIDTH = 132;
 const TAGS_SIDEBAR_MAX_WIDTH = 360;
 type WorkspacePanelMode = "left" | "split" | "right";
-type ProjectSurface = "images" | "works";
+type ProjectSurface = "images" | "works" | "review";
 
 function clipboardImageExtension(file: File) {
   const filenameExt = file.name.match(/\.[a-z0-9]+$/i)?.[0];
@@ -533,6 +534,13 @@ export function AppShell() {
     [openFolioPath],
   );
 
+  const openProjectTimelineBoard = useCallback((boardId: string) => {
+    setActiveCanvasId(boardId);
+    setCanvasMinimized(false);
+    setArchiveMinimized(false);
+    setCanvasDetailRequestId((current) => current + 1);
+  }, []);
+
   const createProjectFromHome = useCallback(
     async (title: string) => {
       setBusy(true);
@@ -815,6 +823,17 @@ export function AppShell() {
       );
     },
     [commitData],
+  );
+
+  const promoteItemToOutput = useCallback(
+    (itemId: string) => {
+      patchItem(
+        itemId,
+        { stage: "output", updatedAt: new Date().toISOString() },
+        "Promoted to output",
+      );
+    },
+    [patchItem],
   );
 
   const addTagToItem = useCallback(
@@ -1215,6 +1234,17 @@ export function AppShell() {
             >
               Works
             </button>
+            <button
+              className={projectSurface === "review" ? "active" : ""}
+              type="button"
+              aria-pressed={projectSurface === "review"}
+              onClick={() => {
+                setProjectSurface("review");
+                clearSelection();
+              }}
+            >
+              Review
+            </button>
           </div>
           <div
             className="view-tabs workspace-panel-mode-control"
@@ -1274,28 +1304,37 @@ export function AppShell() {
               <div className="archive-rail" aria-hidden="true" />
             ) : (
               <>
-                <ArchiveWorkspace
-                  sidebarCollapsed={tagsCollapsed}
-                  sidebarWidth={tagsSidebarWidth}
-                  onStartSidebarResize={startTagsSidebarResize}
-                  routeStyle={archiveRouteStyle}
-                  sidebar={
-                    <TagsSidebar
-                      items={sortedItems}
-                      tags={data.tags}
-                      canvases={projectCanvases}
-                      thumbUrls={thumbUrls}
-                      setThumbUrls={setThumbUrls}
-                      onOpenItem={openItemDetails}
-                      collapsed={tagsCollapsed}
-                      onToggleCollapsed={() =>
-                        setTagsCollapsed((current) => !current)
-                      }
-                      tagFilter={gridTagFilter}
-                      setTagFilter={setGridTagFilter}
-                    />
-                  }
-                >
+                {projectSurface === "review" && activeProject ? (
+                  <ProjectReviewView
+                    project={activeProject}
+                    items={data.items}
+                    canvases={projectCanvases}
+                    onOpenBoard={openProjectTimelineBoard}
+                    onPromoteToOutput={promoteItemToOutput}
+                  />
+                ) : (
+                  <ArchiveWorkspace
+                    sidebarCollapsed={tagsCollapsed}
+                    sidebarWidth={tagsSidebarWidth}
+                    onStartSidebarResize={startTagsSidebarResize}
+                    routeStyle={archiveRouteStyle}
+                    sidebar={
+                      <TagsSidebar
+                        items={sortedItems}
+                        tags={data.tags}
+                        canvases={projectCanvases}
+                        thumbUrls={thumbUrls}
+                        setThumbUrls={setThumbUrls}
+                        onOpenItem={openItemDetails}
+                        collapsed={tagsCollapsed}
+                        onToggleCollapsed={() =>
+                          setTagsCollapsed((current) => !current)
+                        }
+                        tagFilter={gridTagFilter}
+                        setTagFilter={setGridTagFilter}
+                      />
+                    }
+                  >
                   <SelectionBar
                     count={selectedItemIds.length}
                     newBoardDialogOpen={selectionBoardDialogOpen}
@@ -1385,65 +1424,74 @@ export function AppShell() {
                       {busy ? "Importing" : "Import"}
                     </button>
                   </div>
-                  {archiveView === "strip" ? (
-                    <DailyStripView
-                      items={visibleArchiveItems}
-                      tags={data.tags}
-                      canvases={projectCanvases}
-                      thumbUrls={thumbUrls}
-                      setThumbUrls={setThumbUrls}
-                      selectedItemIds={selectedItemIds}
-                      showDateGaps={gridTagFilter === "all"}
-                      onBackgroundClick={clearSelection}
-                      onDragStart={startArchiveItemDrag}
-                      onItemOpen={handleItemOpen}
-                      onEditItem={(itemId) => openItemDetails(itemId, "details")}
-                      onAddTag={addTagToItem}
-                      onRemoveTag={removeTagFromItem}
-                      onDeleteItem={deleteItem}
-                    />
-                  ) : (
-                    <GridView
-                      items={sortedItems}
-                      tags={data.tags}
-                      canvases={projectCanvases}
-                      thumbUrls={thumbUrls}
-                      setThumbUrls={setThumbUrls}
-                      tagFilter={gridTagFilter}
-                      setTagFilter={setGridTagFilter}
-                      selectedItemIds={selectedItemIds}
-                      onBackgroundClick={clearSelection}
-                      onDragStart={startArchiveItemDrag}
-                      onItemOpen={handleItemOpen}
-                      onEditItem={(itemId) => openItemDetails(itemId, "details")}
-                      onAddTag={addTagToItem}
-                      onRemoveTag={removeTagFromItem}
-                      onDeleteItem={deleteItem}
-                    />
-                  )}
-                </ArchiveWorkspace>
+                    {archiveView === "strip" ? (
+                      <DailyStripView
+                        items={visibleArchiveItems}
+                        tags={data.tags}
+                        canvases={projectCanvases}
+                        thumbUrls={thumbUrls}
+                        setThumbUrls={setThumbUrls}
+                        selectedItemIds={selectedItemIds}
+                        showDateGaps={gridTagFilter === "all"}
+                        onBackgroundClick={clearSelection}
+                        onDragStart={startArchiveItemDrag}
+                        onItemOpen={handleItemOpen}
+                        onEditItem={(itemId) => openItemDetails(itemId, "details")}
+                        onAddTag={addTagToItem}
+                        onRemoveTag={removeTagFromItem}
+                        onDeleteItem={deleteItem}
+                        onPromoteToOutput={promoteItemToOutput}
+                      />
+                    ) : (
+                      <GridView
+                        items={sortedItems}
+                        tags={data.tags}
+                        canvases={projectCanvases}
+                        thumbUrls={thumbUrls}
+                        setThumbUrls={setThumbUrls}
+                        tagFilter={gridTagFilter}
+                        setTagFilter={setGridTagFilter}
+                        selectedItemIds={selectedItemIds}
+                        onBackgroundClick={clearSelection}
+                        onDragStart={startArchiveItemDrag}
+                        onItemOpen={handleItemOpen}
+                        onEditItem={(itemId) => openItemDetails(itemId, "details")}
+                        onAddTag={addTagToItem}
+                        onRemoveTag={removeTagFromItem}
+                        onDeleteItem={deleteItem}
+                        onPromoteToOutput={promoteItemToOutput}
+                      />
+                    )}
+                  </ArchiveWorkspace>
+                )}
 
-                <footer
-                  className={`archive-heatmap-footer ${
-                    heatmapMinimized ? "archive-heatmap-footer-minimized" : ""
-                  }`}
-                >
-                  <ArchiveHeatmap
-                    items={visibleArchiveItems}
-                    minimized={heatmapMinimized}
-                  />
-                  <button
-                    className="icon-button archive-heatmap-toggle"
-                    type="button"
-                    aria-label={
-                      heatmapMinimized ? "Show heatmap" : "Minimize heatmap"
-                    }
-                    title={heatmapMinimized ? "Show heatmap" : "Minimize heatmap"}
-                    onClick={() => setHeatmapMinimized((current) => !current)}
+                {projectSurface === "review" ? null : (
+                  <footer
+                    className={`archive-heatmap-footer ${
+                      heatmapMinimized ? "archive-heatmap-footer-minimized" : ""
+                    }`}
                   >
-                    <ButtonIcon icon={heatmapMinimized ? ChevronUp : ChevronDown} />
-                  </button>
-                </footer>
+                    <ArchiveHeatmap
+                      items={visibleArchiveItems}
+                      minimized={heatmapMinimized}
+                      ariaLabel={
+                        activeProject ? "Project activity heatmap" : "Upload heatmap"
+                      }
+                      unitLabel={activeProject ? "activity" : "upload"}
+                    />
+                    <button
+                      className="icon-button archive-heatmap-toggle"
+                      type="button"
+                      aria-label={
+                        heatmapMinimized ? "Show heatmap" : "Minimize heatmap"
+                      }
+                      title={heatmapMinimized ? "Show heatmap" : "Minimize heatmap"}
+                      onClick={() => setHeatmapMinimized((current) => !current)}
+                    >
+                      <ButtonIcon icon={heatmapMinimized ? ChevronUp : ChevronDown} />
+                    </button>
+                  </footer>
+                )}
               </>
             )}
           </section>
@@ -1487,6 +1535,7 @@ export function AppShell() {
                 canvasDetailRequestId={canvasDetailRequestId}
                 setActiveCanvasId={setActiveCanvasId}
                 onOpenItem={openItemDetails}
+                onPromoteItemToOutput={promoteItemToOutput}
                 onCreateBoard={createBoard}
                 onMinimize={showLeftOnlyPanel}
                 thumbUrls={thumbUrls}
@@ -1531,6 +1580,7 @@ export function AppShell() {
         onAddTag={addTagToItem}
         onRemoveTag={removeTagFromItem}
         onAddToCanvas={addItemToActiveCanvas}
+        onPromoteToOutput={promoteItemToOutput}
         onDelete={deleteItem}
       />
 

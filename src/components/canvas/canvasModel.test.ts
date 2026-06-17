@@ -16,6 +16,7 @@ import {
   reverseCanvasEdgeDirection,
   updateCanvasEdgeDirection,
   updateCanvasEdgeLabel,
+  updateCanvasEdgeRelationshipType,
   updateCanvasNoteText,
   updateCanvasTextElementSize,
   updateCanvasTextElementText,
@@ -156,7 +157,12 @@ describe("canvas model helpers", () => {
       "edge-2",
       "bidirectional",
     );
-    const reversedCanvas = reverseCanvasEdgeDirection(directedCanvas, "edge-2");
+    const typedCanvas = updateCanvasEdgeRelationshipType(
+      directedCanvas,
+      "edge-2",
+      "version-of",
+    );
+    const reversedCanvas = reverseCanvasEdgeDirection(typedCanvas, "edge-2");
     const edge = reversedCanvas.edges.find((currentEdge) => currentEdge.id === "edge-2");
 
     expect(labeledCanvas.edges[0].label).toBe("Final");
@@ -168,6 +174,7 @@ describe("canvas model helpers", () => {
         fromSide: "top",
         toSide: "bottom",
         direction: "forward",
+        relationshipType: "version-of",
       }),
     );
     expect(deleteCanvasEdge(reversedCanvas, "edge-2").edges.map((item) => item.id))

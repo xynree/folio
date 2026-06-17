@@ -21,6 +21,7 @@ function renderDrawer(overrides = {}) {
     onAddTag: vi.fn(),
     onRemoveTag: vi.fn(),
     onAddToCanvas: vi.fn(),
+    onPromoteToOutput: vi.fn(),
     onDelete: vi.fn(),
     ...overrides,
   };
@@ -44,6 +45,7 @@ describe("DetailDrawer", () => {
         onAddTag={vi.fn()}
         onRemoveTag={vi.fn()}
         onAddToCanvas={vi.fn()}
+        onPromoteToOutput={vi.fn()}
         onDelete={vi.fn()}
       />,
     );

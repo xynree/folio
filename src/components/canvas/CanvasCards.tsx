@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { GripVertical, Trash2, X } from "lucide-react";
+import { GripVertical, Star, Trash2, X } from "lucide-react";
 import type {
   CanvasConnectionSide,
   CanvasNote,
@@ -95,6 +95,7 @@ export function CanvasItemCard({
   thumbUrls,
   setThumbUrls,
   onOpen,
+  onPromoteToOutput,
   onRemove,
   onConnectorPointerDown,
   onPointerDown,
@@ -106,6 +107,7 @@ export function CanvasItemCard({
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   onOpen: (itemId: string) => void;
+  onPromoteToOutput: (itemId: string) => void;
   onRemove: (itemId: string) => void;
   onConnectorPointerDown: ConnectorPointerDownHandler;
   onPointerDown: (event: React.PointerEvent) => void;
@@ -128,6 +130,18 @@ export function CanvasItemCard({
         thumbUrls={thumbUrls}
         setThumbUrls={setThumbUrls}
       />
+      <button
+        className="icon-button canvas-card-output-button"
+        type="button"
+        aria-label={`Promote ${item.title || basename(item.path)} to output`}
+        title="Promote to output"
+        onClick={(event) => {
+          event.stopPropagation();
+          onPromoteToOutput(item.id);
+        }}
+      >
+        <ButtonIcon icon={Star} />
+      </button>
       <button
         className="icon-button canvas-card-remove-button"
         type="button"

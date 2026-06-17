@@ -298,6 +298,171 @@ button svg {
   border-radius: 8px;
 }
 
+.project-review {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+  padding: 18px;
+  overflow: auto;
+}
+
+.project-review-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.project-review-header p {
+  margin: 0 0 3px;
+  color: #7c6f61;
+  font-size: 12px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.project-review-header h2 {
+  margin: 0;
+  color: #28231e;
+  font-size: 22px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.project-review-recap {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.project-review-recap div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #ded2c1;
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.82);
+}
+
+.project-review-recap dt {
+  color: #7c6f61;
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.project-review-recap dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #28231e;
+  font-size: 17px;
+  font-weight: 780;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-timeline {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+}
+
+.project-timeline-group {
+  display: grid;
+  gap: 8px;
+}
+
+.project-timeline-group h3 {
+  margin: 0;
+  color: #5e5143;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.project-timeline-group ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.project-timeline-entry {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #ded2c1;
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.78);
+}
+
+.project-timeline-kind {
+  justify-self: start;
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #385d56;
+  background: rgba(56, 93, 86, 0.11);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.project-timeline-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.project-timeline-copy strong,
+.project-timeline-copy span,
+.project-timeline-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-timeline-copy strong {
+  color: #28231e;
+  font-size: 13px;
+}
+
+.project-timeline-copy span,
+.project-timeline-copy small {
+  color: #7c6f61;
+  font-size: 12px;
+}
+
+.project-timeline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.project-timeline-actions button {
+  min-height: 28px;
+  padding: 5px 8px;
+  color: #4c3b24;
+  border: 1px solid #d8cab8;
+  border-radius: 7px;
+  background: #fffaf0;
+  font-size: 12px;
+  font-weight: 720;
+}
+
+.project-review-empty {
+  padding: 22px;
+  color: #7c6f61;
+  border: 1px dashed #d8cab8;
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.7);
+}
+
 .archive-panel-header strong,
 .canvas-dock-header strong {
   min-width: 0;
@@ -2351,7 +2516,7 @@ button svg {
 
 .drawer-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -3173,6 +3338,18 @@ button svg {
   box-shadow: none;
 }
 
+.canvas-edge-direction-bar select {
+  height: 22px;
+  max-width: 112px;
+  border: 0;
+  border-radius: 6px;
+  color: #4c3b24;
+  background: #f4eadc;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 720;
+}
+
 .canvas-edge-direction-bar button:hover,
 .canvas-edge-direction-bar button:focus-visible,
 .canvas-edge-direction-bar .canvas-edge-direction-active {
@@ -3265,10 +3442,10 @@ button svg {
   object-fit: contain;
 }
 
-.canvas-card-remove-button {
+.canvas-card-remove-button,
+.canvas-card-output-button {
   position: absolute;
   top: 6px;
-  right: 6px;
   z-index: 2;
   width: 28px;
   min-width: 28px;
@@ -3283,12 +3460,24 @@ button svg {
   pointer-events: none;
 }
 
+.canvas-card-remove-button {
+  right: 6px;
+}
+
+.canvas-card-output-button {
+  right: 40px;
+}
+
 .canvas-card:hover .canvas-card-remove-button,
+.canvas-card:hover .canvas-card-output-button,
 .canvas-card:focus-within .canvas-card-remove-button,
+.canvas-card:focus-within .canvas-card-output-button,
 .canvas-note:hover .canvas-note-handle button,
 .canvas-note:focus-within .canvas-note-handle button,
 .canvas-card-remove-button:hover,
-.canvas-card-remove-button:focus-visible {
+.canvas-card-remove-button:focus-visible,
+.canvas-card-output-button:hover,
+.canvas-card-output-button:focus-visible {
   outline: 0;
   opacity: 1;
   pointer-events: auto;

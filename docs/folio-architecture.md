@@ -452,16 +452,16 @@ If the view grows expensive, introduce a renderer-side selector module before ad
 
 ## Project Timeline Architecture
 
-A project timeline is a derived view from the owning `Project` and its boards:
+The project Review surface builds a derived timeline from the owning `Project` and its boards:
 
 - Image events come from `Project.imageIds` and each item `date` or `updatedAt`.
 - Works events come from `Project.workItemIds` and each promoted item's timeline metadata.
 - Reference events come from references in canvases where `canvas.projectId` matches the project.
-- Note events come from `canvas.notes`; add timestamps before treating notes as timeline-grade data.
+- Note events come from `canvas.notes` using optional note timestamps when present.
 - Output events come from project items whose `stage` is `final` or `output`.
-- Relationship events can be added later if edges receive `createdAt` or `updatedAt`.
+- Relationship events come from edges with `createdAt` or `updatedAt`; edges also support a lightweight relationship type including `version-of`.
 
-Near-term timeline work should add timestamps to mutable board objects:
+Mutable board objects carry optional timestamps for timeline ordering:
 
 ```ts
 interface CanvasNote {
@@ -484,7 +484,7 @@ interface CanvasReference {
 }
 ```
 
-The project timeline should not duplicate source data. It should sort and group existing records into a presentation model, then route edits back to the owning project, item, note, reference, edge, or canvas.
+The project timeline does not duplicate source data. It sorts and groups existing records into a presentation model, then routes edits back to the owning project, item, note, reference, edge, or canvas.
 
 ## Reference Graph Architecture
 

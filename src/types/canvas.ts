@@ -24,6 +24,8 @@ export type CanvasConnectionSide = "top" | "right" | "bottom" | "left";
 
 export type CanvasEdgeDirection = "none" | "forward" | "bidirectional";
 
+export type CanvasRelationshipType = "related" | "inspired-by" | "version-of";
+
 export type CanvasTextSize = "sm" | "md" | "large";
 
 export type BoardKind =
@@ -43,7 +45,10 @@ export interface CanvasEdge {
   fromSide?: CanvasConnectionSide;
   toSide?: CanvasConnectionSide;
   direction?: CanvasEdgeDirection;
+  relationshipType?: CanvasRelationshipType;
   label?: string; // Optional text shown on the edge
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /** A freehand annotation path drawn directly on the canvas */
@@ -57,6 +62,8 @@ export interface CanvasStroke {
 export interface CanvasNote extends CanvasObjectGeometry {
   id: string;
   text: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 /** A lightweight plain text element placed directly on the canvas surface */
@@ -73,6 +80,8 @@ export type CanvasReference = CanvasObjectGeometry & {
   filename: string;
   mediaWidth?: number; // Natural source image width when known
   mediaHeight?: number; // Natural source image height when known
+  capturedAt?: string;
+  updatedAt?: string;
 };
 
 /** A named thinking surface with positioned items and annotations */

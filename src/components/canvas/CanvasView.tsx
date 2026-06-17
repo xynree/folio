@@ -70,6 +70,7 @@ export function CanvasView({
   canvasDetailRequestId,
   setActiveCanvasId,
   onOpenItem,
+  onPromoteItemToOutput,
   onCreateBoard,
   onMinimize,
   thumbUrls,
@@ -84,6 +85,7 @@ export function CanvasView({
   canvasDetailRequestId: number;
   setActiveCanvasId: React.Dispatch<React.SetStateAction<string | null>>;
   onOpenItem: ItemDetailsOpenHandler;
+  onPromoteItemToOutput: (itemId: string) => void;
   onCreateBoard: () => void;
   onMinimize: () => void;
   thumbUrls: ThumbnailUrls;
@@ -404,11 +406,14 @@ export function CanvasView({
 
   const addNote = useCallback(() => {
     if (!activeCanvas) return;
+    const createdAt = new Date().toISOString();
     const note: CanvasNote = {
       id: createId("note"),
       text: "",
       x: 140,
       y: 120,
+      createdAt,
+      updatedAt: createdAt,
     };
     updateCanvas(
       activeCanvas.id,
@@ -514,6 +519,7 @@ export function CanvasView({
     startEdgeLabelEdit,
     stopEdgeLabelEdit,
     updateEdgeDirection,
+    updateEdgeRelationshipType,
   } = useCanvasEdges({
     activeCanvas,
     canvasObjectLayouts,
@@ -616,12 +622,14 @@ export function CanvasView({
           activeCanvas.id,
           uniquePaths,
         );
+        const savedAt = new Date().toISOString();
         const placed = references.map((reference, index) => ({
           ...reference,
+          capturedAt: reference.capturedAt ?? savedAt,
+          updatedAt: savedAt,
           x: point.x + index * 28,
           y: point.y + index * 28,
         }));
-        const savedAt = new Date().toISOString();
 
         commitData(
           (current) => ({
@@ -1042,6 +1050,7 @@ export function CanvasView({
             onStartEdgeLabelEdit={startEdgeLabelEdit}
             onStopEdgeLabelEdit={stopEdgeLabelEdit}
             onUpdateEdgeDirection={updateEdgeDirection}
+            onUpdateEdgeRelationshipType={updateEdgeRelationshipType}
           />
 
           <CanvasToolCursor
@@ -1063,6 +1072,7 @@ export function CanvasView({
             onDeleteNote={deleteNote}
             onDeleteTextElement={deleteTextElement}
             onOpenItem={onOpenItem}
+            onPromoteItemToOutput={onPromoteItemToOutput}
             onRemoveItem={removeItem}
             onRemoveReference={removeReference}
             onStartConnectorDrag={startConnectorDrag}

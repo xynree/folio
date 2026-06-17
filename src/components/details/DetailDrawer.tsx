@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FolderOpen, Plus, Save, Trash2, X } from "lucide-react";
+import { FolderOpen, Plus, Save, Star, Trash2, X } from "lucide-react";
 import type { Canvas, FolioItem, ItemStage, ThumbnailUrls, Tag } from "../../types";
 import { ITEM_STAGE_LABELS, TYPE_LABELS } from "../folio/constants";
 import type { ItemDetailsMode } from "../folio/types";
@@ -19,6 +19,7 @@ export function DetailDrawer({
   onAddTag,
   onRemoveTag,
   onAddToCanvas,
+  onPromoteToOutput,
   onDelete,
 }: {
   item: FolioItem | null;
@@ -32,6 +33,7 @@ export function DetailDrawer({
   onAddTag: (itemId: string, text: string) => void;
   onRemoveTag: (itemId: string, tagText: string) => void;
   onAddToCanvas: (itemId: string) => void;
+  onPromoteToOutput: (itemId: string) => void;
   onDelete: (itemId: string) => void;
 }) {
   const [title, setTitle] = useState("");
@@ -253,6 +255,10 @@ export function DetailDrawer({
           <button type="button" onClick={() => window.folio.openInFinder(item.path)}>
             <ButtonIcon icon={FolderOpen} />
             Show in Finder
+          </button>
+          <button type="button" onClick={() => onPromoteToOutput(item.id)}>
+            <ButtonIcon icon={Star} />
+            Promote to output
           </button>
           <button
             className="danger-action"

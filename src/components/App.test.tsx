@@ -197,7 +197,7 @@ async function showHeatmap(user: ReturnType<typeof userEvent.setup>) {
   if (showButton) {
     await user.click(showButton);
   }
-  await screen.findByLabelText("Upload heatmap");
+  await screen.findByLabelText("Project activity heatmap");
 }
 
 function itemButton(name: RegExp) {
@@ -338,7 +338,9 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     ).toBe(false);
     expect(screen.queryByText("Heatmap")).toBeNull();
     expect(
-      screen.getByLabelText("Upload heatmap").closest(".archive-heatmap-footer"),
+      screen
+        .getByLabelText("Project activity heatmap")
+        .closest(".archive-heatmap-footer"),
     ).not.toBeNull();
     expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
     expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
@@ -491,7 +493,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(
       document.querySelector(".archive-heatmap")?.getAttribute("aria-hidden"),
     ).toBe("true");
-    expect(screen.queryByLabelText("Upload heatmap")).toBeNull();
+    expect(screen.queryByLabelText("Project activity heatmap")).toBeNull();
     expect(screen.getByLabelText(/show heatmap/i)).not.toBeNull();
 
     await user.click(screen.getByLabelText(/show heatmap/i));
@@ -500,7 +502,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
         .querySelector(".archive-heatmap-footer")
         ?.classList.contains("archive-heatmap-footer-minimized"),
     ).toBe(false);
-    expect(screen.getByLabelText("Upload heatmap")).not.toBeNull();
+    expect(screen.getByLabelText("Project activity heatmap")).not.toBeNull();
 
     await waitFor(() => {
       expect(window.folio.ensureThumbnails).toHaveBeenCalledWith(
@@ -754,7 +756,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await waitForArchive();
     const user = userEvent.setup();
     await showHeatmap(user);
-    const heatmap = screen.getByLabelText("Upload heatmap");
+    const heatmap = screen.getByLabelText("Project activity heatmap");
     expect(
       heatmap.querySelector(".archive-heatmap-months")?.textContent,
     ).toContain("Jun");
@@ -962,6 +964,119 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
+  it("shows project review recap, timeline entries, and board jumps", async () => {
+    const app = setupFolio({
+      data: makeData({
+        items: [
+          makeItem("alpha", {
+            title: "Alpha",
+            date: "2026-06-15T08:00:00.000Z",
+            projectId: "project-1",
+          }),
+          makeItem("bravo", {
+            title: "Bravo",
+            date: "2026-06-16T08:00:00.000Z",
+            projectId: "project-1",
+            stage: "final",
+            updatedAt: "2026-06-17T09:00:00.000Z",
+          }),
+        ],
+        canvases: [
+          makeData().canvases[0],
+          {
+            ...makeData().canvases[0],
+            id: "board-2",
+            title: "Review Board",
+            itemIds: ["alpha"],
+            references: [
+              {
+                id: "ref-1",
+                filename: "swatch.png",
+                path: "projects/studio-archive/boards/board-2/references/swatch.png",
+                x: 0,
+                y: 0,
+                capturedAt: "2026-06-16T10:00:00.000Z",
+              },
+            ],
+            notes: [
+              {
+                id: "note-1",
+                text: "Tighten values",
+                x: 0,
+                y: 0,
+                createdAt: "2026-06-16T11:00:00.000Z",
+              },
+            ],
+            edges: [
+              {
+                id: "edge-1",
+                fromId: "alpha",
+                toId: "ref-1",
+                relationshipType: "version-of",
+                createdAt: "2026-06-17T08:00:00.000Z",
+              },
+            ],
+          },
+        ],
+        projects: [
+          makeProject("project-1", {
+            imageIds: ["alpha", "bravo"],
+            workItemIds: ["alpha"],
+            boardIds: ["board-1", "board-2"],
+          }),
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(screen.getByRole("button", { name: /^review$/i }));
+
+    expect(screen.getByLabelText("Project review")).not.toBeNull();
+    expect(screen.getByText("References")).not.toBeNull();
+    expect(screen.getByText("Outputs")).not.toBeNull();
+    expect(screen.getByText("Tighten values")).not.toBeNull();
+    expect(screen.getByText("version-of on Review Board")).not.toBeNull();
+    expect(screen.getByText("Final output")).not.toBeNull();
+
+    const alphaTimelineEntry = screen
+      .getAllByText("Alpha")
+      .map((element) => element.closest(".project-timeline-entry") as HTMLElement)
+      .find((entry) =>
+        within(entry).queryByRole("button", { name: /promote to output/i }),
+      ) as HTMLElement;
+    await user.click(
+      within(alphaTimelineEntry).getByRole("button", {
+        name: /promote to output/i,
+      }),
+    );
+    await waitFor(() => {
+      expect(app.data.items.find((item) => item.id === "alpha")?.stage).toBe(
+        "output",
+      );
+    });
+
+    await user.click(screen.getAllByRole("button", { name: /open on board/i })[0]);
+    await waitFor(() => {
+      expect(document.querySelector(".canvas-surface")).not.toBeNull();
+    });
+  });
+
+  it("promotes archive items to output from the item card menu", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(screen.getByLabelText(/more actions for alpha/i));
+    await user.click(screen.getByRole("menuitem", { name: /promote to output/i }));
+
+    await waitFor(() => {
+      expect(app.data.items.find((item) => item.id === "alpha")?.stage).toBe(
+        "output",
+      );
+    });
+  });
+
   it("bulk deletes selected items from the selection action bar", async () => {
     const app = setupFolio();
     const user = userEvent.setup();
@@ -1117,6 +1232,24 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
+  it("promotes an item to output from the details modal", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(screen.getByLabelText(/more actions for alpha/i));
+    await user.click(screen.getByRole("menuitem", { name: /edit/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /item details/i });
+    await user.click(within(dialog).getByRole("button", { name: /promote to output/i }));
+
+    await waitFor(() => {
+      expect(app.data.items.find((item) => item.id === "alpha")?.stage).toBe(
+        "output",
+      );
+    });
+  });
+
   it("runs detail modal Finder and delete actions and clears canvas memberships", async () => {
     const app = setupFolio({
       data: makeData({
@@ -1255,6 +1388,12 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await waitForArchive();
     await openActiveBoardCanvas(user);
+    await user.click(screen.getByLabelText(/promote alpha to output/i));
+    await waitFor(() => {
+      expect(app.data.items.find((item) => item.id === "alpha")?.stage).toBe(
+        "output",
+      );
+    });
     await user.click(screen.getByLabelText("Open board folder"));
     expect(window.folio.openInFinder).toHaveBeenCalledWith(
       "projects/studio-archive/boards/board-1",

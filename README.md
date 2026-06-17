@@ -6,6 +6,7 @@ Folio is a local-first Electron app for collecting visual work, browsing it by t
 
 - Archive import from drag and drop, the floating Import action, Finder file selection, and the macOS Photos picker helper.
 - Projects as the first screen, with readable project folders, project-scoped image lists, Works, boards, and Finder folder shortcuts.
+- Project review view with recap metrics, a derived timeline, Open on board actions, and output promotion.
 - Strip and grid archive views with most-recent-first sorting, tag filtering, multi-select, and a 50%-200% UI scale control.
 - A persistent bottom heatmap inspired by GitHub activity grids, with upload intensity capped at 8 items per day.
 - A resizable tags sidebar with per-tag counts and thumbnail previews.
@@ -13,6 +14,7 @@ Folio is a local-first Electron app for collecting visual work, browsing it by t
 - Canvas boards with image-only draggable and resizable archive cards, reference images, notes, and text; image cards default to the source image's proportions.
 - Board headers show when each board was created and when it was last saved.
 - Side-node connection edges between canvas items, references, notes, and board text, with inline labels and direction modes.
+- Canvas relationships can be marked as related, inspired by, or version of.
 - Freehand pen strokes on boards with an eraser and Cmd+Z undo.
 - Resizable board text boxes for quick labels, headings, and questions, with small, medium, and large sizing.
 - Board settings for title, color, delete, and board member dots on archive cards.

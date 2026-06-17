@@ -2,6 +2,7 @@ import type {
   Canvas,
   CanvasEdge,
   CanvasEdgeDirection,
+  CanvasRelationshipType,
   CanvasNote,
   CanvasObjectSize,
   CanvasPosition,
@@ -128,10 +129,11 @@ export function updateCanvasNoteText(
   noteId: string,
   text: string,
 ): Canvas {
+  const updatedAt = new Date().toISOString();
   return {
     ...canvas,
     notes: canvas.notes.map((note) =>
-      note.id === noteId ? { ...note, text } : note,
+      note.id === noteId ? { ...note, text, updatedAt } : note,
     ),
   };
 }
@@ -261,11 +263,14 @@ export function updateCanvasEdgeLabel(
   label: string,
 ): Canvas {
   const trimmed = label.trim();
+  const updatedAt = new Date().toISOString();
 
   return {
     ...canvas,
     edges: (canvas.edges ?? []).map((edge) =>
-      edge.id === edgeId ? { ...edge, label: trimmed || undefined } : edge,
+      edge.id === edgeId
+        ? { ...edge, label: trimmed || undefined, updatedAt }
+        : edge,
     ),
   };
 }
@@ -275,10 +280,25 @@ export function updateCanvasEdgeDirection(
   edgeId: string,
   direction: CanvasEdgeDirection,
 ): Canvas {
+  const updatedAt = new Date().toISOString();
   return {
     ...canvas,
     edges: (canvas.edges ?? []).map((edge) =>
-      edge.id === edgeId ? { ...edge, direction } : edge,
+      edge.id === edgeId ? { ...edge, direction, updatedAt } : edge,
+    ),
+  };
+}
+
+export function updateCanvasEdgeRelationshipType(
+  canvas: Canvas,
+  edgeId: string,
+  relationshipType: CanvasRelationshipType,
+): Canvas {
+  const updatedAt = new Date().toISOString();
+  return {
+    ...canvas,
+    edges: (canvas.edges ?? []).map((edge) =>
+      edge.id === edgeId ? { ...edge, relationshipType, updatedAt } : edge,
     ),
   };
 }
@@ -295,10 +315,11 @@ export function reverseCanvasEdgeDirection(
             ...edge,
             fromId: edge.toId,
             toId: edge.fromId,
-            fromSide: edge.toSide,
-            toSide: edge.fromSide,
-            direction: "forward",
-          }
+          fromSide: edge.toSide,
+          toSide: edge.fromSide,
+          direction: "forward",
+          updatedAt: new Date().toISOString(),
+        }
         : edge,
     ),
   };

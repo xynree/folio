@@ -43,10 +43,14 @@ function latestHeatmapDate(items: FolioItem[]) {
 
 export function ArchiveHeatmap({
   items,
+  ariaLabel = "Upload heatmap",
   minimized = false,
+  unitLabel = "upload",
 }: {
   items: FolioItem[];
+  ariaLabel?: string;
   minimized?: boolean;
+  unitLabel?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const countsByDate = useMemo(() => {
@@ -102,7 +106,7 @@ export function ArchiveHeatmap({
     <div
       className="archive-heatmap"
       aria-hidden={minimized}
-      aria-label={minimized ? undefined : "Upload heatmap"}
+      aria-label={minimized ? undefined : ariaLabel}
     >
       <div className="archive-heatmap-content">
         <div
@@ -128,7 +132,7 @@ export function ArchiveHeatmap({
                   <span
                     aria-label={`${formatDateLabel(day.dateKey)}: ${formatCount(
                       day.count,
-                      "upload",
+                      unitLabel,
                     )}`}
                     className={`heatmap-cell heatmap-level-${day.level}`}
                     data-count={day.count}
@@ -138,7 +142,7 @@ export function ArchiveHeatmap({
                     role="gridcell"
                     title={`${formatDateLabel(day.dateKey)} · ${formatCount(
                       day.count,
-                      "upload",
+                      unitLabel,
                     )}`}
                   />
                 ))}

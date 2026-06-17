@@ -213,6 +213,7 @@ describe("canvas components", () => {
     const onSelectEdge = vi.fn();
     const onStartEdgeLabelEdit = vi.fn();
     const onUpdateEdgeDirection = vi.fn();
+    const onUpdateEdgeRelationshipType = vi.fn();
     const onReverseEdgeDirection = vi.fn();
     const onDeleteEdge = vi.fn();
 
@@ -230,15 +231,23 @@ describe("canvas components", () => {
         onStartEdgeLabelEdit={onStartEdgeLabelEdit}
         onStopEdgeLabelEdit={vi.fn()}
         onUpdateEdgeDirection={onUpdateEdgeDirection}
+        onUpdateEdgeRelationshipType={onUpdateEdgeRelationshipType}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "No direction" }));
+    fireEvent.change(screen.getByLabelText("Relationship type"), {
+      target: { value: "version-of" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Reverse direction" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
     fireEvent.doubleClick(screen.getByRole("button", { name: "Edge label: Link" }));
 
     expect(onUpdateEdgeDirection).toHaveBeenCalledWith("edge-1", "none");
+    expect(onUpdateEdgeRelationshipType).toHaveBeenCalledWith(
+      "edge-1",
+      "version-of",
+    );
     expect(onReverseEdgeDirection).toHaveBeenCalledWith("edge-1");
     expect(onDeleteEdge).toHaveBeenCalledWith("edge-1");
     expect(onStartEdgeLabelEdit).toHaveBeenCalledWith(edge);
@@ -260,6 +269,7 @@ describe("canvas components", () => {
         onStartEdgeLabelEdit={onStartEdgeLabelEdit}
         onStopEdgeLabelEdit={onStop}
         onUpdateEdgeDirection={onUpdateEdgeDirection}
+        onUpdateEdgeRelationshipType={onUpdateEdgeRelationshipType}
       />,
     );
 
@@ -352,6 +362,7 @@ describe("canvas components", () => {
         thumbUrls={thumbUrls}
         setThumbUrls={vi.fn()}
         onOpen={onOpen}
+        onPromoteToOutput={vi.fn()}
         onRemove={onRemove}
         onConnectorPointerDown={onConnector}
         onPointerDown={onPointerDown}
@@ -493,6 +504,7 @@ describe("canvas components", () => {
         onDeleteNote={vi.fn()}
         onDeleteTextElement={vi.fn()}
         onOpenItem={onOpenItem}
+        onPromoteItemToOutput={vi.fn()}
         onRemoveItem={vi.fn()}
         onRemoveReference={vi.fn()}
         onStartConnectorDrag={vi.fn()}

@@ -58,6 +58,7 @@ type CanvasObjectLayerProps = {
   onDeleteNote: (noteId: string) => void;
   onDeleteTextElement: (textElementId: string) => void;
   onOpenItem: ItemDetailsOpenHandler;
+  onPromoteItemToOutput: (itemId: string) => void;
   onRemoveItem: (itemId: string) => void;
   onRemoveReference: (referenceId: string) => void;
   onStartConnectorDrag: StartConnectorDragHandler;
@@ -86,6 +87,7 @@ export function CanvasObjectLayer({
   onDeleteNote,
   onDeleteTextElement,
   onOpenItem,
+  onPromoteItemToOutput,
   onRemoveItem,
   onRemoveReference,
   onStartConnectorDrag,
@@ -108,6 +110,7 @@ export function CanvasObjectLayer({
             thumbUrls={thumbUrls}
             setThumbUrls={setThumbUrls}
             onOpen={onOpenItem}
+            onPromoteToOutput={onPromoteItemToOutput}
             onRemove={onRemoveItem}
             onConnectorPointerDown={(event, side) =>
               onStartConnectorDrag(event, item.id, side)

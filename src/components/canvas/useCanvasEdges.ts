@@ -5,6 +5,7 @@ import type {
   CanvasEdge,
   CanvasEdgeDirection,
   CanvasPosition,
+  CanvasRelationshipType,
 } from "../../types";
 import { createId } from "../folio/model";
 import { objectTargetFromEvent } from "./canvasDom";
@@ -14,6 +15,7 @@ import {
   reverseCanvasEdgeDirection,
   updateCanvasEdgeDirection,
   updateCanvasEdgeLabel,
+  updateCanvasEdgeRelationshipType,
 } from "./canvasModel";
 import type { CanvasObjectKind, CanvasObjectLayout } from "./canvasTypes";
 
@@ -83,6 +85,19 @@ export function useCanvasEdges({
         activeCanvas.id,
         (canvas) => updateCanvasEdgeDirection(canvas, edgeId, direction),
         "Edge direction updated",
+      );
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const updateEdgeRelationshipType = useCallback(
+    (edgeId: string, relationshipType: CanvasRelationshipType) => {
+      if (!activeCanvas) return;
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) =>
+          updateCanvasEdgeRelationshipType(canvas, edgeId, relationshipType),
+        "Relationship updated",
       );
     },
     [activeCanvas, updateCanvas],
@@ -175,6 +190,7 @@ export function useCanvasEdges({
         const toSide =
           target.side ?? bestConnectionSide(latestTarget.center, latestSource.center);
         const edgeId = createId("edge");
+        const createdAt = new Date().toISOString();
         updateCanvas(
           activeCanvas.id,
           (canvas) => {
@@ -196,6 +212,9 @@ export function useCanvasEdges({
                   fromSide,
                   toSide,
                   direction: "forward",
+                  relationshipType: "related",
+                  createdAt,
+                  updatedAt: createdAt,
                 },
               ],
             };
@@ -239,5 +258,6 @@ export function useCanvasEdges({
     startEdgeLabelEdit,
     stopEdgeLabelEdit,
     updateEdgeDirection,
+    updateEdgeRelationshipType,
   };
 }
