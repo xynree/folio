@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 function renderDrawer(overrides = {}) {
   vi.mocked(window.folio.getFileDataUrl).mockResolvedValue(
-    "folio://file/items/2026/06_june/alpha.png",
+    "folio://file/projects%2Fstudio-archive%2Fimages%2Falpha.png",
   );
 
   const props = {
@@ -60,9 +60,9 @@ describe("DetailDrawer", () => {
 
     expect(
       (await screen.findByRole("img", { name: "Alpha" })).getAttribute("src"),
-    ).toBe("folio://file/items/2026/06_june/alpha.png");
+    ).toBe("folio://file/projects%2Fstudio-archive%2Fimages%2Falpha.png");
     expect(window.folio.getFileDataUrl).toHaveBeenCalledWith(
-      "items/2026/06_june/alpha.png",
+      "projects/studio-archive/images/alpha.png",
     );
 
     fireEvent.change(screen.getByDisplayValue("Alpha"), {
@@ -107,7 +107,7 @@ describe("DetailDrawer", () => {
     expect(props.onAddTag).toHaveBeenCalledWith("alpha", "process");
     expect(props.onAddToCanvas).toHaveBeenCalledWith("alpha");
     expect(window.folio.openInFinder).toHaveBeenCalledWith(
-      "items/2026/06_june/alpha.png",
+      "projects/studio-archive/images/alpha.png",
     );
     expect(props.onDelete).toHaveBeenCalledWith("alpha");
   });

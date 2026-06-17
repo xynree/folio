@@ -18,7 +18,7 @@ import { makeData, makeProject } from "../../test/fixtures";
 function item(id: string, date: string, tagIds: string[] = []): FolioItem {
   return {
     id,
-    path: `items/2026/06_june/${id}.png`,
+    path: `projects/studio-archive/images/${id}.png`,
     hash: id,
     type: "sketch",
     date,
@@ -78,7 +78,7 @@ describe("folio model helpers", () => {
   it("merges imported items into a project image list", () => {
     const imported = {
       ...item("new-image", "2026-06-15T11:00:00.000Z"),
-      path: "projects/studio/images/new-image.png",
+      path: "projects/studio-archive/images/new-image.png",
     };
     const next = mergeImportedItemsIntoProject(
       makeData({
@@ -160,7 +160,7 @@ describe("folio model helpers", () => {
     expect(
       itemCanUseDirectPreview({
         ...item("song", "2026-06-15T08:00:00.000Z"),
-        path: "items/2026/06_june/song.mp3",
+        path: "projects/studio-archive/images/song.mp3",
         type: "music",
       }),
     ).toBe(false);

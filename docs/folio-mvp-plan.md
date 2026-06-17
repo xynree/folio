@@ -47,28 +47,26 @@ The next gap is not raw file handling. The next gap is making **Projects** the f
 
 ### 1.2 Define folder structure and JSON schema
 
-- [x] Create `~/Documents/Folio/items/` and year/month folder structure on first import (e.g. `~/Documents/Folio/items/2026/02_february/`)
-- [x] Create `~/Documents/Folio/references/`, `~/Documents/Folio/.folio/thumbs/` on first launch if they don't exist
+- [x] Create `~/Documents/Folio/projects/` and per-project `images/`, `works/`, `references/`, `boards/`, and `reviews/` folders
+- [x] Create `~/Documents/Folio/.folio/thumbs/` on first launch if it doesn't exist
 - [x] Define and document the split JSON schema (folio.json, tags.json, canvases.json)
 - [x] Write TypeScript types for the full schema (`src/types/`, imported by both main and renderer)
 
 ```
 ~/Documents/Folio/
-  items/
-    2025/
-      09_september/
-        loose-warm-up.jpg
-        gesture-study.jpg
-      10_october/
-        seated-figure.jpg
-    2026/
-      01_january/
-        new-year-figure.jpg
-      02_february/
+  projects/
+    <project-slug>/
+      images/
         figure-study-5.jpg
         hand-gestures.png
-  references/
-    <canvas-id>/        ← canvas reference images, separate from archive
+      works/
+        figure-study-5-<item-id>.jpg
+      references/
+        palette-reference.png
+      boards/
+        <board-id>/
+      reviews/
+        review-<review-id>.md
   .folio/               ← hidden app state (analogous to .git/)
     folio.json          ← items metadata and schema version
     tags.json           ← global tags list
@@ -76,7 +74,7 @@ The next gap is not raw file handling. The next gap is making **Projects** the f
     thumbs/             ← generated small thumbnails and placeholders, regenerable
 ```
 
-Folder names: year as `YYYY`, month as `MM_monthname` (e.g. `02_february`) inside the `items/` directory. Images sit loose in the month folder — no day subfolders. Folder path always determined by **import date**, never file creation date.
+Project media folders are flat lists. Folio no longer creates date-bucketed media folders; legacy `items/YYYY/MM_monthname/` folders are migration sources only.
 
 ### 1.3 IPC bridge (preload layer)
 
@@ -107,7 +105,7 @@ window.folio.onFilesAdded(callback);
 
 ### 1.4 File watcher
 
-- [x] Install `chokidar`, start watching `~/Documents/Folio/items/` recursively from main process on app launch
+- [x] Install `chokidar`, start watching project `images/` folders from the main process on app launch
 - [x] On new file detected: check hash against all known `item.hash` values — if it matches an existing item, update `item.path` and clear any `missing` flag rather than creating a duplicate entry
 - [x] On new file with no matching hash: date is always the current import date (`new Date()`), infer type from extension (`jpg/png/webp/heic` → sketch, `mp3/wav/aiff` → music, `mp4/mov/gif` → animation, `txt/md/rtf/docx` → text), generate ID with `nanoid`, append to `folio.json`, emit `files-added` IPC event
 - [x] Debounce watcher at 300ms to batch rapid drops
@@ -116,9 +114,9 @@ window.folio.onFilesAdded(callback);
 ### 1.5 Filesystem operations (`src/main/*`)
 
 - [x] `saveFolioData()`: atomic writes — split data and write to respective `.json.tmp` files, then rename over target files; the OS-level rename is the crash guard
-- [x] `copyToFolio()`: resolve destination as `~/Documents/Folio/items/<YYYY>/<MM-monthname>/<sanitized-name>.<ext>`, create year/month folders if needed, handle name collisions with `_2`, `_3` suffix
+- [x] `copyToFolio()`: route legacy import calls into the default project and copy files to `projects/<project>/images/<sanitized-name>.<ext>`, handling name collisions with `_2`, `_3` suffix
 - [x] `computeHash(filePath)`: read first 64KB of file, return 8-char hex hash using Node's built-in `crypto.createHash('sha256')` — fast enough for large files, unique enough for a personal archive
-- [x] `copyReference()`: copy files to `~/Documents/Folio/references/<canvas-id>/`
+- [x] `copyReference()`: copy files to `projects/<project>/references/`
 - [x] Imported archive images and board-local references store optional natural image dimensions for proportional board card sizing
 - [x] `loadFolioData()`: read all three `.json` files in parallel on startup; if missing, create fresh empty schemas via `initialize()`
 - [x] File sanitization helper: lowercase, spaces → hyphens, strip special characters (shared utility used by both `copyToFolio` and `copyReference`)
@@ -127,7 +125,7 @@ window.folio.onFilesAdded(callback);
 
 Run once on every app launch, after `loadFolioData()`, before the UI renders. Diffs `folio.json` against what's actually on disk and surfaces any drift.
 
-- [x] **Scan the archive**: walk all files under `~/Documents/Folio/items/` (excluding `.folio/` and `references/`) and build a set of `{path, hash}` for every file found on disk
+- [x] **Scan the archive**: walk files under project `images/` folders plus legacy `items/` and root-level `images/` migration sources, then build a set of `{path, hash}` for every file found on disk
 - [x] **Find missing files**: items in `folio.json` whose `item.path` no longer exists on disk — mark as `missing: true`
 - [x] **Re-locate moved/renamed files**: for each missing item, check if any on-disk file has a matching `item.hash` — if found, update `item.path` to the new location, clear `missing` flag, save silently. This handles manual renames and moves in Finder with no user interaction required
 - [x] **Find untracked files**: files on disk with no matching entry in `folio.json` (no path match, no hash match) — these were added manually in Finder
@@ -279,7 +277,7 @@ Reference images belong to a canvas, not to items. They are first-class position
 - [x] Drop image files directly onto the canvas to add a reference at the drop position
 - [x] Import images button in the focused board header imports archive items directly onto the active board
 - [x] Browse reference button: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)` — drops new reference at a default position near the centre of the current viewport
-- [x] References copy to `~/Documents/Folio/references/<board-id>/` on disk, never into the main archive
+- [x] References copy to `projects/<project>/references/` on disk, never into the project image library
 - [x] Reference card on canvas: generated small thumbnail, pinned remove button, and drag-anywhere behavior
 - [x] Reference thumbnails render from `ensureReferenceThumbnail(referenceId, path)` on the board surface instead of falling back to full source files
 - [x] Reference cards can be moved freely like item cards — position saved to `canvas.references[].x/y`
@@ -324,7 +322,7 @@ This phase turns the current archive and board system into a project-based creat
 - [x] Open the app to a Projects view that lists all projects instead of opening directly to the archive/board workspace.
 - [x] Let the user create any number of projects from the Projects view.
 - [x] Project creation should create a readable folder at `~/Documents/Folio/projects/<project-slug-or-id>/`.
-- [x] Each project folder should include `images/`, `works/`, and `boards/` subfolders.
+- [x] Each project folder should include `images/`, `works/`, `references/`, `boards/`, and `reviews/` subfolders.
 - [x] Add a migration path that creates a default project for existing archive items and existing canvases.
 - [x] Assign existing canvases to the default project with `canvas.projectId` and `project.boardIds`.
 - [x] Define project as a personal studio container, not a collaborative workspace; avoid collaborator, owner, assignee, review-request, comment-thread, or approval concepts.
@@ -337,7 +335,7 @@ This phase turns the current archive and board system into a project-based creat
 - [x] The Import button and macOS Photos picker should import into the active project when a project is open.
 - [x] Dropping a new image directly onto a project board should first add it to the project's All Images list, then place it on the board.
 - [x] Imported project images should continue to store optional `mediaWidth` and `mediaHeight` for proportional canvas card sizing.
-- [x] Reconciliation should scan project `images/` folders in addition to the legacy archive `items/` folder.
+- [x] Reconciliation should scan project `images/` folders in addition to legacy `items/` and root-level `images/` migration sources.
 
 ### 4.3 Works view
 
@@ -356,7 +354,7 @@ This phase turns the current archive and board system into a project-based creat
 - [x] Creating a board from inside a project should create a `Canvas` owned by that project.
 - [x] Existing canvas behavior remains the project board surface: draggable image cards, notes, board text, references, strokes, and edges.
 - [x] Any image in `Project.imageIds` should be available to place on any board in that project.
-- [x] Board-local references should save under `projects/<project>/boards/<board-id>/references/`.
+- [x] Board references should save under `projects/<project>/references/` while board membership remains in `canvases.json`.
 - [ ] Keep board headers focused on created/saved timestamps and board actions, not object counts.
 - [ ] Board edit UI can expose board kind, status, brief, and outcome later without cluttering quick rename/color editing.
 
@@ -570,12 +568,12 @@ These ideas should not block the project workspace and reference graph MVP, but 
 
 ### File naming and paths
 
-- [x] Destination resolved from import date: `~/Documents/Folio/items/YYYY/MM_monthname/` (e.g. `~/Documents/Folio/items/2026/02_february/`)
-- [x] Month folder format: zero-padded number + full lowercase name — `01_january` through `12_december`
+- [x] Destination resolved from active project: `~/Documents/Folio/projects/<project>/images/`
+- [x] Legacy month folders (`items/YYYY/MM_monthname/`) are migration sources only and are not created for new imports
 - [x] Filename: original name, sanitized — lowercase, spaces → hyphens, special characters stripped
-- [x] Name collision within the same month folder: append `_2`, `_3`, etc. before the extension
+- [x] Name collision within the same project media folder: append `_2`, `_3`, etc. before the extension
 - [x] `item.title` defaults to filename without extension; user can rename at any time
-- [x] `item.path` stores relative path from `~/Documents/Folio/` (e.g. `items/2026/02_february/figure-study.jpg`) — used to locate files and rebuild thumbnails if the cache is deleted
+- [x] `item.path` stores relative path from `~/Documents/Folio/` (e.g. `projects/studio-archive/images/figure-study.jpg`) — used to locate files and rebuild thumbnails if the cache is deleted
 
 ### Accepted file types
 

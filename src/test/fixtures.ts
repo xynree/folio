@@ -12,7 +12,7 @@ export function makeItem(
 ): FolioItem {
   return {
     id,
-    path: `items/2026/06_june/${id}.png`,
+    path: `projects/studio-archive/images/${id}.png`,
     hash: `hash-${id}`,
     type: "sketch",
     date: "2026-06-15T08:00:00.000Z",

@@ -12,11 +12,9 @@ import {
   Columns2,
   FolderOpen,
   Grid3X3,
-  Images,
   PanelLeft,
   PanelRight,
   Rows3,
-  Star,
   Upload,
 } from "lucide-react";
 import type {
@@ -1396,24 +1394,6 @@ export function AppShell() {
                   onClick={() => openFolioPath(activeProject.folderPath)}
                 >
                   <ButtonIcon icon={FolderOpen} />
-                </button>
-                <button
-                  className="icon-button"
-                  type="button"
-                  aria-label="Open project images folder"
-                  title="Open project images folder"
-                  onClick={() => openFolioPath(`${activeProject.folderPath}/images`)}
-                >
-                  <ButtonIcon icon={Images} />
-                </button>
-                <button
-                  className="icon-button"
-                  type="button"
-                  aria-label="Open project Works folder"
-                  title="Open project Works folder"
-                  onClick={() => openFolioPath(`${activeProject.folderPath}/works`)}
-                >
-                  <ButtonIcon icon={Star} />
                 </button>
               </div>
             </div>

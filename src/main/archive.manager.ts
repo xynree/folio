@@ -4,7 +4,6 @@ import path from "node:path";
 import { nanoid } from "nanoid";
 import {
   computeHash,
-  createDirectoryByDate,
   exists,
   inferItemType,
   sanitizeFileBaseName,
@@ -42,6 +41,8 @@ const PLACEHOLDER_SVG_BY_TYPE: Record<ItemType, string> = {
 };
 const THUMBNAIL_JPEG_QUALITY = 72;
 const THUMBNAIL_SIZE = 320;
+const IMAGES_DIR_NAME = "images";
+const REFERENCES_DIR_NAME = "references";
 
 /**
  * ArchiveManager handles filesystem-level operations for the media archive:
@@ -71,19 +72,19 @@ export class ArchiveManager {
   }
 
   /**
-   * Copy files into today's Folio folder. Files already inside Folio/items are
-   * registered in place, which is used by reconciliation's "add to archive" UI.
+   * Legacy import path. Main-process callers should prefer project-scoped imports.
    */
   async copyToFolio(filePaths: string[]): Promise<FolioItem[]> {
     const result = await this.importFilePaths(filePaths, {
       mode: "copy-external",
       destination: "archive",
+      destDir: this.projectImagesDirectory("projects/studio-archive"),
     });
     return result.items;
   }
 
   /**
-   * Copy files into a project's readable images folder.
+   * Copy files into a project's flat images folder and tag them with that project.
    */
   async copyToProject(
     projectId: string,
@@ -94,18 +95,26 @@ export class ArchiveManager {
       mode: "copy-external",
       destination: "project",
       projectId,
-      destDir: path.join(this.folioRoot, projectFolderPath, "images"),
+      destDir: this.projectImagesDirectory(projectFolderPath),
     });
     return result.items;
   }
 
   /**
-   * Track files that appeared directly in Folio/items via Finder or launch reconciliation.
+   * Track files that appeared directly in a project's images folder via Finder.
    */
-  async trackExistingFiles(filePaths: string[]): Promise<ImportResult> {
+  async trackExistingFiles(
+    filePaths: string[],
+    projectId?: string,
+    projectFolderPath?: string,
+  ): Promise<ImportResult> {
     return this.importFilePaths(filePaths, {
       mode: "register-in-place",
-      destination: "archive",
+      destination: projectId ? "project" : "archive",
+      projectId,
+      destDir: projectFolderPath
+        ? this.projectImagesDirectory(projectFolderPath)
+        : undefined,
     });
   }
 
@@ -113,7 +122,8 @@ export class ArchiveManager {
    * Legacy source-based import support for clipboard/buffer callers.
    */
   async importItems(sources: ImportSource[]): Promise<FolioItem[]> {
-    const destDir = await createDirectoryByDate(this.folioRoot);
+    const destDir = this.projectImagesDirectory("projects/studio-archive");
+    await fs.mkdir(destDir, { recursive: true });
     const imported: FolioItem[] = [];
 
     for (const source of sources) {
@@ -135,7 +145,7 @@ export class ArchiveManager {
     projectFolderPath: string,
     sources: ImportSource[],
   ): Promise<FolioItem[]> {
-    const destDir = path.join(this.folioRoot, projectFolderPath, "images");
+    const destDir = this.projectImagesDirectory(projectFolderPath);
     await fs.mkdir(destDir, { recursive: true });
     const imported: FolioItem[] = [];
 
@@ -207,13 +217,10 @@ export class ArchiveManager {
   }
 
   async copyReferences(
-    canvasId: string,
+    projectFolderPath: string,
     filePaths: string[],
-    projectFolderPath?: string,
   ): Promise<CanvasReference[]> {
-    const destDir = projectFolderPath
-      ? path.join(this.folioRoot, projectFolderPath, "boards", canvasId, "references")
-      : path.join(this.folioRoot, "references", canvasId);
+    const destDir = this.projectReferencesDirectory(projectFolderPath);
     await fs.mkdir(destDir, { recursive: true });
 
     const references: CanvasReference[] = [];
@@ -350,6 +357,29 @@ export class ArchiveManager {
       : path.join(this.folioRoot, relativeOrAbsolutePath);
   }
 
+  public async migrateItemsToProjectImages(
+    projectFolderById: Map<string, string>,
+    fallbackProjectId?: string,
+  ): Promise<boolean> {
+    let changed = false;
+
+    for (const item of this.items) {
+      const projectId = item.projectId ?? fallbackProjectId;
+      const projectFolderPath = projectId
+        ? projectFolderById.get(projectId)
+        : undefined;
+      if (!projectFolderPath) continue;
+
+      changed =
+        (await this.moveItemToDirectory(
+          item,
+          this.projectImagesDirectory(projectFolderPath),
+        )) || changed;
+    }
+
+    return changed;
+  }
+
   /**
    * Saves the current items to disk.
    */
@@ -384,9 +414,22 @@ export class ArchiveManager {
 
       if (options.mode === "copy-external" && !sourceAlreadyInDestination) {
         const sourceHash = await computeHash(absoluteSource);
-        const duplicate = this.items.find((item) => item.hash === sourceHash);
+        const duplicate = this.items.find(
+          (item) =>
+            item.hash === sourceHash &&
+            !(
+              options.projectId &&
+              item.projectId &&
+              item.projectId !== options.projectId
+            ),
+        );
 
         if (duplicate && !duplicate.missing) {
+          if (options.destination === "project" && options.destDir) {
+            changed =
+              (await this.moveItemToDirectory(duplicate, options.destDir)) ||
+              changed;
+          }
           if (options.projectId && !duplicate.projectId) {
             duplicate.projectId = options.projectId;
             changed = true;
@@ -396,9 +439,8 @@ export class ArchiveManager {
         }
 
         const destDir =
-          options.destination === "project" && options.destDir
-            ? options.destDir
-            : await createDirectoryByDate(this.folioRoot);
+          options.destDir ??
+          this.projectImagesDirectory("projects/studio-archive");
         archivedPath = await this.saveToDirectory(
           { kind: "path", filePath: absoluteSource },
           sourceFilename,
@@ -454,7 +496,11 @@ export class ArchiveManager {
       return { item: pathMatch, created: false, changed };
     }
 
-    const hashMatch = this.items.find((item) => item.hash === hash);
+    const hashMatch = this.items.find(
+      (item) =>
+        item.hash === hash &&
+        !(projectId && item.projectId && item.projectId !== projectId),
+    );
     if (hashMatch) {
       let changed = this.applyMediaDimensions(
         hashMatch,
@@ -527,6 +573,80 @@ export class ArchiveManager {
     const resolvedPath = path.resolve(destPath);
     this.recentlyCopied.add(resolvedPath);
     setTimeout(() => this.recentlyCopied.delete(resolvedPath), 2000);
+  }
+
+  private projectImagesDirectory(projectFolderPath: string): string {
+    return path.join(this.folioRoot, projectFolderPath, IMAGES_DIR_NAME);
+  }
+
+  private projectReferencesDirectory(projectFolderPath: string): string {
+    return path.join(this.folioRoot, projectFolderPath, REFERENCES_DIR_NAME);
+  }
+
+  private isFlatFileInDirectory(filePath: string, directory: string): boolean {
+    return path.resolve(path.dirname(filePath)) === path.resolve(directory);
+  }
+
+  private async moveItemToDirectory(
+    item: FolioItem,
+    destDir: string,
+  ): Promise<boolean> {
+    const sourcePath = this.getAbsolutePath(item.path);
+    if (!(await exists(sourcePath))) return false;
+
+    if (this.isFlatFileInDirectory(sourcePath, destDir)) return false;
+
+    const extension = path.extname(item.path);
+    const preferredBaseName = sanitizeFileBaseName(
+      item.title || path.basename(item.path, extension) || item.id,
+    );
+    const destPath = await this.moveFileToDirectory(
+      sourcePath,
+      destDir,
+      `${preferredBaseName}${extension.toLowerCase()}`,
+    );
+
+    item.path = path.relative(this.folioRoot, destPath);
+    item.missing = false;
+    return true;
+  }
+
+  private async moveFileToDirectory(
+    sourcePath: string,
+    destDir: string,
+    preferredFilename: string,
+  ): Promise<string> {
+    await fs.mkdir(destDir, { recursive: true });
+
+    const extension = path.extname(preferredFilename).toLowerCase();
+    const baseName = sanitizeFileBaseName(
+      path.basename(preferredFilename, extension),
+    );
+    let destPath = path.join(destDir, `${baseName}${extension}`);
+    let counter = 2;
+
+    while (
+      (await exists(destPath)) &&
+      path.resolve(destPath) !== path.resolve(sourcePath)
+    ) {
+      destPath = path.join(destDir, `${baseName}_${counter}${extension}`);
+      counter += 1;
+    }
+
+    if (path.resolve(destPath) === path.resolve(sourcePath)) return destPath;
+
+    try {
+      await fs.rename(sourcePath, destPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EXDEV") {
+        throw error;
+      }
+      await fs.copyFile(sourcePath, destPath);
+      await fs.rm(sourcePath, { force: true });
+    }
+
+    this.trackRecentlyCopied(destPath);
+    return destPath;
   }
 
   private async createThumbnail(

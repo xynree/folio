@@ -315,18 +315,13 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await waitForArchive();
     await user.click(screen.getByLabelText("Open project folder"));
-    await user.click(screen.getByLabelText("Open project images folder"));
-    await user.click(screen.getByLabelText("Open project Works folder"));
 
     expect(window.folio.openInFinder).toHaveBeenCalledWith(
       "projects/studio-archive",
     );
-    expect(window.folio.openInFinder).toHaveBeenCalledWith(
-      "projects/studio-archive/images",
-    );
-    expect(window.folio.openInFinder).toHaveBeenCalledWith(
-      "projects/studio-archive/works",
-    );
+    expect(screen.queryByLabelText("Open images folder")).toBeNull();
+    expect(screen.queryByLabelText("Open Works folder")).toBeNull();
+    expect(screen.queryByLabelText("Open references folder")).toBeNull();
   });
 
   it("loads archive data, thumbnails, status counts, and the docked board panel", async () => {
@@ -553,7 +548,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       importedItems: [
         makeItem("delta", {
           title: "Delta",
-          path: "items/2026/06_june/delta.png",
+          path: "projects/studio-archive/images/delta.png",
           date: "2026-06-15T11:00:00.000Z",
         }),
       ],
@@ -578,7 +573,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       importedItems: [
         makeItem("delta", {
           title: "Delta",
-          path: "items/2026/06_june/delta.png",
+          path: "projects/studio-archive/images/delta.png",
           date: "2026-06-15T11:00:00.000Z",
         }),
       ],
@@ -1041,7 +1036,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
               {
                 id: "ref-1",
                 filename: "swatch.png",
-                path: "projects/studio-archive/boards/board-2/references/swatch.png",
+                path: "projects/studio-archive/references/swatch.png",
                 x: 0,
                 y: 0,
                 capturedAt: "2026-06-16T10:00:00.000Z",
@@ -1330,7 +1325,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await user.click(within(dialog).getByRole("button", { name: /show in finder/i }));
     expect(window.folio.openInFinder).toHaveBeenCalledWith(
-      "items/2026/06_june/alpha.png",
+      "projects/studio-archive/images/alpha.png",
     );
 
     await user.click(within(dialog).getByRole("button", { name: /^delete$/i }));
@@ -1429,7 +1424,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       importedItems: [
         makeItem("echo", {
           title: "Echo",
-          path: "items/2026/06_june/echo.png",
+          path: "projects/studio-archive/images/echo.png",
           date: "2026-06-15T11:30:00.000Z",
         }),
       ],
@@ -1893,14 +1888,14 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       {
         id: "ref-a",
         filename: "reference-a.png",
-        path: "projects/studio-archive/boards/board-1/references/reference-a.png",
+        path: "projects/studio-archive/references/reference-a.png",
         x: 0,
         y: 0,
       },
       {
         id: "ref-b",
         filename: "reference-b.png",
-        path: "projects/studio-archive/boards/board-1/references/reference-b.png",
+        path: "projects/studio-archive/references/reference-b.png",
         x: 0,
         y: 0,
       },
@@ -2081,7 +2076,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
               {
                 id: "ref-a",
                 filename: "swatch.png",
-                path: "references/board-1/swatch.png",
+                path: "projects/studio-archive/references/swatch.png",
                 x: 320,
                 y: 90,
               },

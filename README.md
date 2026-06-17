@@ -1,24 +1,25 @@
 # Folio
 
-Folio is a local-first Electron app for collecting visual work, browsing it by time and tag, and arranging references on spatial canvas boards. The app is built for a single-user desktop archive: files stay readable in `~/Documents/Folio`, app state is stored beside them as JSON, and the UI works without a backend.
+Folio is a local-first Electron app for collecting visual work, organizing it into projects, reviewing Works over time, and arranging references on spatial canvas boards. The app is built for a single-user desktop studio archive: files stay readable in `~/Documents/Folio`, app state is stored beside them as JSON, and the UI works without a backend.
 
 ## Current Features
 
 - Archive import from drag and drop, the floating Import action, Finder file selection, and the macOS Photos picker helper.
-- Projects as the first screen, with readable project folders, project-scoped image lists, Works, boards, and Finder folder shortcuts.
-- Project Review surface with recap metrics, a derived progress timeline, and dedicated Markdown editor pages for Work-tagged review documents.
-- Strip and grid archive views with most-recent-first sorting, tag filtering, multi-select, and a 50%-200% UI scale control.
-- A Works-only bottom heatmap inspired by GitHub activity grids, with work activity capped at 8 items per day.
+- Projects as the first screen, with one Finder shortcut to the readable project folder and project-scoped images, Works, references, boards, and reviews.
+- Project Review surface with recap metrics, a Works-focused progress timeline, and dedicated Markdown editor pages for review documents that can tag specific Works.
+- Strip and grid views for All Images and Works, with most-recent-first sorting, tag filtering, multi-select, and a 50%-200% UI scale control.
+- A Works-only bottom heatmap shown only in the Works view, with work activity capped at 8 items per day.
 - A resizable tags sidebar with per-tag counts and thumbnail previews.
 - A right-side board dock that opens to a board browser or a focused canvas board.
 - Canvas boards with image-only draggable and resizable archive cards, reference images, notes, and text; image cards default to the source image's proportions.
+- Double-clicking an image or Work opens the item editor with a large source preview on the left and editable metadata on the right.
 - Board headers show when each board was created and when it was last saved.
 - Side-node connection edges between canvas items, references, notes, and board text, with inline labels and direction modes.
 - Canvas relationships can be marked as related, inspired by, or version of.
 - Freehand pen strokes on boards with an eraser and Cmd+Z undo.
 - Resizable board text boxes for quick labels, headings, and questions, with small, medium, and large sizing.
 - Board settings for title, color, delete, and board member dots on archive cards.
-- Project board references are stored under the owning project board folder when a board belongs to a project.
+- Project board references are stored in the owning project's `references/` folder while board membership and position stay in `canvases.json`.
 - Small generated thumbnails for archive cards, board previews, and canvas references so the UI does not load full source images for normal browsing.
 - Local reconciliation for files renamed, moved, or deleted in Finder.
 
@@ -42,25 +43,18 @@ The app manages a folder at `~/Documents/Folio`:
 
 ```text
 ~/Documents/Folio/
-  items/
-    2026/
-      06_june/
-        example.png
   projects/
     <project-slug>/
       images/
-        project-image.png
+        example.png
       works/
         promoted-work-link-or-copy.png
+      references/
+        reference-image.png
       reviews/
         review-<review-id>.md
       boards/
         <board-id>/
-          references/
-            reference-image.png
-  references/
-    <board-id>/
-      reference-image.png
   .folio/
     folio.json
     tags.json
@@ -71,7 +65,7 @@ The app manages a folder at `~/Documents/Folio`:
       reference-<reference-id>-small.jpg
 ```
 
-`projects/`, `items/`, and `references/` are user-readable media folders. `.folio/` stores app metadata and a regenerable thumbnail cache.
+Each project owns its own `images/`, `works/`, and `references/` folders. `.folio/` stores app metadata and a regenerable thumbnail cache. Legacy `items/`, root-level media folders, and old board-local reference folders are migrated into the owning project at launch when Folio can match them to metadata.
 
 ## Project Organization
 
@@ -115,11 +109,6 @@ Useful checks:
 ```sh
 npm run lint
 npm test
-```
-
-Package locally:
-
-```sh
 npm run package
 ```
 

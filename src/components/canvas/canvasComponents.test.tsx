@@ -31,7 +31,7 @@ const board = makeCanvas("board-1", {
     {
       id: "reference-1",
       filename: "reference.png",
-      path: "references/reference.png",
+      path: "projects/studio-archive/references/reference.png",
       x: 50,
       y: 60,
     },

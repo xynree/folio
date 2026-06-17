@@ -12,13 +12,9 @@ export async function initialize(app: Electron.App) {
   const DOT_FOLIO = path.join(FOLIO_ROOT, ".folio");
 
   // 1. Create the base Folio folder and all required subdirectories.
-  const currentYear = new Date().getFullYear().toString();
   const dirs = [
     FOLIO_ROOT,
-    path.join(FOLIO_ROOT, "references"),
-    path.join(FOLIO_ROOT, "items"),
     path.join(FOLIO_ROOT, "projects"),
-    path.join(FOLIO_ROOT, "items", currentYear),
     DOT_FOLIO,
     path.join(DOT_FOLIO, "thumbs"),
   ];

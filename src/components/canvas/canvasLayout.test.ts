@@ -15,7 +15,7 @@ import {
 function item(id: string, overrides: Partial<FolioItem> = {}): FolioItem {
   return {
     id,
-    path: `items/${id}.png`,
+    path: `projects/studio-archive/images/${id}.png`,
     hash: id,
     type: "sketch",
     date: "2026-06-15T08:00:00.000Z",

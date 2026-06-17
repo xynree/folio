@@ -44,7 +44,7 @@ describe("ArchiveManager project imports", () => {
     ).resolves.toBe("image bytes");
   });
 
-  it("copies board references into the project board folder when scoped", async () => {
+  it("copies board references into the project references folder", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-reference-"));
     const dotFolio = path.join(tempDir, ".folio");
     await fs.mkdir(dotFolio, { recursive: true });
@@ -53,17 +53,15 @@ describe("ArchiveManager project imports", () => {
     await fs.writeFile(sourcePath, "reference bytes");
 
     const manager = new ArchiveManager(tempDir, dbPath);
-    const references = await manager.copyReferences(
-      "board-1",
-      [sourcePath],
-      "projects/color-study",
-    );
+    const references = await manager.copyReferences("projects/color-study", [
+      sourcePath,
+    ]);
 
     expect(references).toHaveLength(1);
     expect(references[0]).toMatchObject({
       filename: "reference.png",
       path: expect.stringMatching(
-        /^projects\/color-study\/boards\/board-1\/references\/reference.*\.png$/,
+        /^projects\/color-study\/references\/reference.*\.png$/,
       ),
     });
     await expect(

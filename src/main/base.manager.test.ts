@@ -109,7 +109,7 @@ describe("FolioManager project Works", () => {
     await expect(fs.readdir(worksDir)).resolves.toEqual([]);
   });
 
-  it("copies board references under the owning project board folder", async () => {
+  it("copies board references into the owning project references folder", async () => {
     const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "folio-manager-"));
     electronMocks.homePath = tempHome;
 
@@ -141,28 +141,116 @@ describe("FolioManager project Works", () => {
         ],
       }),
     );
-    await expect(
-      fs.stat(
-        path.join(
-          folioRoot,
-          "projects",
-          "color-study",
-          "boards",
-          "board-1",
-          "references",
-        ),
-      ),
-    ).resolves.toBeTruthy();
-
     const references = await manager.copyReference("board-1", [sourcePath]);
 
     expect(references).toHaveLength(1);
     expect(references[0].path).toMatch(
-      /^projects\/color-study\/boards\/board-1\/references\/reference.*\.png$/,
+      /^projects\/color-study\/references\/reference.*\.png$/,
     );
     await expect(
       fs.readFile(path.join(folioRoot, references[0].path), "utf-8"),
     ).resolves.toBe("reference bytes");
+  });
+
+  it("migrates legacy item and reference folders into project media folders", async () => {
+    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "folio-manager-"));
+    electronMocks.homePath = tempHome;
+
+    const folioRoot = path.join(tempHome, "Documents", "Folio");
+    const dotFolio = path.join(folioRoot, ".folio");
+    const legacyItemPath = path.join(
+      folioRoot,
+      "items",
+      "2026",
+      "06_june",
+      "alpha.png",
+    );
+    const legacyReferencePath = path.join(
+      folioRoot,
+      "projects",
+      "color-study",
+      "boards",
+      "board-1",
+      "references",
+      "swatch.png",
+    );
+    await fs.mkdir(path.dirname(legacyItemPath), { recursive: true });
+    await fs.mkdir(path.dirname(legacyReferencePath), { recursive: true });
+    await fs.mkdir(dotFolio, { recursive: true });
+    await fs.writeFile(legacyItemPath, "image bytes");
+    await fs.writeFile(legacyReferencePath, "reference bytes");
+
+    const manager = new FolioManager();
+    await manager.saveFolioData(
+      makeData({
+        items: [
+          makeItem("alpha", {
+            title: "Alpha",
+            path: "items/2026/06_june/alpha.png",
+            projectId: "project-1",
+          }),
+        ],
+        canvases: [
+          makeCanvas("board-1", {
+            projectId: "project-1",
+            itemIds: ["alpha"],
+            references: [
+              {
+                id: "ref-1",
+                filename: "swatch.png",
+                path: "projects/color-study/boards/board-1/references/swatch.png",
+                x: 0,
+                y: 0,
+              },
+            ],
+          }),
+        ],
+        projects: [
+          makeProject("project-1", {
+            title: "Color Study",
+            folderPath: "projects/color-study",
+            imageIds: ["alpha"],
+            workItemIds: ["alpha"],
+            boardIds: ["board-1"],
+          }),
+        ],
+      }),
+    );
+
+    const data = await manager.loadData();
+
+    expect(data.items[0].path).toBe("projects/color-study/images/alpha.png");
+    expect(data.canvases[0].references[0].path).toBe(
+      "projects/color-study/references/swatch.png",
+    );
+    await expect(
+      fs.readFile(
+        path.join(folioRoot, "projects", "color-study", "images", "alpha.png"),
+        "utf-8",
+      ),
+    ).resolves.toBe("image bytes");
+    await expect(
+      fs.readFile(
+        path.join(
+          folioRoot,
+          "projects",
+          "color-study",
+          "references",
+          "swatch.png",
+        ),
+        "utf-8",
+      ),
+    ).resolves.toBe("reference bytes");
+    await expect(
+      fs.readFile(
+        path.join(folioRoot, "projects", "color-study", "works", "alpha-alpha.png"),
+        "utf-8",
+      ),
+    ).resolves.toBe("image bytes");
+    await expect(fs.stat(path.join(folioRoot, "items"))).rejects.toThrow();
+    await expect(fs.stat(path.join(folioRoot, "images"))).rejects.toThrow();
+    await expect(fs.stat(path.join(folioRoot, "works"))).rejects.toThrow();
+    await expect(fs.stat(path.join(folioRoot, "references"))).rejects.toThrow();
   });
 
   it("opens folders directly and reveals files in Finder", async () => {

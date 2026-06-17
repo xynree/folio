@@ -28,6 +28,9 @@ import { FolioStorage } from "./storage.manager";
 const execFileAsync = promisify(execFile);
 const PHOTOS_PICKER_CANCELLED = "__FOLIO_PHOTOS_PICKER_CANCELLED__";
 const PHOTOS_PICKER_HELPER_NAME = "FolioPhotosPicker";
+const IMAGES_DIR_NAME = "images";
+const WORKS_DIR_NAME = "works";
+const REFERENCES_DIR_NAME = "references";
 
 interface ImportFileSelection {
   filePaths: string[];
@@ -173,8 +176,13 @@ export class FolioManager implements FolioManagerInterface {
     ipcMain.handle(
       "folio:import-items",
       async (_: unknown, sources: ImportSource[]) => {
-        const items = await this.archiveManager.importItems(sources);
-        await this.archiveManager.save(this.version);
+        const project = await this.ensureDefaultProject();
+        const items = await this.archiveManager.importProjectItems(
+          project.id,
+          project.folderPath,
+          sources,
+        );
+        await this.appendItemsToProject(project.id, items);
         return items;
       },
     );
@@ -220,13 +228,12 @@ export class FolioManager implements FolioManagerInterface {
   }
 
   public startWatcher(mainWindow: BrowserWindow) {
-    const archiveRoot = path.join(this.folioRoot, "items");
-    const watcher = watch(archiveRoot, {
+    const projectsRoot = path.join(this.folioRoot, "projects");
+    const watcher = watch(projectsRoot, {
       ignored: (filePath) => {
         const relative = path.relative(this.folioRoot, filePath);
         return (
           relative.startsWith(".folio") ||
-          relative.startsWith("references") ||
           path.basename(filePath).startsWith(".")
         );
       },
@@ -238,12 +245,14 @@ export class FolioManager implements FolioManagerInterface {
     });
 
     watcher.on("add", (filePath) => {
+      if (!this.getProjectForImageFilePath(filePath)) return;
       if (this.archiveManager.isRecentlyCopied(filePath)) return;
       this.pendingWatcherAdds.add(filePath);
       this.scheduleWatcherFlush(mainWindow);
     });
 
     watcher.on("unlink", async (filePath) => {
+      if (!this.getProjectForImageFilePath(filePath)) return;
       const item = this.archiveManager
         .getItems()
         .find(
@@ -282,8 +291,10 @@ export class FolioManager implements FolioManagerInterface {
     this.canvases = canvasesBase.canvases;
     this.projects = projectsBase.projects;
 
+    await this.ensureMediaDirectories();
     const repairedLegacyOutputStages = this.repairLegacyOutputStages();
     const migratedProjects = await this.migrateProjectData();
+    const migratedMediaFiles = await this.migrateMediaFilesToFlatFolders();
     const repairedMissingFlags = await this.repairMissingFlagsForExistingFiles();
     const repairedMediaDimensions =
       await this.archiveManager.repairMissingMediaDimensions();
@@ -293,13 +304,18 @@ export class FolioManager implements FolioManagerInterface {
     if (
       repairedLegacyOutputStages ||
       migratedProjects ||
+      migratedMediaFiles.itemsChanged ||
       repairedMissingFlags ||
       repairedMediaDimensions
     ) {
       await this.archiveManager.save(this.version);
     }
 
-    if (migratedProjects || repairedReferenceMediaDimensions) {
+    if (
+      migratedProjects ||
+      migratedMediaFiles.referencesChanged ||
+      repairedReferenceMediaDimensions
+    ) {
       await Promise.all([
         this.storageManager.saveCanvases(
           this.canvasesPath,
@@ -364,8 +380,12 @@ export class FolioManager implements FolioManagerInterface {
       reviews: project.reviews ?? [],
     }));
 
+    await this.ensureMediaDirectories();
     await Promise.all(this.projects.map((project) => this.ensureProjectDirectories(project)));
     await Promise.all(this.projects.map((project) => this.syncProjectReviewFiles(project)));
+    await Promise.all(
+      this.projects.map((project) => this.syncProjectWorksFolder(project)),
+    );
 
     await Promise.all([
       this.archiveManager.save(this.version),
@@ -401,6 +421,7 @@ export class FolioManager implements FolioManagerInterface {
       reviews: [],
     };
 
+    await this.ensureMediaDirectories();
     await this.ensureProjectDirectories(project);
     this.projects = [project, ...this.projects];
     await this.storageManager.saveProjects(
@@ -448,6 +469,36 @@ export class FolioManager implements FolioManagerInterface {
     return project;
   }
 
+  private getProjectForCanvas(canvasId: string): Project | undefined {
+    const canvas = this.canvases.find((candidate) => candidate.id === canvasId);
+    if (canvas?.projectId) {
+      const project = this.projects.find(
+        (candidate) => candidate.id === canvas.projectId,
+      );
+      if (project) return project;
+    }
+
+    return this.projects.find((project) => project.boardIds.includes(canvasId));
+  }
+
+  private getProjectForCanvasOrThrow(canvasId: string): Project {
+    const project = this.getProjectForCanvas(canvasId);
+    if (!project) {
+      throw new Error(`Project for board ${canvasId} was not found.`);
+    }
+    return project;
+  }
+
+  private getProjectForImageFilePath(filePath: string): Project | undefined {
+    const absolutePath = path.resolve(filePath);
+    return this.projects.find((project) =>
+      this.isPathInsideDirectory(
+        absolutePath,
+        path.join(this.folioRoot, project.folderPath, IMAGES_DIR_NAME),
+      ),
+    );
+  }
+
   async saveItems(items: FolioItem[]): Promise<void> {
     this.archiveManager.setItems(items);
     await this.archiveManager.save(this.version);
@@ -468,14 +519,8 @@ export class FolioManager implements FolioManagerInterface {
   }
 
   async copyToFolio(filePaths: string[]): Promise<FolioItem[]> {
-    const items = await this.archiveManager.copyToFolio(filePaths);
-    await this.archiveManager.save(this.version);
-
-    void this.archiveManager
-      .ensureThumbnails(items.map((item) => item.id))
-      .catch((error) => console.error("Thumbnail generation failed", error));
-
-    return items;
+    const project = await this.ensureDefaultProject();
+    return this.copyToProject(project.id, filePaths);
   }
 
   async copyToProject(projectId: string, filePaths: string[]): Promise<FolioItem[]> {
@@ -575,17 +620,8 @@ export class FolioManager implements FolioManagerInterface {
     canvasId: string,
     filePaths: string[],
   ): Promise<CanvasReference[]> {
-    const canvas = this.canvases.find((candidate) => candidate.id === canvasId);
-    const project =
-      canvas?.projectId
-        ? this.projects.find((candidate) => candidate.id === canvas.projectId)
-        : this.projects.find((candidate) => candidate.boardIds.includes(canvasId));
-
-    return this.archiveManager.copyReferences(
-      canvasId,
-      filePaths,
-      project?.folderPath,
-    );
+    const project = this.getProjectForCanvasOrThrow(canvasId);
+    return this.archiveManager.copyReferences(project.folderPath, filePaths);
   }
 
   async deleteItems(itemIds: string[]): Promise<FolioData> {
@@ -796,13 +832,33 @@ export class FolioManager implements FolioManagerInterface {
 
     if (!filePaths.length) return;
 
-    const result = await this.archiveManager.trackExistingFiles(filePaths);
-    if (result.changed) {
-      await this.archiveManager.save(this.version);
+    const filesByProject = new Map<Project, string[]>();
+    for (const filePath of filePaths) {
+      const project = this.getProjectForImageFilePath(filePath);
+      if (!project) continue;
+      const projectFiles = filesByProject.get(project) ?? [];
+      projectFiles.push(filePath);
+      filesByProject.set(project, projectFiles);
     }
 
-    if (result.items.length) {
-      mainWindow.webContents.send("folio:files-added", result.items);
+    const addedItems: FolioItem[] = [];
+    for (const [project, projectFilePaths] of filesByProject) {
+      const result = await this.archiveManager.trackExistingFiles(
+        projectFilePaths,
+        project.id,
+        project.folderPath,
+      );
+      if (result.changed) {
+        await this.archiveManager.save(this.version);
+      }
+      if (result.items.length) {
+        addedItems.push(...result.items);
+        await this.appendItemsToProject(project.id, result.items);
+      }
+    }
+
+    if (addedItems.length) {
+      mainWindow.webContents.send("folio:files-added", addedItems);
     }
   }
 
@@ -880,9 +936,10 @@ export class FolioManager implements FolioManagerInterface {
   private async scanArchiveFiles(): Promise<ReconciliationFile[]> {
     const folioRoot = this.folioRoot;
     const roots = [
+      path.join(folioRoot, IMAGES_DIR_NAME),
       path.join(folioRoot, "items"),
       ...this.projects.map((project) =>
-        path.join(folioRoot, project.folderPath, "images"),
+        path.join(folioRoot, project.folderPath, IMAGES_DIR_NAME),
       ),
     ];
     const files: ReconciliationFile[] = [];
@@ -938,6 +995,208 @@ export class FolioManager implements FolioManagerInterface {
     }
 
     return changed;
+  }
+
+  private async migrateMediaFilesToFlatFolders(): Promise<{
+    itemsChanged: boolean;
+    referencesChanged: boolean;
+  }> {
+    await this.ensureMediaDirectories();
+
+    const projectFolderById = new Map(
+      this.projects.map((project) => [project.id, project.folderPath]),
+    );
+    const itemsChanged = await this.archiveManager.migrateItemsToProjectImages(
+      projectFolderById,
+      this.projects[0]?.id,
+    );
+    const referencesChanged = await this.migrateReferencesToProjectFolders();
+
+    await Promise.all(
+      this.projects.map((project) => this.syncProjectWorksFolder(project)),
+    );
+    await this.removeLegacyMediaDirectories();
+
+    return { itemsChanged, referencesChanged };
+  }
+
+  private async migrateReferencesToProjectFolders(): Promise<boolean> {
+    let changed = false;
+
+    this.canvases = await Promise.all(
+      this.canvases.map(async (canvas) => {
+        const project = this.getProjectForCanvas(canvas.id);
+        if (!project) return canvas;
+
+        let canvasChanged = false;
+        const referencesDir = path.join(
+          this.folioRoot,
+          project.folderPath,
+          REFERENCES_DIR_NAME,
+        );
+        await fs.mkdir(referencesDir, { recursive: true });
+
+        const references = await Promise.all(
+          (canvas.references ?? []).map(async (reference) => {
+            const sourcePath = this.archiveManager.getAbsolutePath(reference.path);
+            if (!(await this.fileExists(sourcePath))) return reference;
+
+            if (this.isFlatFileInDirectory(sourcePath, referencesDir)) {
+              return reference;
+            }
+
+            const destPath = await this.moveFileToDirectory(
+              sourcePath,
+              referencesDir,
+              reference.filename || path.basename(reference.path),
+            );
+            const nextReference = {
+              ...reference,
+              filename: path.basename(destPath),
+              path: path.relative(this.folioRoot, destPath),
+            };
+            canvasChanged = true;
+            return nextReference;
+          }),
+        );
+
+        if (!canvasChanged) return canvas;
+        changed = true;
+        return { ...canvas, references };
+      }),
+    );
+
+    return changed;
+  }
+
+  private async ensureMediaDirectories(): Promise<void> {
+    await Promise.all([
+      fs.mkdir(this.folioRoot, { recursive: true }),
+      fs.mkdir(path.join(this.folioRoot, "projects"), { recursive: true }),
+      fs.mkdir(this.dotFolio, { recursive: true }),
+    ]);
+  }
+
+  private isFlatFileInDirectory(filePath: string, directory: string): boolean {
+    return path.resolve(path.dirname(filePath)) === path.resolve(directory);
+  }
+
+  private isPathInsideDirectory(filePath: string, directory: string): boolean {
+    const relative = path.relative(directory, filePath);
+    return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+  }
+
+  private async moveFileToDirectory(
+    sourcePath: string,
+    destDir: string,
+    preferredFilename: string,
+  ): Promise<string> {
+    await fs.mkdir(destDir, { recursive: true });
+
+    const extension = path.extname(preferredFilename).toLowerCase();
+    const baseName = sanitizeFileBaseName(
+      path.basename(preferredFilename, extension),
+    );
+    let destPath = path.join(destDir, `${baseName}${extension}`);
+    let counter = 2;
+
+    while (
+      (await this.fileExists(destPath)) &&
+      path.resolve(destPath) !== path.resolve(sourcePath)
+    ) {
+      destPath = path.join(destDir, `${baseName}_${counter}${extension}`);
+      counter += 1;
+    }
+
+    if (path.resolve(destPath) === path.resolve(sourcePath)) return destPath;
+
+    try {
+      await fs.rename(sourcePath, destPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EXDEV") {
+        throw error;
+      }
+      await fs.copyFile(sourcePath, destPath);
+      await fs.rm(sourcePath, { force: true });
+    }
+
+    return destPath;
+  }
+
+  private async removeLegacyMediaDirectories(): Promise<void> {
+    await this.removeEmptyDirectoryTree(path.join(this.folioRoot, "items"));
+    await this.removeEmptyDirectoryTree(path.join(this.folioRoot, IMAGES_DIR_NAME));
+    await this.removeGeneratedWorksDirectory(path.join(this.folioRoot, WORKS_DIR_NAME));
+    await this.removeDirectoryIfEmpty(path.join(this.folioRoot, WORKS_DIR_NAME));
+    await this.removeEmptyDirectoryTree(
+      path.join(this.folioRoot, REFERENCES_DIR_NAME),
+    );
+
+    await Promise.all(
+      this.projects.map(async (project) => {
+        const projectRoot = path.join(this.folioRoot, project.folderPath);
+
+        await Promise.all(
+          project.boardIds.map((boardId) =>
+            this.removeDirectoryIfEmpty(
+              path.join(projectRoot, "boards", boardId, REFERENCES_DIR_NAME),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  private async removeDirectoryIfEmpty(directory: string): Promise<void> {
+    let entries: string[];
+    try {
+      entries = await fs.readdir(directory);
+    } catch {
+      return;
+    }
+
+    if (entries.length) return;
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+
+  private async removeEmptyDirectoryTree(directory: string): Promise<void> {
+    let entries: Array<import("node:fs").Dirent>;
+    try {
+      entries = await fs.readdir(directory, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => this.removeEmptyDirectoryTree(path.join(directory, entry.name))),
+    );
+
+    await this.removeDirectoryIfEmpty(directory);
+  }
+
+  private async removeGeneratedWorksDirectory(worksDir: string): Promise<void> {
+    let entries: Array<import("node:fs").Dirent>;
+    try {
+      entries = await fs.readdir(worksDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    const knownItemIds = new Set(this.archiveManager.getItems().map((item) => item.id));
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.isFile() && !entry.isSymbolicLink()) return;
+        const isGeneratedWork = Array.from(knownItemIds).some((itemId) =>
+          entry.name.includes(`-${itemId}`),
+        );
+        if (!isGeneratedWork) return;
+        await fs.rm(path.join(worksDir, entry.name), { force: true });
+      }),
+    );
+
+    await this.removeDirectoryIfEmpty(worksDir);
   }
 
   private validateSchema(
@@ -1076,6 +1335,38 @@ export class FolioManager implements FolioManagerInterface {
     };
   }
 
+  private async ensureDefaultProject(): Promise<Project> {
+    const existingProject = this.projects[0];
+    if (existingProject) {
+      await this.ensureProjectDirectories(existingProject);
+      return existingProject;
+    }
+
+    const now = new Date().toISOString();
+    const defaultProject: Project = {
+      id: "project_default",
+      title: "Studio Archive",
+      description: "Default project for imported studio files.",
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+      folderPath: "projects/studio-archive",
+      imageIds: [],
+      workItemIds: [],
+      boardIds: [],
+      reviews: [],
+    };
+
+    this.projects = [defaultProject];
+    await this.ensureProjectDirectories(defaultProject);
+    await this.storageManager.saveProjects(
+      this.projectsPath,
+      this.projects,
+      this.version,
+    );
+    return defaultProject;
+  }
+
   private async createProjectFolderPath(
     title: string,
     projectId: string,
@@ -1102,14 +1393,13 @@ export class FolioManager implements FolioManagerInterface {
   private async ensureProjectDirectories(project: Project): Promise<void> {
     const projectRoot = path.join(this.folioRoot, project.folderPath);
     await Promise.all([
-      fs.mkdir(path.join(projectRoot, "images"), { recursive: true }),
-      fs.mkdir(path.join(projectRoot, "works"), { recursive: true }),
+      fs.mkdir(path.join(projectRoot, IMAGES_DIR_NAME), { recursive: true }),
+      fs.mkdir(path.join(projectRoot, WORKS_DIR_NAME), { recursive: true }),
+      fs.mkdir(path.join(projectRoot, REFERENCES_DIR_NAME), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "boards"), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "reviews"), { recursive: true }),
       ...project.boardIds.map((boardId) =>
-        fs.mkdir(path.join(projectRoot, "boards", boardId, "references"), {
-          recursive: true,
-        }),
+        fs.mkdir(path.join(projectRoot, "boards", boardId), { recursive: true }),
       ),
     ]);
   }
@@ -1138,10 +1428,11 @@ export class FolioManager implements FolioManagerInterface {
   }
 
   private async syncProjectWorksFolder(project: Project): Promise<void> {
-    const worksDir = path.join(this.folioRoot, project.folderPath, "works");
+    const worksDir = path.join(this.folioRoot, project.folderPath, WORKS_DIR_NAME);
     await fs.mkdir(worksDir, { recursive: true });
 
     const desiredIds = new Set(project.workItemIds);
+    const projectImageIds = new Set(project.imageIds);
     const itemById = new Map(
       this.archiveManager.getItems().map((item) => [item.id, item]),
     );
@@ -1150,10 +1441,10 @@ export class FolioManager implements FolioManagerInterface {
     await Promise.all(
       entries.map(async (entry) => {
         if (!entry.isFile() && !entry.isSymbolicLink()) return;
-        const representsProjectImage = project.imageIds.find((itemId) =>
+        const representedItemId = Array.from(projectImageIds).find((itemId) =>
           entry.name.includes(`-${itemId}`),
         );
-        if (!representsProjectImage || desiredIds.has(representsProjectImage)) {
+        if (!representedItemId || desiredIds.has(representedItemId)) {
           return;
         }
         await fs.rm(path.join(worksDir, entry.name), { force: true });
@@ -1175,8 +1466,10 @@ export class FolioManager implements FolioManagerInterface {
       if (await this.fileExists(destPath)) continue;
 
       try {
+        await fs.rm(destPath, { force: true });
         await fs.symlink(sourcePath, destPath);
       } catch {
+        await fs.rm(destPath, { force: true });
         await fs.copyFile(sourcePath, destPath);
       }
     }

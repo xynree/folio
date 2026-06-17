@@ -91,29 +91,7 @@ The renderer is a React app under `src/components/`. It treats `window.folio` li
 
 ## Local Storage
 
-Folio creates and manages `~/Documents/Folio`. The existing archive layout remains valid for migration and loose imports:
-
-```text
-~/Documents/Folio/
-  items/
-    2026/
-      06_june/
-        imported-image.png
-  references/
-    <board-id>/
-      reference-image.png
-  .folio/
-    folio.json
-    tags.json
-    canvases.json
-    thumbs/
-      <item-id>-small.jpg
-      <item-id>-small.svg
-      reference-<reference-id>-small.jpg
-      reference-<reference-id>-small.svg
-```
-
-The project-oriented layout should add first-class project folders:
+Folio creates and manages `~/Documents/Folio`. Project folders are the canonical user-readable media layout:
 
 ```text
 ~/Documents/Folio/
@@ -123,10 +101,12 @@ The project-oriented layout should add first-class project folders:
         uploaded-project-image.png
       works/
         promoted-work-image.png
+      references/
+        board-reference.png
+      reviews/
+        review-<review-id>.md
       boards/
         <board-id>/
-          references/
-            board-reference.png
   .folio/
     projects.json
     folio.json
@@ -135,7 +115,7 @@ The project-oriented layout should add first-class project folders:
     thumbs/
 ```
 
-The visible folders are normal user files. `.folio/` is the app's bookkeeping directory. The thumbnail cache is fully regenerable. Project `images/` contains all images imported into the project. Project `works/` is the user-accessible representation of images promoted into Works; implementation may use copies, links, or generated exports, but canonical work membership should remain in metadata so it can be reconciled. Project `boards/<board-id>/` contains board-scoped assets such as references that are not part of the project's main image library.
+The visible folders are normal user files. `.folio/` is the app's bookkeeping directory. The thumbnail cache is fully regenerable. Project `images/` contains all images imported into the project. Project `works/` is the user-accessible representation of images promoted into Works; implementation may use copies, links, or generated exports, but canonical work membership remains in metadata so it can be reconciled. Project `references/` contains board references for that project. Legacy `items/`, root-level `images/`, root-level `works/`, root-level `references/`, and old board-local reference folders are migration sources only.
 
 ## Data Model
 
@@ -355,21 +335,13 @@ Dragging or pasting a new image directly onto a project board should still impor
 
 Promoting an image to Works updates `Project.workItemIds`. The Works view should reuse the existing strip, grid, and heatmap presentation over that subset of project images.
 
-Loose archive imports can continue to copy to:
+Project references are copied to:
 
 ```text
-~/Documents/Folio/items/YYYY/MM_monthname/
+~/Documents/Folio/projects/<project-slug-or-id>/references/
 ```
 
-This path is useful for migration, legacy archive browsing, or unsorted imports before a project is chosen. Existing files inside `items/` can be registered in place during reconciliation.
-
-Board-local references use a project board path:
-
-```text
-~/Documents/Folio/projects/<project-slug-or-id>/boards/<board-id>/references/
-```
-
-References belong to one board and do not become project images unless the user explicitly adds or promotes them. Older board references in `~/Documents/Folio/references/<board-id>/` remain valid and should be migrated lazily or read in place.
+References remain associated with their board in `canvases.json` and do not become project images unless the user explicitly adds or promotes them. Older references in `~/Documents/Folio/references/<board-id>/` and `projects/<project>/boards/<board-id>/references/` are migrated into the owning project `references/` folder when Folio can match them to canvas metadata.
 
 ## Thumbnail Pipeline
 
@@ -544,14 +516,14 @@ Folder access should use existing main-process shell capabilities:
 
 - `openInFinder(filePath)` opens individual items and opens directory paths directly.
 - Project-level actions reveal `~/Documents/Folio/projects/<project-slug-or-id>/`.
-- Scoped actions open project `images/`, `works/`, and `boards/<board-id>/` folders.
-- If a legacy project spans old archive month folders, show a file list or migrate/copy into the project folder before relying on Finder folder access.
+- Scoped actions open project `images/`, `works/`, and `references/` folders.
+- If a legacy project spans old archive month folders or root-level media folders, migrate matched files into the project folder before relying on Finder folder access.
 
 No persistent collaborator, comment, permission, or shared-review schema is needed for these flows.
 
 ## File Reconciliation
 
-Every item stores a short hash derived from the first 64KB of the file. At launch, Folio scans project `images/` folders and the legacy `items/` archive, compares paths and hashes, then:
+Every item stores a short hash derived from the first 64KB of the file. At launch, Folio scans project `images/` folders plus legacy `items/` and root-level `images/` migration sources, compares paths and hashes, then:
 
 - clears `missing` when a known file exists again
 - silently updates paths for renamed or moved files with matching hashes

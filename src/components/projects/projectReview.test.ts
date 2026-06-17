@@ -40,7 +40,7 @@ describe("project review model", () => {
           {
             id: "ref-1",
             filename: "swatch.png",
-            path: "projects/studio/boards/board-1/references/swatch.png",
+            path: "projects/studio-archive/references/swatch.png",
             x: 0,
             y: 0,
             capturedAt: "2026-06-16T10:00:00.000Z",
