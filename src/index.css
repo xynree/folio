@@ -275,8 +275,29 @@ button svg {
 
 .app-main {
   grid-row: 2;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
+}
+
+.workspace-panel-mode-control {
+  grid-row: 1;
+  justify-self: center;
+  z-index: 5;
+  margin: 8px 0 6px;
+  padding: 3px;
+  border-color: rgba(210, 194, 173, 0.9);
+  background: rgba(255, 253, 248, 0.94);
+  box-shadow: 0 10px 24px rgba(52, 36, 21, 0.12);
+  backdrop-filter: blur(10px);
+}
+
+.workspace-panel-mode-control button {
+  width: 32px;
+  min-width: 32px;
+  min-height: 28px;
+  padding: 4px;
 }
 
 .selection-bar {
@@ -444,6 +465,7 @@ button svg {
 }
 
 .studio-workspace {
+  grid-row: 2;
   display: grid;
   height: 100%;
   min-height: 0;
@@ -464,7 +486,7 @@ button svg {
 .archive-panel-minimized {
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
-  border-right: 1px solid #ded4c6;
+  border-right: 0;
   background: #fffdf8;
 }
 
@@ -702,6 +724,8 @@ button svg {
 
 .canvas-dock-minimized {
   grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  border-left-color: transparent;
 }
 
 .canvas-dock-minimized .canvas-dock-header {

@@ -8,8 +8,10 @@ import React, {
 import {
   ChevronDown,
   ChevronUp,
+  Columns2,
   Grid3X3,
-  PanelRightOpen,
+  PanelLeft,
+  PanelRight,
   Rows3,
   Upload,
 } from "lucide-react";
@@ -66,10 +68,10 @@ import { ButtonIcon } from "./shared/ButtonIcon";
 const ARCHIVE_UI_SCALE_MIN = 50;
 const ARCHIVE_UI_SCALE_MAX = 200;
 const ARCHIVE_UI_SCALE_STEP = 5;
-const ARCHIVE_PANEL_COLLAPSED_WIDTH = 58;
 const TAGS_SIDEBAR_DEFAULT_WIDTH = 176;
 const TAGS_SIDEBAR_MIN_WIDTH = 132;
 const TAGS_SIDEBAR_MAX_WIDTH = 360;
+type WorkspacePanelMode = "left" | "split" | "right";
 
 export function AppShell() {
   const [data, setData] = useState<FolioData>(EMPTY_DATA);
@@ -322,17 +324,17 @@ export function AppShell() {
     [clampCanvasDockWidth],
   );
 
-  const showArchiveProminent = useCallback(() => {
+  const showLeftOnlyPanel = useCallback(() => {
     setArchiveMinimized(false);
     setCanvasMinimized(true);
   }, []);
 
-  const showBoardsProminent = useCallback(() => {
+  const showRightOnlyPanel = useCallback(() => {
     setCanvasMinimized(false);
     setArchiveMinimized(true);
   }, []);
 
-  const showSplitWorkspace = useCallback(() => {
+  const showSplitPanel = useCallback(() => {
     setArchiveMinimized(false);
     setCanvasMinimized(false);
   }, []);
@@ -809,11 +811,16 @@ export function AppShell() {
     [putData],
   );
 
+  const panelMode: WorkspacePanelMode = archiveMinimized
+    ? "right"
+    : canvasMinimized
+    ? "left"
+    : "split";
   const dividerHidden = archiveMinimized || canvasMinimized;
   const studioGridTemplateColumns = archiveMinimized
-    ? `${ARCHIVE_PANEL_COLLAPSED_WIDTH}px 0px minmax(${CANVAS_DOCK_MIN_WIDTH}px, 1fr)`
+    ? `0px 0px minmax(${CANVAS_DOCK_MIN_WIDTH}px, 1fr)`
     : canvasMinimized
-    ? `minmax(${ARCHIVE_PANEL_MIN_WIDTH}px, 1fr) 0px 58px`
+    ? `minmax(${ARCHIVE_PANEL_MIN_WIDTH}px, 1fr) 0px 0px`
     : `minmax(${ARCHIVE_PANEL_MIN_WIDTH}px, 1fr) ${CANVAS_SPLITTER_WIDTH}px ${canvasDockWidth}px`;
 
   return (
@@ -832,6 +839,41 @@ export function AppShell() {
       />
 
       <main className="app-main">
+        <div
+          className="view-tabs workspace-panel-mode-control"
+          aria-label="Workspace panel view"
+        >
+          <button
+            className={panelMode === "left" ? "active" : ""}
+            type="button"
+            aria-label="Left only panel view"
+            aria-pressed={panelMode === "left"}
+            title="Left only"
+            onClick={showLeftOnlyPanel}
+          >
+            <ButtonIcon icon={PanelLeft} />
+          </button>
+          <button
+            className={panelMode === "split" ? "active" : ""}
+            type="button"
+            aria-label="Split panel view"
+            aria-pressed={panelMode === "split"}
+            title="Split"
+            onClick={showSplitPanel}
+          >
+            <ButtonIcon icon={Columns2} />
+          </button>
+          <button
+            className={panelMode === "right" ? "active" : ""}
+            type="button"
+            aria-label="Right only panel view"
+            aria-pressed={panelMode === "right"}
+            title="Right only"
+            onClick={showRightOnlyPanel}
+          >
+            <ButtonIcon icon={PanelRight} />
+          </button>
+        </div>
         <section
           ref={studioWorkspaceRef}
           className={`studio-workspace ${
@@ -851,19 +893,7 @@ export function AppShell() {
             }`}
           >
             {archiveMinimized ? (
-              <div className="archive-rail">
-                <div className="archive-rail-actions">
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label="Open archive panel"
-                    title="Open archive panel"
-                    onClick={showArchiveProminent}
-                  >
-                    <ButtonIcon icon={Rows3} />
-                  </button>
-                </div>
-              </div>
+              <div className="archive-rail" aria-hidden="true" />
             ) : (
               <>
                 <ArchiveWorkspace
@@ -940,30 +970,6 @@ export function AppShell() {
                       />
                       <output>{archiveUiScale}%</output>
                     </label>
-                    <div
-                      className="view-tabs workspace-focus-toggle"
-                      aria-label="Workspace focus"
-                    >
-                      <button
-                        className={canvasMinimized ? "active" : ""}
-                        type="button"
-                        aria-label="Make archive prominent"
-                        aria-pressed={canvasMinimized}
-                        title="Make archive prominent"
-                        onClick={showArchiveProminent}
-                      >
-                        <ButtonIcon icon={Rows3} />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Make boards prominent"
-                        aria-pressed={false}
-                        title="Make boards prominent"
-                        onClick={showBoardsProminent}
-                      >
-                        <ButtonIcon icon={PanelRightOpen} />
-                      </button>
-                    </div>
                     <div className="view-tabs archive-view-toggle" aria-label="Archive view">
                       <button
                         className={archiveView === "strip" ? "active" : ""}
@@ -1086,20 +1092,7 @@ export function AppShell() {
             className={`canvas-dock ${canvasMinimized ? "canvas-dock-minimized" : ""}`}
           >
             {canvasMinimized ? (
-              <header className="canvas-dock-header">
-                <div />
-                <div className="canvas-dock-header-actions">
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label="Open board panel"
-                    title="Open board panel"
-                    onClick={showSplitWorkspace}
-                  >
-                    <ButtonIcon icon={PanelRightOpen} />
-                  </button>
-                </div>
-              </header>
+              <div className="canvas-dock-collapsed" aria-hidden="true" />
             ) : (
               <CanvasView
                 data={data}
@@ -1108,7 +1101,7 @@ export function AppShell() {
                 setActiveCanvasId={setActiveCanvasId}
                 onOpenItem={openItemDetails}
                 onCreateBoard={createBoard}
-                onMinimize={showArchiveProminent}
+                onMinimize={showLeftOnlyPanel}
                 thumbUrls={thumbUrls}
                 setThumbUrls={setThumbUrls}
                 commitData={commitData}

@@ -97,9 +97,11 @@ function archiveRoute() {
 }
 
 async function openBoardPanel(user: ReturnType<typeof userEvent.setup>) {
-  const openButton = screen.queryByRole("button", { name: /open board panel/i });
-  if (openButton) {
-    await user.click(openButton);
+  const splitButton = screen.queryByRole("button", {
+    name: /split panel view/i,
+  });
+  if (splitButton?.getAttribute("aria-pressed") !== "true") {
+    await user.click(splitButton);
   }
   await screen.findByText(/^Boards$/i);
 }
@@ -206,10 +208,19 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
     expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
     expect(screen.getByRole("separator", { name: /resize tags panel/i })).not.toBeNull();
-    expect(screen.getByRole("button", { name: /make archive prominent/i }))
+    const panelModeControl = screen
+      .getByRole("button", { name: /split panel view/i })
+      .closest(".workspace-panel-mode-control");
+    expect(panelModeControl).not.toBeNull();
+    expect(panelModeControl?.closest(".archive-floating-actions")).toBeNull();
+    expect(screen.getByRole("button", { name: /left only panel view/i }))
       .not.toBeNull();
-    expect(screen.getByRole("button", { name: /make boards prominent/i }))
+    expect(screen.getByRole("button", { name: /split panel view/i }))
       .not.toBeNull();
+    expect(screen.getByRole("button", { name: /right only panel view/i }))
+      .not.toBeNull();
+    expect(screen.getByRole("button", { name: /split panel view/i }))
+      .toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByRole("button", { name: /open archive panel/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
     expect(document.querySelector(".canvas-dock-minimized")).toBeNull();
@@ -244,6 +255,9 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(archiveActions?.firstElementChild).toBe(
       archiveSizeSlider.closest(".archive-scale-control"),
     );
+    expect(
+      archiveActions?.querySelector(".workspace-panel-mode-control"),
+    ).toBeNull();
     expect(archiveSizeSlider.min).toBe("50");
     expect(archiveSizeSlider.max).toBe("200");
     expect(archiveSizeSlider.value).toBe("100");
@@ -289,21 +303,25 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       ).toBe("260px");
     });
 
-    await user.click(screen.getByRole("button", { name: /make boards prominent/i }));
+    await user.click(screen.getByRole("button", { name: /right only panel view/i }));
     expect(document.querySelector(".archive-panel-minimized")).not.toBeNull();
-    expect(screen.getByRole("button", { name: /open archive panel/i })).not.toBeNull();
+    expect(screen.getByRole("button", { name: /right only panel view/i }))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: /open archive panel/i })).toBeNull();
     expect(screen.queryByRole("separator", { name: /resize open board panel/i }))
       .toBeNull();
-    expect(workspace.style.gridTemplateColumns).toContain("58px 0px");
+    expect(workspace.style.gridTemplateColumns).toContain("0px 0px");
     expect(workspace.style.gridTemplateColumns).toContain("minmax(420px, 1fr)");
 
-    await user.click(screen.getByRole("button", { name: /open archive panel/i }));
+    await user.click(screen.getByRole("button", { name: /left only panel view/i }));
     expect(document.querySelector(".archive-panel-minimized")).toBeNull();
     expect(document.querySelector(".canvas-dock-minimized")).not.toBeNull();
-    expect(screen.getByRole("button", { name: /open board panel/i })).not.toBeNull();
-    expect(workspace.style.gridTemplateColumns).toContain("0px 58px");
+    expect(screen.getByRole("button", { name: /left only panel view/i }))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
+    expect(workspace.style.gridTemplateColumns).toContain("0px 0px");
 
-    await user.click(screen.getByRole("button", { name: /open board panel/i }));
+    await user.click(screen.getByRole("button", { name: /split panel view/i }));
     expect(document.querySelector(".canvas-dock-minimized")).toBeNull();
     expect(screen.getByRole("separator", { name: /resize open board panel/i }))
       .not.toBeNull();
@@ -1928,7 +1946,11 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await openBoardPanel(user);
     expect(screen.getByText(/^Boards$/i)).not.toBeNull();
     await user.click(screen.getByLabelText(/minimize board panel/i));
-    expect(screen.getAllByLabelText(/open board panel/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /left only panel view/i }))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
     expect(screen.queryByText(/^Board$/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: /split panel view/i }));
+    expect(screen.getByText(/^Boards$/i)).not.toBeNull();
   });
 });

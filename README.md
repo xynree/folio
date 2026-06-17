@@ -13,7 +13,7 @@ Folio is a local-first Electron app for collecting visual work, browsing it by t
 - Board headers show when each board was created and when it was last saved.
 - Side-node connection edges between canvas items, references, notes, and board text, with inline labels and direction modes.
 - Freehand pen strokes on boards with an eraser and Cmd+Z undo.
-- Transparent board text elements for quick labels, headings, and questions, with small, medium, and large sizing.
+- Resizable board text boxes for quick labels, headings, and questions, with small, medium, and large sizing.
 - Board settings for title, color, delete, and board member dots on archive cards.
 - Small generated thumbnails for archive cards, board previews, and canvas references so the UI does not load full source images for normal browsing.
 - Local reconciliation for files renamed, moved, or deleted in Finder.

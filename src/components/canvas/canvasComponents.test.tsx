@@ -408,6 +408,7 @@ describe("canvas components", () => {
     const onChange = vi.fn();
     const onDelete = vi.fn();
     const onConnector = vi.fn();
+    const onResizePointerDown = vi.fn();
     const onSizeChange = vi.fn();
 
     try {
@@ -418,7 +419,7 @@ describe("canvas components", () => {
           onDelete={onDelete}
           onConnectorPointerDown={onConnector}
           onPointerDown={vi.fn()}
-          onResizePointerDown={vi.fn()}
+          onResizePointerDown={onResizePointerDown}
           onClickCapture={vi.fn()}
         />,
       );
@@ -440,7 +441,7 @@ describe("canvas components", () => {
           onSizeChange={onSizeChange}
           onConnectorPointerDown={onConnector}
           onPointerDown={vi.fn()}
-          onResizePointerDown={vi.fn()}
+          onResizePointerDown={onResizePointerDown}
           onClickCapture={vi.fn()}
         />,
       );
@@ -451,11 +452,17 @@ describe("canvas components", () => {
       act(() => {
         vi.advanceTimersByTime(500);
       });
+      const textBox = document.querySelector(".canvas-text-card") as HTMLElement;
+      const textResizeCorner = textBox.querySelector(
+        ".canvas-card-resize-corner",
+      ) as HTMLElement;
+      fireEvent.pointerDown(textResizeCorner);
       fireEvent.click(screen.getByLabelText("Large text"));
       fireEvent.click(screen.getByLabelText("Delete text"));
 
       expect(onChange).toHaveBeenCalledWith("note-1", "Updated note");
       expect(onChange).toHaveBeenCalledWith("text-1", "Updated text");
+      expect(onResizePointerDown).toHaveBeenCalledWith(expect.any(Object));
       expect(onSizeChange).toHaveBeenCalledWith("text-1", "large");
       expect(onDelete).toHaveBeenCalledWith("note-1");
       expect(onDelete).toHaveBeenCalledWith("text-1");
