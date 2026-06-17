@@ -153,7 +153,9 @@ describe("canvas components", () => {
 
   it("dispatches board header tool and action callbacks", () => {
     const onFitContent = vi.fn();
+    const onAddLink = vi.fn();
     const onResetZoom = vi.fn();
+    const onToggleBoardTools = vi.fn();
     const onZoomIn = vi.fn();
     const onZoomOut = vi.fn();
 
@@ -172,6 +174,7 @@ describe("canvas components", () => {
           projectImageCount={3}
           projectImagePickerOpen
           onActiveToolChange={setActiveTool}
+          onAddLink={onAddLink}
           onAddNote={vi.fn()}
           onBackToBoards={vi.fn()}
           onBoardColorDraftChange={vi.fn()}
@@ -183,7 +186,7 @@ describe("canvas components", () => {
           onOpenBoardFolder={vi.fn()}
           onResetZoom={onResetZoom}
           onSaveBoardSettings={vi.fn()}
-          onToggleBoardTools={vi.fn()}
+          onToggleBoardTools={onToggleBoardTools}
           onToggleProjectImages={vi.fn()}
           onUndoStroke={vi.fn()}
           onZoomIn={onZoomIn}
@@ -202,13 +205,8 @@ describe("canvas components", () => {
     fireEvent.click(screen.getByLabelText("Connect tool"));
     expect(screen.getByLabelText("Connect tool").getAttribute("aria-pressed"))
       .toBe("true");
-    fireEvent.click(screen.getByLabelText("Link tool"));
-    expect(screen.getByLabelText("Link tool").getAttribute("aria-pressed")).toBe(
-      "true",
-    );
-    fireEvent.click(screen.getByLabelText("Section tool"));
-    expect(screen.getByLabelText("Section tool").getAttribute("aria-pressed"))
-      .toBe("true");
+    fireEvent.click(screen.getByLabelText("Add link"));
+    fireEvent.click(screen.getByRole("button", { name: "Edit board" }));
     fireEvent.click(screen.getByLabelText("Zoom out"));
     fireEvent.click(screen.getByLabelText("Reset zoom"));
     fireEvent.click(screen.getByLabelText("Zoom in"));
@@ -219,6 +217,9 @@ describe("canvas components", () => {
     expect(onResetZoom).toHaveBeenCalledTimes(1);
     expect(onZoomIn).toHaveBeenCalledTimes(1);
     expect(onFitContent).toHaveBeenCalledTimes(1);
+    expect(onAddLink).toHaveBeenCalledTimes(1);
+    expect(onToggleBoardTools).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText("Section tool")).toBeNull();
     expect(screen.getByRole("dialog", { name: "Edit board" })).not.toBeNull();
   });
 
@@ -705,7 +706,7 @@ describe("canvas components", () => {
   });
 
   it("renders selection bar actions and a minimap when content overflows", () => {
-    const onAlignLeft = vi.fn();
+    const onArrangeByType = vi.fn();
     const scroll = document.createElement("div");
     Object.defineProperties(scroll, {
       clientHeight: { configurable: true, value: 180 },
@@ -731,17 +732,10 @@ describe("canvas components", () => {
       <>
         <CanvasSelectionBar
           selectedCount={2}
-          onAlignCenter={vi.fn()}
-          onAlignLeft={onAlignLeft}
-          onAlignTop={vi.fn()}
           onArrangeByDate={vi.fn()}
-          onArrangeByType={vi.fn()}
+          onArrangeByType={onArrangeByType}
           onDelete={vi.fn()}
-          onDistributeHorizontal={vi.fn()}
-          onDistributeVertical={vi.fn()}
           onDuplicate={vi.fn()}
-          onOrganizeIntoSection={vi.fn()}
-          onTidyGrid={vi.fn()}
         />
         <CanvasMinimap
           objectViews={[
@@ -769,11 +763,12 @@ describe("canvas components", () => {
       </>,
     );
 
-    fireEvent.click(screen.getByLabelText("Align left"));
+    fireEvent.click(screen.getByLabelText("Arrange by type"));
 
     expect(screen.getByText("2 selected")).not.toBeNull();
     expect(screen.getByLabelText("Minimap")).not.toBeNull();
-    expect(onAlignLeft).toHaveBeenCalledTimes(1);
+    expect(onArrangeByType).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText("Organize into section")).toBeNull();
   });
 
   it("zooms and pans the canvas viewport", () => {

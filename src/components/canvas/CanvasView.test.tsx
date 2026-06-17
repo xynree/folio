@@ -89,6 +89,7 @@ describe("CanvasView Phase 5 interactions", () => {
     setCanvasMeasurements(container);
 
     fireEvent.click(screen.getByLabelText("Import images and files"));
+    fireEvent.click(screen.getByLabelText("Add images"));
 
     expect(await screen.findByTitle("Delta")).not.toBeNull();
     expect(window.folio.importToProject).toHaveBeenCalledWith("project-1");
@@ -99,7 +100,7 @@ describe("CanvasView Phase 5 interactions", () => {
       expect(container.querySelector('[data-canvas-object-id="bravo"]')).not.toBeNull();
     });
 
-    fireEvent.click(screen.getByLabelText("Remove Bravo from board"));
+    fireEvent.click(screen.getAllByLabelText("Remove Bravo from board")[0]);
 
     await waitFor(() => {
       expect(container.querySelector('[data-canvas-object-id="bravo"]')).toBeNull();
@@ -206,7 +207,7 @@ describe("CanvasView Phase 5 interactions", () => {
     });
   });
 
-  it("creates text, link, and section cards from board tools", async () => {
+  it("creates text from the text tool and links from the link action", async () => {
     vi.mocked(window.folio.ensureThumbnails).mockResolvedValue({});
     const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("example.com/source");
     const { container } = renderCanvasView();
@@ -214,19 +215,16 @@ describe("CanvasView Phase 5 interactions", () => {
 
     fireEvent.click(screen.getByLabelText("Text tool"));
     fireEvent.pointerDown(surface, { button: 0, clientX: 300, clientY: 310 });
-    fireEvent.click(screen.getByLabelText("Link tool"));
-    fireEvent.pointerDown(surface, { button: 0, clientX: 320, clientY: 330 });
-    fireEvent.click(screen.getByLabelText("Section tool"));
-    fireEvent.pointerDown(surface, { button: 0, clientX: 340, clientY: 350 });
+    fireEvent.click(screen.getByLabelText("Add link"));
 
     expect(await screen.findByDisplayValue("Text")).not.toBeNull();
     expect(await screen.findByDisplayValue("example.com")).not.toBeNull();
-    expect(await screen.findByDisplayValue("Section")).not.toBeNull();
+    expect(screen.queryByLabelText("Section tool")).toBeNull();
     expect(promptSpy).toHaveBeenCalledWith("Add a link to this board");
     promptSpy.mockRestore();
   });
 
-  it("selects board objects, searches matches, and organizes a section", async () => {
+  it("selects board objects and searches matches without section actions", async () => {
     vi.mocked(window.folio.ensureThumbnails).mockResolvedValue({});
     const data = makeData({
       canvases: [
@@ -268,9 +266,7 @@ describe("CanvasView Phase 5 interactions", () => {
       expect(bravoCard.className).toContain("canvas-object-search-match");
     });
 
-    fireEvent.click(screen.getByLabelText("Organize into section"));
-
-    expect(await screen.findByDisplayValue("Selection")).not.toBeNull();
+    expect(screen.queryByLabelText("Organize into section")).toBeNull();
   });
 
   it("arranges selected project items and handles selection keyboard shortcuts", async () => {
@@ -301,12 +297,6 @@ describe("CanvasView Phase 5 interactions", () => {
 
     expect(screen.getByText("3 selected")).not.toBeNull();
 
-    fireEvent.click(screen.getByLabelText("Align left"));
-    fireEvent.click(screen.getByLabelText("Align top"));
-    fireEvent.click(screen.getByLabelText("Align center"));
-    fireEvent.click(screen.getByLabelText("Distribute horizontal"));
-    fireEvent.click(screen.getByLabelText("Distribute vertical"));
-    fireEvent.click(screen.getByLabelText("Tidy grid"));
     fireEvent.click(screen.getByLabelText("Arrange by date"));
     fireEvent.click(screen.getByLabelText("Arrange by type"));
     fireEvent.keyDown(window, { key: "s" });

@@ -14,7 +14,6 @@ import {
   Plus,
   ScanLine,
   Search,
-  SquareDashed,
   StickyNote,
   Type,
   Undo2,
@@ -51,6 +50,7 @@ type CanvasBoardHeaderProps = {
   projectImageCount: number;
   projectImagePickerOpen: boolean;
   onActiveToolChange: React.Dispatch<React.SetStateAction<CanvasTool>>;
+  onAddLink: () => void;
   onAddNote: () => void;
   onBackToBoards: () => void;
   onBoardColorDraftChange: (color: string) => void;
@@ -81,6 +81,7 @@ export function CanvasBoardHeader({
   projectImageCount,
   projectImagePickerOpen,
   onActiveToolChange,
+  onAddLink,
   onAddNote,
   onBackToBoards,
   onBoardColorDraftChange,
@@ -117,7 +118,19 @@ export function CanvasBoardHeader({
         </button>
         <span className="canvas-dot" style={{ background: activeCanvas.color }} />
         <span className="canvas-board-copy">
-          <strong>{activeCanvas.title}</strong>
+          <span className="canvas-board-title-row">
+            <strong>{activeCanvas.title}</strong>
+            <button
+              className="canvas-board-title-edit-button"
+              type="button"
+              aria-label="Edit board"
+              title="Edit board"
+              onClick={onToggleBoardTools}
+              aria-expanded={boardToolsOpen}
+            >
+              <ButtonIcon icon={Edit3} size={13} />
+            </button>
+          </span>
           <span>
             Created{" "}
             <time dateTime={activeCanvas.createdAt}>
@@ -129,138 +142,98 @@ export function CanvasBoardHeader({
         </span>
       </div>
       <div className="canvas-board-actions">
-        <label className="canvas-board-search">
-          <ButtonIcon icon={Search} size={14} />
-          <span className="sr-only">Search board</span>
-          <input
-            aria-label="Search board"
-            placeholder="Search"
-            value={boardSearchQuery}
-            onChange={(event) => onBoardSearchQueryChange(event.currentTarget.value)}
-          />
-        </label>
-        <button
-          className="canvas-board-action-button"
-          type="button"
-          aria-label="Add note"
-          title="Add note"
-          onClick={onAddNote}
-        >
-          <ButtonIcon icon={StickyNote} />
-        </button>
-        <button
-          className={`canvas-board-action-button canvas-board-image-toggle ${
-            projectImagePickerOpen ? "canvas-board-action-active" : ""
-          }`}
-          type="button"
-          aria-label={
-            projectImagePickerOpen ? "Hide project images" : "Show project images"
-          }
-          aria-controls="canvas-project-image-picker"
-          aria-expanded={projectImagePickerOpen}
-          title={
-            projectImagePickerOpen ? "Hide project images" : "Show project images"
-          }
-          onClick={onToggleProjectImages}
-        >
-          <ButtonIcon icon={Images} />
-          <span className="canvas-board-action-count" aria-hidden="true">
-            {projectImageCount}
-          </span>
-        </button>
-        <button
-          className="canvas-board-action-button"
-          type="button"
-          aria-label="Import images and files"
-          title="Import images and files"
-          onClick={onImportImages}
-        >
-          <ButtonIcon icon={ImagePlus} />
-        </button>
-        <button
-          className={`canvas-board-action-button ${
-            activeTool === "select" ? "canvas-board-action-active" : ""
-          }`}
-          type="button"
-          aria-label="Select tool"
-          aria-pressed={activeTool === "select"}
-          title="Select tool"
-          onClick={() => onActiveToolChange("select")}
-        >
-          <ButtonIcon icon={MousePointer2} />
-        </button>
-        <button
-          className={`canvas-board-action-button ${
-            activeTool === "connect" ? "canvas-board-action-active" : ""
-          }`}
-          type="button"
-          aria-label="Connect tool"
-          aria-pressed={activeTool === "connect"}
-          title="Connect tool"
-          onClick={() => toggleTool("connect")}
-        >
-          <ButtonIcon icon={ScanLine} />
-        </button>
-        <button
-          className={`canvas-board-action-button ${
-            activeTool === "pen" ? "canvas-board-action-active" : ""
-          }`}
-          type="button"
-          aria-label="Pen tool"
-          aria-pressed={activeTool === "pen"}
-          title="Pen tool"
-          onClick={() => toggleTool("pen")}
-        >
-          <ButtonIcon icon={PenLine} />
-        </button>
-        <button
-          className={`canvas-board-action-button ${
-            activeTool === "eraser" ? "canvas-board-action-active" : ""
-          }`}
-          type="button"
-          aria-label="Eraser tool"
-          aria-pressed={activeTool === "eraser"}
-          title="Eraser tool"
-          onClick={() => toggleTool("eraser")}
-        >
-          <ButtonIcon icon={Eraser} />
-        </button>
-        <button
-          className={`canvas-board-action-button ${
-            activeTool === "text" ? "canvas-board-action-active" : ""
-          }`}
-          type="button"
-          aria-label="Text tool"
-          aria-pressed={activeTool === "text"}
-          title="Text tool"
-          onClick={() => toggleTool("text")}
-        >
-          <ButtonIcon icon={Type} />
-        </button>
-        <button
-          className={`canvas-board-action-button ${
-            activeTool === "link" ? "canvas-board-action-active" : ""
-          }`}
-          type="button"
-          aria-label="Link tool"
-          aria-pressed={activeTool === "link"}
-          title="Link tool"
-          onClick={() => toggleTool("link")}
-        >
-          <ButtonIcon icon={LinkIcon} />
-        </button>
-        <button
-          className={`canvas-board-action-button ${
-            activeTool === "section" ? "canvas-board-action-active" : ""
-          }`}
-          type="button"
-          aria-label="Section tool"
-          aria-pressed={activeTool === "section"}
-          title="Section tool"
-          onClick={() => toggleTool("section")}
-        >
-          <ButtonIcon icon={SquareDashed} />
-        </button>
+        <span className="canvas-board-primary-actions">
+          <label className="canvas-board-search">
+            <ButtonIcon icon={Search} size={14} />
+            <span className="sr-only">Search board</span>
+            <input
+              aria-label="Search board"
+              placeholder="Search"
+              value={boardSearchQuery}
+              onChange={(event) =>
+                onBoardSearchQueryChange(event.currentTarget.value)
+              }
+            />
+          </label>
+          <button
+            className="canvas-board-action-button"
+            type="button"
+            aria-label="Add note"
+            title="Add note"
+            onClick={onAddNote}
+          >
+            <ButtonIcon icon={StickyNote} />
+          </button>
+          <button
+            className={`canvas-board-action-button ${
+              activeTool === "select" ? "canvas-board-action-active" : ""
+            }`}
+            type="button"
+            aria-label="Select tool"
+            aria-pressed={activeTool === "select"}
+            title="Select tool"
+            onClick={() => onActiveToolChange("select")}
+          >
+            <ButtonIcon icon={MousePointer2} />
+          </button>
+          <button
+            className={`canvas-board-action-button ${
+              activeTool === "connect" ? "canvas-board-action-active" : ""
+            }`}
+            type="button"
+            aria-label="Connect tool"
+            aria-pressed={activeTool === "connect"}
+            title="Connect tool"
+            onClick={() => toggleTool("connect")}
+          >
+            <ButtonIcon icon={ScanLine} />
+          </button>
+          <button
+            className={`canvas-board-action-button ${
+              activeTool === "pen" ? "canvas-board-action-active" : ""
+            }`}
+            type="button"
+            aria-label="Pen tool"
+            aria-pressed={activeTool === "pen"}
+            title="Pen tool"
+            onClick={() => toggleTool("pen")}
+          >
+            <ButtonIcon icon={PenLine} />
+          </button>
+          <button
+            className={`canvas-board-action-button ${
+              activeTool === "eraser" ? "canvas-board-action-active" : ""
+            }`}
+            type="button"
+            aria-label="Eraser tool"
+            aria-pressed={activeTool === "eraser"}
+            title="Eraser tool"
+            onClick={() => toggleTool("eraser")}
+          >
+            <ButtonIcon icon={Eraser} />
+          </button>
+          <button
+            className={`canvas-board-action-button ${
+              activeTool === "text" ? "canvas-board-action-active" : ""
+            }`}
+            type="button"
+            aria-label="Text tool"
+            aria-pressed={activeTool === "text"}
+            title="Text tool"
+            onClick={() => toggleTool("text")}
+          >
+            <ButtonIcon icon={Type} />
+          </button>
+          <button
+            className="canvas-board-action-button"
+            type="button"
+            aria-label="Add link"
+            title="Add link"
+            onClick={onAddLink}
+          >
+            <ButtonIcon icon={LinkIcon} />
+          </button>
+        </span>
         <span className="canvas-board-zoom-controls" aria-label="Canvas zoom">
           <button
             className="canvas-board-action-button"
@@ -318,15 +291,33 @@ export function CanvasBoardHeader({
         >
           <ButtonIcon icon={Undo2} />
         </button>
-        <button
-          className="canvas-board-edit-button"
-          type="button"
-          onClick={onToggleBoardTools}
-          aria-expanded={boardToolsOpen}
-        >
-          <ButtonIcon icon={Edit3} />
-          Edit
-        </button>
+        <span className="canvas-board-right-actions">
+          <button
+            className="canvas-board-action-button"
+            type="button"
+            aria-label="Import images and files"
+            title="Import images and files"
+            onClick={onImportImages}
+          >
+            <ButtonIcon icon={ImagePlus} />
+          </button>
+          <button
+            className={`canvas-board-action-button canvas-board-image-toggle ${
+              projectImagePickerOpen ? "canvas-board-action-active" : ""
+            }`}
+            type="button"
+            aria-label={projectImagePickerOpen ? "Hide add images" : "Add images"}
+            aria-controls="canvas-project-image-picker"
+            aria-expanded={projectImagePickerOpen}
+            title={projectImagePickerOpen ? "Hide add images" : "Add images"}
+            onClick={onToggleProjectImages}
+          >
+            <ButtonIcon icon={Images} />
+            <span className="canvas-board-action-count" aria-hidden="true">
+              {projectImageCount}
+            </span>
+          </button>
+        </span>
       </div>
 
       {boardToolsOpen ? (

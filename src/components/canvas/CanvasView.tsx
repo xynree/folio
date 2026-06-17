@@ -41,10 +41,7 @@ import { CanvasObjectLayer } from "./CanvasObjectLayer";
 import { CanvasSelectionBar } from "./CanvasSelectionBar";
 import { CanvasToolCursor } from "./CanvasToolCursor";
 import {
-  alignCanvasObjects,
   canvasObjectBounds,
-  distributeCanvasObjects,
-  sectionAroundCanvasObjects,
   tidyCanvasObjectsIntoGrid,
   type ArrangeableCanvasObject,
   type CanvasObjectMovePatch,
@@ -65,7 +62,6 @@ import {
 import type { CanvasDragPreview } from "./canvasLayout";
 import {
   addCanvasLink,
-  addCanvasSection,
   addCanvasTextElement,
   deleteCanvasObjects,
   deleteCanvasNote,
@@ -165,7 +161,7 @@ export function CanvasView({
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const [dragPreview, setDragPreview] = useState<CanvasDragPreview | null>(null);
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
-  const [projectImagePickerOpen, setProjectImagePickerOpen] = useState(true);
+  const [projectImagePickerOpen, setProjectImagePickerOpen] = useState(false);
   const [boardBrowserOpen, setBoardBrowserOpen] = useState(
     () => canvasDetailRequestId === 0,
   );
@@ -794,33 +790,6 @@ export function CanvasView({
     [applyMovePatches],
   );
 
-  const alignSelectedObjects = useCallback(
-    (alignment: "left" | "top" | "center-x") => {
-      arrangeSelectedObjects(
-        alignCanvasObjects(selectedArrangeableObjects, alignment),
-        "Selection aligned",
-      );
-    },
-    [arrangeSelectedObjects, selectedArrangeableObjects],
-  );
-
-  const distributeSelectedObjects = useCallback(
-    (direction: "horizontal" | "vertical") => {
-      arrangeSelectedObjects(
-        distributeCanvasObjects(selectedArrangeableObjects, direction),
-        "Selection distributed",
-      );
-    },
-    [arrangeSelectedObjects, selectedArrangeableObjects],
-  );
-
-  const tidySelectedObjects = useCallback(() => {
-    arrangeSelectedObjects(
-      tidyCanvasObjectsIntoGrid(selectedArrangeableObjects),
-      "Selection tidied",
-    );
-  }, [arrangeSelectedObjects, selectedArrangeableObjects]);
-
   const selectedProjectItemsById = useMemo(() => {
     return new Map(
       selectedArrangeableObjects.flatMap((object) => {
@@ -871,23 +840,6 @@ export function CanvasView({
     selectedArrangeableObjects,
     selectedProjectItemsById,
   ]);
-
-  const organizeSelectedIntoSection = useCallback(() => {
-    if (!activeCanvas || !selectedArrangeableObjects.length) return;
-    const section = sectionAroundCanvasObjects(selectedArrangeableObjects, {
-      id: createId("section"),
-      title: "Selection",
-      color: activeCanvas.color ?? CANVAS_COLORS[0],
-    });
-    if (!section) return;
-
-    updateCanvas(
-      activeCanvas.id,
-      (canvas) => addCanvasSection(canvas, section),
-      "Section added",
-    );
-    setSelectedObjects([{ id: section.id, kind: "section" }]);
-  }, [activeCanvas, selectedArrangeableObjects, updateCanvas]);
 
   const deleteSelectedObjects = useCallback(() => {
     if (!activeCanvas || !selectedObjects.length) return;
@@ -1141,9 +1093,25 @@ export function CanvasView({
     };
   }, [canvasZoom]);
 
-  const addProjectImageToBoard = useCallback(
+  const toggleProjectImageOnBoard = useCallback(
     (itemId: string) => {
-      if (!activeCanvas || activeCanvas.itemIds.includes(itemId)) return;
+      if (!activeCanvas) return;
+
+      if (activeCanvas.itemIds.includes(itemId)) {
+        updateCanvas(
+          activeCanvas.id,
+          (canvas) => removeItemFromCanvas(canvas, itemId),
+          "Item removed from board",
+        );
+        setSelectedObjects((current) =>
+          current.filter(
+            (selection) =>
+              selection.id !== itemId
+              || (selection.kind !== "item" && selection.kind !== "document"),
+          ),
+        );
+        return;
+      }
 
       updateCanvas(
         activeCanvas.id,
@@ -1170,6 +1138,15 @@ export function CanvasView({
     },
     [activeCanvas, updateCanvas],
   );
+
+  const addLinkToBoard = useCallback(() => {
+    const rawUrl = window.prompt("Add a link to this board");
+    if (!rawUrl) return;
+
+    if (addLinkAtPosition(rawUrl, centerPositionForCurrentViewport())) {
+      setActiveTool("select");
+    }
+  }, [addLinkAtPosition, centerPositionForCurrentViewport, setActiveTool]);
 
   const addTextAtPosition = useCallback(
     (text: string, point: CanvasPosition) => {
@@ -1720,6 +1697,7 @@ export function CanvasView({
             projectImageCount={projectImages.length}
             projectImagePickerOpen={projectImagePickerOpen}
             onActiveToolChange={setActiveTool}
+            onAddLink={addLinkToBoard}
             onAddNote={addNote}
             onBackToBoards={() => setBoardBrowserOpen(true)}
             onBoardColorDraftChange={setBoardColorDraft}
@@ -1753,7 +1731,7 @@ export function CanvasView({
                     const alreadyAdded = activeCanvasItemIds.has(item.id);
                     const itemKind = canvasKindForItem(item);
                     const actionLabel = alreadyAdded
-                      ? `${itemTitle} is already on this board`
+                      ? `Remove ${itemTitle} from board`
                       : item.missing
                         ? `${itemTitle} is missing`
                         : `Add ${itemTitle} to board`;
@@ -1774,8 +1752,7 @@ export function CanvasView({
                           aria-pressed={alreadyAdded}
                           title={itemTitle}
                           disabled={item.missing}
-                          onClick={() => addProjectImageToBoard(item.id)}
-                          onDoubleClick={() => onOpenItem(item.id)}
+                          onClick={() => toggleProjectImageOnBoard(item.id)}
                         >
                           <LazyThumbnail
                             item={item}
@@ -1801,17 +1778,10 @@ export function CanvasView({
 
         <CanvasSelectionBar
           selectedCount={selectedObjects.length}
-          onAlignCenter={() => alignSelectedObjects("center-x")}
-          onAlignLeft={() => alignSelectedObjects("left")}
-          onAlignTop={() => alignSelectedObjects("top")}
           onArrangeByDate={arrangeSelectedByDate}
           onArrangeByType={arrangeSelectedByType}
           onDelete={deleteSelectedObjects}
-          onDistributeHorizontal={() => distributeSelectedObjects("horizontal")}
-          onDistributeVertical={() => distributeSelectedObjects("vertical")}
           onDuplicate={duplicateSelectedObjects}
-          onOrganizeIntoSection={organizeSelectedIntoSection}
-          onTidyGrid={tidySelectedObjects}
         />
 
         <CanvasViewport

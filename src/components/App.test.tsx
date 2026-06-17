@@ -913,15 +913,19 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await waitForArchive();
     await openActiveBoardCanvas(user);
 
-    const hideButton = screen.getByRole("button", { name: /hide project images/i });
-    expect(hideButton.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryByRole("region", { name: /project images/i })).toBeNull();
+    const addImagesButton = screen.getByRole("button", { name: /add images/i });
+    expect(addImagesButton.getAttribute("aria-expanded")).toBe("false");
+    await user.click(addImagesButton);
+    expect(addImagesButton.getAttribute("aria-expanded")).toBe("true");
+    const hideButton = screen.getByRole("button", { name: /hide add images/i });
     await user.click(hideButton);
     expect(screen.queryByRole("region", { name: /project images/i })).toBeNull();
-    await user.click(screen.getByRole("button", { name: /show project images/i }));
+    await user.click(screen.getByRole("button", { name: /add images/i }));
 
     const tray = screen.getByRole("region", { name: /project images/i });
     const alphaButton = within(tray).getByRole("button", {
-      name: /alpha is already on this board/i,
+      name: /remove alpha from board/i,
     }) as HTMLButtonElement;
     expect(alphaButton.getAttribute("aria-pressed")).toBe("true");
 
@@ -935,7 +939,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
     expect(window.folio.importToProject).not.toHaveBeenCalled();
     const bravoButton = within(tray).getByRole("button", {
-      name: /bravo is already on this board/i,
+      name: /remove bravo from board/i,
     }) as HTMLButtonElement;
     expect(bravoButton.getAttribute("aria-pressed")).toBe("true");
   });
@@ -1950,9 +1954,11 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.canvases[0].itemIds).toEqual(["alpha", "board-image"]);
       expect(app.data.canvases[0].positions["board-image"]).toBeTruthy();
     });
+    await user.click(screen.getByRole("button", { name: /add images/i }));
+    const tray = await screen.findByRole("region", { name: /project images/i });
     expect(
-      await screen.findByRole("button", {
-        name: /board image is already on this board/i,
+      within(tray).getByRole("button", {
+        name: /remove board image from board/i,
       }),
     ).not.toBeNull();
   });

@@ -19,9 +19,7 @@ export type CanvasTool =
   | "connect"
   | "pen"
   | "eraser"
-  | "text"
-  | "link"
-  | "section";
+  | "text";
 
 export type CanvasObjectLayout = {
   id: string;
