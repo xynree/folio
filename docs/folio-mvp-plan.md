@@ -5,7 +5,7 @@
 - **Electron** + **Electron Forge** — desktop shell and build/packaging pipeline
 - **React + Vite** — UI (renderer process), via `@electron-forge/plugin-vite`
 - **Node.js** — file watching, filesystem ops, thumbnail generation (main process)
-- **`.folio/*.json`** — split flat JSON in `~/Documents/Folio/.folio/` (`folio.json`, `tags.json`, `canvases.json`), single source of truth (no database)
+- **`.folio/*.json`** — split flat JSON in `~/Documents/Folio/.folio/` (`folio.json`, `tags.json`, `canvases.json`, planned `projects.json`), single source of truth (no database)
 - **`nativeImage`** — thumbnail generation (built into Electron, no native module needed)
 - **`chokidar`** — file watching
 
@@ -13,17 +13,18 @@
 
 ## Product goals
 
-Folio should move from a file archive with boards into a local studio workspace for creative practice. The app has two core jobs:
+Folio should move from a file archive with boards into a project-based local studio workspace for creative practice. The app has three core jobs:
 
-1. **Interactive studio wall** — users can upload work, arrange it, track it, and watch a body of output evolve over days, weeks, and projects.
-2. **Reference and inspiration graph** — users can collect reference material like a personal Pinterest board, then connect references, notes, work-in-progress, and finished pieces back to specific projects.
+1. **Projects as the primary workspace** — opening the app shows a Projects view; each project owns its image list, Works view, boards, and local folder.
+2. **Interactive studio wall** — within a project, users can upload work, arrange it, track it, and watch a body of output evolve over days and weeks.
+3. **Reference and inspiration graph** — users can collect reference material like a personal Pinterest board, then connect references, notes, work-in-progress, and finished pieces back to specific projects.
 
 The design should preserve these principles:
 
 - **Local-first ownership**: source files remain readable in `~/Documents/Folio`; app metadata stays portable and inspectable in `.folio/*.json`.
 - **Fast capture first**: adding work, reference, or notes should take one gesture and should not force metadata decisions up front.
 - **Process is first-class**: sketches, references, WIP, outputs, notes, revisions, and gaps should all contribute to the record of practice.
-- **Spatial thinking plus time**: boards show relationships in space; archive and project views show how work changes over time.
+- **Spatial thinking plus time**: boards show relationships in space; project image, Works, and review views show how work changes over time.
 - **Gentle organization**: tags, projects, statuses, and relationships should help discovery without turning the app into a heavy task manager.
 - **Personal review, not collaboration**: project review means self-review inside a private studio surface. The app should not add comments, approvals, assignments, shared cursors, or team workflow.
 
@@ -31,7 +32,7 @@ The design should preserve these principles:
 
 The completed MVP already provides the archive foundation, local import pipeline, thumbnail cache, daily strip, heatmap, tags, board browser, draggable board cards, notes, and board-local references. Conceptually, it is strongest as a grouped archive and early spatial board tool.
 
-The next gap is not raw file handling. The next gap is making **projects**, **references**, **relationships**, **iterations**, and **output over time** explicit in the product model and UI.
+The next gap is not raw file handling. The next gap is making **Projects** the first-screen organizing model: a user can create any number of projects, import or paste images into a project, promote selected images into Works, and create project boards that use those images.
 
 ---
 
@@ -312,69 +313,73 @@ Reference images belong to a canvas, not to items. They are first-class position
 
 ---
 
-## Phase 4 — Studio wall: projects, stages, and output over time
+## Phase 4 — Projects: first-screen workspace containers
 
-This phase turns the current archive and board system into a creative-process surface. The goal is to answer: What am I working on? What changed? What became finished output?
+This phase turns the current archive and board system into a project-based creative workspace. The goal is to answer: What projects exist? What images belong to each project? Which images are actual Works? Which boards help think through the project?
 
-### 4.1 Project and board semantics
+### 4.1 Project model and launch flow
 
-- [ ] Decide whether the current `Canvas` object should be renamed to `ProjectBoard` in code, or whether a new `Project` entity should own one or more canvases.
-- [ ] For the near-term MVP, treat each board as a project-capable workspace while preserving generic reference boards.
-- [ ] Add board metadata: `kind` (`project`, `reference-board`, `moodboard`, `collection`), `status` (`active`, `paused`, `done`, `archived`), `startedAt`, `targetDate`, `completedAt`, `brief`, and `outcome`.
+- [ ] Add `projects.json` to the split metadata schema.
+- [ ] Define `Project` with `id`, `title`, `description`, `status`, `createdAt`, `updatedAt`, `folderPath`, `imageIds`, `workItemIds`, and `boardIds`.
+- [ ] Open the app to a Projects view that lists all projects instead of opening directly to the archive/board workspace.
+- [ ] Let the user create any number of projects from the Projects view.
+- [ ] Project creation should create a readable folder at `~/Documents/Folio/projects/<project-slug-or-id>/`.
+- [ ] Each project folder should include `images/`, `works/`, and `boards/` subfolders.
+- [ ] Add a migration path that creates a default project for existing archive items and existing canvases.
+- [ ] Assign existing canvases to the default project with `canvas.projectId` and `project.boardIds`.
 - [ ] Define project as a personal studio container, not a collaborative workspace; avoid collaborator, owner, assignee, review-request, comment-thread, or approval concepts.
-- [ ] Add a migration path that defaults old boards to `kind: "project"` only when they contain archive items; otherwise default to `kind: "collection"`.
-- [ ] Update board edit UI to expose board kind, status, brief, and outcome without cluttering quick rename/color editing.
-- [ ] Show board status and kind in the board browser so active projects are visually distinct from passive collections.
-- [ ] Add board sorting: active first, recently touched second, archived last.
-- [ ] Add "Open project folder" from board/project UI, resolving to the related archive and reference folders where possible.
 
-### 4.2 Item stage and role metadata
+### 4.2 Project image intake
 
-- [ ] Add item `stage`: `reference`, `sketch`, `wip`, `process`, `final`, `output`, `note`, `other`.
-- [ ] Keep imported files low-friction by inferring a default stage from item type and import context, then allow edits later.
-- [ ] Add item `capturedAt` or keep `date` as the canonical import timestamp; document the distinction if both import date and source-created date are introduced.
-- [ ] Add optional item `projectIds` only if project membership is no longer derivable from boards; otherwise continue deriving membership from board `itemIds`.
-- [ ] Add stage controls to the item detail modal and item card overflow menu.
-- [ ] Add visual treatment for final/output items so finished work is easy to scan in archive, board, and project views.
-- [ ] Add filters for stage in strip/grid views and board browser previews.
+- [ ] Add an All Images view inside each project, backed by `Project.imageIds`.
+- [ ] Dragging image files into an open project should copy them into `projects/<project>/images/`, create `FolioItem` records, and append them to `Project.imageIds`.
+- [ ] Pasting images or copied image files into an open project should use the same import path as drag/drop.
+- [ ] The Import button and macOS Photos picker should import into the active project when a project is open.
+- [ ] Dropping a new image directly onto a project board should first add it to the project's All Images list, then place it on the board.
+- [ ] Imported project images should continue to store optional `mediaWidth` and `mediaHeight` for proportional canvas card sizing.
+- [ ] Reconciliation should scan project `images/` folders in addition to the legacy archive `items/` folder.
 
-### 4.3 Studio wall home view
+### 4.3 Works view
 
-- [ ] Add a first-screen Studio Wall view that shows active projects, recent uploads, recent references, and latest output.
-- [ ] Keep the current archive view available, but make the home view answer "what is happening in the studio right now?"
-- [ ] Add sections: Active projects, Recent work, Recent references, Outputs, Needs sorting, and Review prompts.
-- [ ] Add a small "unsorted inbox" count for newly imported items not yet assigned to a board/project or tag.
-- [ ] Let users drag from the Studio Wall into an active board or project.
-- [ ] Add empty states that invite import, reference capture, or new project creation without marketing copy.
+- [ ] Let users select one or more project images and mark or unmark them as Works.
+- [ ] Store Works membership as `Project.workItemIds`, a subset of `Project.imageIds`.
+- [ ] Show Works with the existing strip, grid, and heatmap views, scoped to the active project.
+- [ ] Works should represent the actual pieces of work being tracked, not every captured reference or process image.
+- [ ] Keep Works lightweight: promoting to Works should not force stage, tag, title, or board assignment decisions.
+- [ ] Add a user-accessible `works/` folder representation for promoted Works, while keeping canonical membership in `projects.json` so it can be reconciled.
+- [ ] Add item `stage`: `reference`, `sketch`, `wip`, `process`, `final`, `output`, `note`, `other` only after Works membership exists, so stage does not carry the burden of identifying Works.
 
-### 4.4 Project timeline
+### 4.4 Project boards
 
-- [ ] Add a project detail/timeline view for a board/project.
-- [ ] Timeline should combine archive items, references, notes, output snapshots, and relationship changes in chronological order.
+- [ ] Let each project have any number of boards.
+- [ ] Scope the board browser to the active project by `Project.boardIds` and `canvas.projectId`.
+- [ ] Creating a board from inside a project should create a `Canvas` owned by that project.
+- [ ] Existing canvas behavior remains the project board surface: draggable image cards, notes, board text, references, strokes, and edges.
+- [ ] Any image in `Project.imageIds` should be available to place on any board in that project.
+- [ ] Board-local references should save under `projects/<project>/boards/<board-id>/references/`.
+- [ ] Keep board headers focused on created/saved timestamps and board actions, not object counts.
+- [ ] Board edit UI can expose board kind, status, brief, and outcome later without cluttering quick rename/color editing.
+
+### 4.5 Local folder access and tracking
+
+- [ ] Add "Open project folder" from the Projects view and project workspace.
+- [ ] Add scoped folder actions for project Images, Works, and a specific board folder.
+- [ ] Ensure all project images, Works membership, and canvases are recoverable from local files plus `.folio/*.json`.
+- [ ] Keep source images readable in project folders and metadata inspectable in `.folio/projects.json`, `.folio/folio.json`, and `.folio/canvases.json`.
+- [ ] Keep file operations non-destructive; reconciliation should mark missing files and repair moved paths by hash where possible.
+- [ ] Preserve the legacy archive path as a migration and unsorted-import fallback, not the main product surface.
+
+### 4.6 Project review, timeline, and output
+
+- [ ] Add a project detail/timeline view from the owning `Project`, not from a single board.
+- [ ] Timeline should combine project images, Works, board references, notes, output snapshots, and relationship changes in chronological order.
 - [ ] Group timeline entries by day, week, or milestone depending on density.
-- [ ] Add a "latest output" area that shows the most recent `final` or `output` item for the project.
-- [ ] Add before/after comparison between selected project items.
-- [ ] Add project recap metadata: item count, reference count, output count, active days, first item date, latest item date.
-- [ ] Add "open on board" from any timeline entry.
-
-### 4.5 Review and progress signals
-
+- [ ] Add project recap metadata: image count, Works count, board count, reference count, output count, active days, first image date, latest saved date.
 - [ ] Expand heatmap meaning from upload volume only to project activity where appropriate.
-- [ ] Add project-level activity strips: days with uploads, notes, references, and outputs.
-- [ ] Add a personal weekly self-review view: new work, changed projects, outputs completed, unsorted imports, and stale active projects.
-- [ ] Keep review prompts private and reflective: "look back at this", "mark output", "sort these", "write a note", not "request review" or "assign feedback".
-- [ ] Add "gaps" only where useful: archive-wide gaps can remain, but project gaps should mean "no activity on this active project."
-- [ ] Add project freshness indicators without turning them into gamified streak pressure.
-- [ ] Add exportable recap text or image contact sheet for a project/week.
-
-### 4.6 Iterations and output snapshots
-
+- [ ] Add "open on board" from any timeline entry that has board placement.
 - [ ] Add relationship type `version-of` or a dedicated `ItemRevisionGroup` to connect iterations of the same work.
-- [ ] Allow users to select several items and create an iteration stack.
-- [ ] Show iteration stack controls on item cards: previous, next, latest, mark as final.
 - [ ] Add "promote to output" action from item card, detail modal, and board card.
 - [ ] Let a project have multiple outputs, not just one final piece.
-- [ ] Add output notes: what changed, what was learned, where it was used or published.
 
 ---
 
@@ -388,14 +393,14 @@ This phase makes references and inspiration first-class. The goal is to move fro
 - [ ] Add paste-from-clipboard support for images and copied files.
 - [ ] Add URL reference capture: store URL, title, source domain, optional image, and captured date.
 - [ ] Add reference metadata: `sourceUrl`, `sourceTitle`, `author`, `capturedAt`, `notes`, and `tagIds`.
-- [ ] Decide whether board-local references can be promoted into archive items; support "Add reference to archive" if yes.
+- [ ] Decide whether board-local references can be added to project Images; support "Add to project images" if yes.
 - [ ] Add reference detail modal parallel to item detail modal.
-- [ ] Add "reference inbox" for captured references not yet assigned to a board/project.
+- [ ] Add "reference inbox" for captured references not yet assigned to a project board.
 
 ### 5.2 Edge drawing and rendering
 
 - [x] Render `canvas.edges[]` as SVG curves above the canvas background and below cards.
-- [x] Edges can connect current canvas objects: archive item, reference, note, and board text elements.
+- [x] Edges can connect current canvas objects: project/archive item, reference, note, and board text elements.
 - [x] Hold Shift and drag from a source card to a target card to create an edge.
 - [x] Add visible connection handles on hover/focus for each card side.
 - [x] Update edge endpoints live when connected cards move.
@@ -415,7 +420,7 @@ This phase makes references and inspiration first-class. The goal is to move fro
 
 ### 5.4 Backlinks and graph-aware details
 
-- [ ] In item details, show "Appears on" boards/projects.
+- [ ] In item details, show "Appears on" projects and boards.
 - [ ] In item details, show "Connected to" grouped by relationship type.
 - [ ] In reference details, show which work it inspired and which projects use it.
 - [ ] In project details, show inbound references and outbound outputs.
@@ -424,10 +429,10 @@ This phase makes references and inspiration first-class. The goal is to move fro
 
 ### 5.5 Pinterest-like browsing
 
-- [ ] Add a references view separate from archive work items.
+- [ ] Add a references view separate from project Works.
 - [ ] Support masonry/grid browsing for references with source, tags, project chips, and board dots.
 - [ ] Add reference filters: tag, source domain, project, date captured, used/unused, relationship type.
-- [ ] Add "save to board/project" from reference cards.
+- [ ] Add "save to project/board" from reference cards.
 - [ ] Add "similar nearby" layout option on boards: selected reference plus connected work and notes.
 - [ ] Add batch tagging and batch board assignment for references.
 
@@ -475,12 +480,12 @@ This phase improves the canvas as a thinking surface so complex boards stay read
 
 ## Phase 7 — Search, retrieval, and intelligence
 
-This phase makes a larger archive useful without requiring perfect manual organization.
+This phase makes a larger project library useful without requiring perfect manual organization.
 
 ### 7.1 Search foundation
 
 - [ ] Add global search across item titles, descriptions, tags, board titles, notes, reference metadata, and edge labels.
-- [ ] Add scoped search for current board/project.
+- [ ] Add scoped search for current project or board.
 - [ ] Add saved filters for common queries such as "unused references", "active WIP", and "recent outputs".
 - [ ] Add sort controls: newest, oldest, recently edited, project, stage, title.
 - [ ] Add "needs sorting" filter for items with no board, no tag, and no stage edits.
@@ -491,12 +496,12 @@ This phase makes a larger archive useful without requiring perfect manual organi
 - [ ] Add OCR for screenshots and text-heavy images only if local-first processing remains practical.
 - [ ] Add color palette extraction for image references and work items.
 - [ ] Add duplicate/near-duplicate detection beyond first-64KB hash.
-- [ ] Add optional generated contact sheets per board/project.
+- [ ] Add optional generated contact sheets per project or board.
 
 ### 7.3 Suggested organization
 
 - [ ] Suggest tags from filename, folder, board context, and existing tag vocabulary.
-- [ ] Suggest adding unsorted items to active boards based on import timing and visual/source similarity.
+- [ ] Suggest adding unsorted items to active projects or boards based on import timing and visual/source similarity.
 - [ ] Suggest relationship links between references and work only as optional prompts; never auto-create graph edges without user approval.
 - [ ] Add "review suggestions" queue that can be accepted, edited, or dismissed.
 - [ ] Keep all intelligent features optional and local-first where possible.
@@ -505,7 +510,7 @@ This phase makes a larger archive useful without requiring perfect manual organi
 
 ## Phase 8 — Longer-term directions
 
-These ideas should not block the studio wall and reference graph MVP, but they describe where the product can go after the core loop works.
+These ideas should not block the project workspace and reference graph MVP, but they describe where the product can go after the core loop works.
 
 ### 8.1 Export and presentation
 
@@ -514,8 +519,8 @@ These ideas should not block the studio wall and reference graph MVP, but they d
 - [ ] Export a project timeline as Markdown.
 - [ ] Export selected work and references into a portable folder with metadata JSON.
 - [ ] Add "presentation mode" for a board: clean view, hide controls, step through sections or outputs.
-- [ ] Add printable studio wall summaries.
-- [ ] Add "Show project files" and "Show project references" actions that open Finder to the folders related to the project.
+- [ ] Add printable project review summaries.
+- [ ] Add "Show project images", "Show project Works", and "Show board references" actions that open Finder to the folders related to the project.
 
 ### 8.2 Sync and portability
 
@@ -531,7 +536,7 @@ These ideas should not block the studio wall and reference graph MVP, but they d
 - [ ] Do not add shared projects, invitations, comments, approvals, tasks, or team review states.
 - [ ] Support sharing only by exporting outside artifacts such as board snapshots, contact sheets, Markdown timelines, or portable project folders.
 - [ ] Let users access the folders related to a project directly in Finder so they can manage or share files outside Folio.
-- [ ] Consider external feedback as imported artifacts only: screenshots, notes, PDFs, or files that the user adds back into their personal archive.
+- [ ] Consider external feedback as imported artifacts only: screenshots, notes, PDFs, or files that the user adds back into a personal project.
 
 ---
 
