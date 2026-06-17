@@ -9,11 +9,18 @@ export interface CanvasPosition {
   y: number;
 }
 
+export type CanvasConnectionSide = "top" | "right" | "bottom" | "left";
+
+export type CanvasEdgeDirection = "none" | "forward" | "bidirectional";
+
 /** A connecting line between two objects on a canvas */
 export interface CanvasEdge {
   id: string;
-  fromId: string; // ID of an item, note, or reference
+  fromId: string; // ID of an item, note, reference, or text element
   toId: string;
+  fromSide?: CanvasConnectionSide;
+  toSide?: CanvasConnectionSide;
+  direction?: CanvasEdgeDirection;
   label?: string; // Optional text shown on the edge
 }
 
@@ -24,8 +31,14 @@ export interface CanvasStroke {
   color: string;
 }
 
-/** A text card placed directly on the canvas surface */
+/** A sticky note placed directly on the canvas surface */
 export interface CanvasNote extends CanvasPosition {
+  id: string;
+  text: string;
+}
+
+/** A lightweight plain text element placed directly on the canvas surface */
+export interface CanvasTextElement extends CanvasPosition {
   id: string;
   text: string;
 }
@@ -49,4 +62,5 @@ export interface Canvas {
   edges: CanvasEdge[];
   references: CanvasReference[];
   strokes?: CanvasStroke[];
+  texts?: CanvasTextElement[];
 }

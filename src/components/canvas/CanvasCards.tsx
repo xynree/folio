@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { GripVertical, Trash2, X } from "lucide-react";
 import type {
+  CanvasConnectionSide,
   CanvasNote,
   CanvasPosition,
   CanvasReference,
+  CanvasTextElement,
   FolioItem,
   ThumbnailUrls,
 } from "../../types";
@@ -12,6 +14,37 @@ import { basename } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
 
+type ConnectorPointerDownHandler = (
+  event: React.PointerEvent<HTMLButtonElement>,
+  side: CanvasConnectionSide,
+) => void;
+
+const CONNECTOR_SIDES: CanvasConnectionSide[] = ["top", "right", "bottom", "left"];
+
+function ConnectionHandles({
+  label,
+  onConnectorPointerDown,
+}: {
+  label: string;
+  onConnectorPointerDown: ConnectorPointerDownHandler;
+}) {
+  return (
+    <span className="canvas-connector-nodes" aria-hidden={false}>
+      {CONNECTOR_SIDES.map((side) => (
+        <button
+          aria-label={`Connect ${label} from ${side}`}
+          className={`canvas-connector-node canvas-connector-node-${side}`}
+          data-connector-side={side}
+          key={side}
+          type="button"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => onConnectorPointerDown(event, side)}
+        />
+      ))}
+    </span>
+  );
+}
+
 export function CanvasItemCard({
   item,
   position,
@@ -19,6 +52,7 @@ export function CanvasItemCard({
   setThumbUrls,
   onOpen,
   onRemove,
+  onConnectorPointerDown,
   onPointerDown,
   onClickCapture,
 }: {
@@ -28,9 +62,11 @@ export function CanvasItemCard({
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   onOpen: (itemId: string) => void;
   onRemove: (itemId: string) => void;
+  onConnectorPointerDown: ConnectorPointerDownHandler;
   onPointerDown: (event: React.PointerEvent) => void;
   onClickCapture: (event: React.MouseEvent) => void;
 }) {
+  const label = item.title || basename(item.path);
   return (
     <div
       className="canvas-card"
@@ -64,7 +100,11 @@ export function CanvasItemCard({
           <ButtonIcon icon={X} />
         </button>
       </div>
-      <strong>{item.title || basename(item.path)}</strong>
+      <strong>{label}</strong>
+      <ConnectionHandles
+        label={label}
+        onConnectorPointerDown={onConnectorPointerDown}
+      />
     </div>
   );
 }
@@ -73,12 +113,14 @@ export function ReferenceCard({
   reference,
   position,
   onRemove,
+  onConnectorPointerDown,
   onPointerDown,
   onClickCapture,
 }: {
   reference: CanvasReference;
   position: CanvasPosition;
   onRemove: (referenceId: string) => void;
+  onConnectorPointerDown: ConnectorPointerDownHandler;
   onPointerDown: (event: React.PointerEvent) => void;
   onClickCapture: (event: React.MouseEvent) => void;
 }) {
@@ -97,7 +139,7 @@ export function ReferenceCard({
     return () => {
       cancelled = true;
     };
-  }, [reference.path]);
+  }, [reference.id, reference.path]);
 
   return (
     <div
@@ -135,6 +177,10 @@ export function ReferenceCard({
         )}
       </span>
       <strong>{reference.filename}</strong>
+      <ConnectionHandles
+        label={reference.filename}
+        onConnectorPointerDown={onConnectorPointerDown}
+      />
     </div>
   );
 }
@@ -143,12 +189,14 @@ export function CanvasNoteCard({
   note,
   onChange,
   onDelete,
+  onConnectorPointerDown,
   onPointerDown,
   onClickCapture,
 }: {
   note: CanvasNote;
   onChange: (noteId: string, text: string) => void;
   onDelete: (noteId: string) => void;
+  onConnectorPointerDown: ConnectorPointerDownHandler;
   onPointerDown: (event: React.PointerEvent) => void;
   onClickCapture: (event: React.MouseEvent) => void;
 }) {
@@ -200,6 +248,76 @@ export function CanvasNoteCard({
           }
         }}
         onChange={(event) => setDraft(event.target.value)}
+      />
+      <ConnectionHandles
+        label="note"
+        onConnectorPointerDown={onConnectorPointerDown}
+      />
+    </div>
+  );
+}
+
+export function CanvasTextCard({
+  textElement,
+  onChange,
+  onDelete,
+  onConnectorPointerDown,
+  onPointerDown,
+  onClickCapture,
+}: {
+  textElement: CanvasTextElement;
+  onChange: (textElementId: string, text: string) => void;
+  onDelete: (textElementId: string) => void;
+  onConnectorPointerDown: ConnectorPointerDownHandler;
+  onPointerDown: (event: React.PointerEvent) => void;
+  onClickCapture: (event: React.MouseEvent) => void;
+}) {
+  const [draft, setDraft] = useState(textElement.text);
+
+  useEffect(() => {
+    setDraft(textElement.text);
+  }, [textElement.text]);
+
+  return (
+    <div
+      className="canvas-text-card"
+      data-canvas-object-id={textElement.id}
+      data-canvas-object-kind="text"
+      style={{
+        transform: `translate(${textElement.x + CANVAS_WORLD_ORIGIN}px, ${
+          textElement.y + CANVAS_WORLD_ORIGIN
+        }px)`,
+      }}
+      onPointerDown={onPointerDown}
+      onClickCapture={onClickCapture}
+    >
+      <button
+        className="icon-button canvas-text-delete-button"
+        type="button"
+        aria-label="Delete text"
+        title="Delete text"
+        onClick={(event) => {
+          event.stopPropagation();
+          onDelete(textElement.id);
+        }}
+      >
+        <ButtonIcon icon={Trash2} />
+      </button>
+      <textarea
+        aria-label="Board text"
+        value={draft}
+        onBlur={() => {
+          if (draft.trim()) {
+            onChange(textElement.id, draft);
+          } else {
+            onDelete(textElement.id);
+          }
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+      />
+      <ConnectionHandles
+        label="text"
+        onConnectorPointerDown={onConnectorPointerDown}
       />
     </div>
   );

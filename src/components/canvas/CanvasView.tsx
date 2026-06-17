@@ -1,27 +1,35 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
+  ArrowLeftRight,
+  ArrowRight,
   Edit3,
   Ellipsis,
+  Eraser,
   ImagePlus,
   Link2,
   Minimize2,
+  Minus,
   Paperclip,
   PenLine,
   Plus,
   Save,
   StickyNote,
   Trash2,
+  Type,
   Undo2,
   X,
 } from "lucide-react";
 import type {
   Canvas,
+  CanvasConnectionSide,
   CanvasEdge,
+  CanvasEdgeDirection,
   CanvasNote,
   CanvasPosition,
   CanvasReference,
   CanvasStroke,
+  CanvasTextElement,
   FolioData,
   FolioItem,
   ThumbnailUrls,
@@ -44,33 +52,55 @@ import {
 import { chooseAndImportItems } from "../folio/importing";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
-import { CanvasItemCard, CanvasNoteCard, ReferenceCard } from "./CanvasCards";
+import {
+  CanvasItemCard,
+  CanvasNoteCard,
+  CanvasTextCard,
+  ReferenceCard,
+} from "./CanvasCards";
 import { CanvasViewport } from "./CanvasViewport";
 
-type CanvasDragKind = "item" | "reference" | "note";
+type CanvasObjectKind = "item" | "reference" | "note" | "text";
+type CanvasTool = "select" | "pen" | "eraser" | "text";
+
 const CANVAS_OBJECT_DRAG_THRESHOLD = 4;
 const BOARD_BROWSER_PREVIEW_LIMIT = 3;
 const STROKE_POINT_MIN_DISTANCE = 2;
+const CANVAS_CONNECTION_SIDES: CanvasConnectionSide[] = [
+  "top",
+  "right",
+  "bottom",
+  "left",
+];
 
 const CANVAS_OBJECT_SIZES: Record<
-  CanvasDragKind,
+  CanvasObjectKind,
   { width: number; height: number }
 > = {
   item: { width: 162, height: 190 },
   reference: { width: 162, height: 214 },
   note: { width: 220, height: 150 },
+  text: { width: 220, height: 96 },
 };
 
 type CanvasObjectLayout = {
   id: string;
-  kind: CanvasDragKind;
+  kind: CanvasObjectKind;
   center: CanvasPosition;
+  sides: Record<CanvasConnectionSide, CanvasPosition>;
 };
 
 type EdgeRenderModel = {
   edge: CanvasEdge;
   path: string;
   labelPosition: CanvasPosition;
+  direction: CanvasEdgeDirection;
+};
+
+type CanvasObjectTarget = {
+  id: string;
+  kind: CanvasObjectKind;
+  side?: CanvasConnectionSide;
 };
 
 function buildPolylinePath(points: CanvasPosition[]) {
@@ -82,14 +112,104 @@ function buildPolylinePath(points: CanvasPosition[]) {
   ].join(" ");
 }
 
-function buildEdgePath(from: CanvasPosition, to: CanvasPosition) {
-  const deltaX = to.x - from.x;
-  const direction = deltaX >= 0 ? 1 : -1;
-  const controlOffset = Math.max(48, Math.abs(deltaX) * 0.45) * direction;
+function connectionVector(side: CanvasConnectionSide) {
+  if (side === "top") return { x: 0, y: -1 };
+  if (side === "right") return { x: 1, y: 0 };
+  if (side === "bottom") return { x: 0, y: 1 };
+  return { x: -1, y: 0 };
+}
+
+function isCanvasConnectionSide(value: string | undefined): value is CanvasConnectionSide {
+  return Boolean(
+    value
+      && CANVAS_CONNECTION_SIDES.includes(value as CanvasConnectionSide),
+  );
+}
+
+function edgeDirection(edge: CanvasEdge): CanvasEdgeDirection {
+  return edge.direction ?? "none";
+}
+
+function bestConnectionSide(
+  source: CanvasPosition,
+  target: CanvasPosition,
+): CanvasConnectionSide {
+  const deltaX = target.x - source.x;
+  const deltaY = target.y - source.y;
+  if (Math.abs(deltaX) >= Math.abs(deltaY)) {
+    return deltaX >= 0 ? "right" : "left";
+  }
+  return deltaY >= 0 ? "bottom" : "top";
+}
+
+function sidePointFromPosition(
+  position: CanvasPosition,
+  kind: CanvasObjectKind,
+  side: CanvasConnectionSide,
+) {
+  const size = CANVAS_OBJECT_SIZES[kind];
+  const absoluteX = position.x + CANVAS_WORLD_ORIGIN;
+  const absoluteY = position.y + CANVAS_WORLD_ORIGIN;
+  if (side === "top") {
+    return { x: absoluteX + size.width / 2, y: absoluteY };
+  }
+  if (side === "right") {
+    return { x: absoluteX + size.width, y: absoluteY + size.height / 2 };
+  }
+  if (side === "bottom") {
+    return { x: absoluteX + size.width / 2, y: absoluteY + size.height };
+  }
+  return { x: absoluteX, y: absoluteY + size.height / 2 };
+}
+
+function objectLayoutFromPosition(
+  id: string,
+  kind: CanvasObjectKind,
+  position: CanvasPosition,
+): CanvasObjectLayout {
+  const size = CANVAS_OBJECT_SIZES[kind];
+  const absoluteX = position.x + CANVAS_WORLD_ORIGIN;
+  const absoluteY = position.y + CANVAS_WORLD_ORIGIN;
+
+  return {
+    id,
+    kind,
+    center: {
+      x: absoluteX + size.width / 2,
+      y: absoluteY + size.height / 2,
+    },
+    sides: {
+      top: sidePointFromPosition(position, kind, "top"),
+      right: sidePointFromPosition(position, kind, "right"),
+      bottom: sidePointFromPosition(position, kind, "bottom"),
+      left: sidePointFromPosition(position, kind, "left"),
+    },
+  };
+}
+
+function buildEdgePath(
+  from: CanvasPosition,
+  to: CanvasPosition,
+  fromSide: CanvasConnectionSide,
+  toSide: CanvasConnectionSide,
+) {
+  const distance = Math.hypot(to.x - from.x, to.y - from.y);
+  const controlOffset = Math.min(180, Math.max(48, distance * 0.32));
+  const fromVector = connectionVector(fromSide);
+  const toVector = connectionVector(toSide);
+  const firstControl = {
+    x: from.x + fromVector.x * controlOffset,
+    y: from.y + fromVector.y * controlOffset,
+  };
+  const secondControl = {
+    x: to.x + toVector.x * controlOffset,
+    y: to.y + toVector.y * controlOffset,
+  };
+
   return [
     `M ${Math.round(from.x)} ${Math.round(from.y)}`,
-    `C ${Math.round(from.x + controlOffset)} ${Math.round(from.y)}`,
-    `${Math.round(to.x - controlOffset)} ${Math.round(to.y)}`,
+    `C ${Math.round(firstControl.x)} ${Math.round(firstControl.y)}`,
+    `${Math.round(secondControl.x)} ${Math.round(secondControl.y)}`,
     `${Math.round(to.x)} ${Math.round(to.y)}`,
   ].join(" ");
 }
@@ -101,30 +221,26 @@ function edgeLabelPosition(from: CanvasPosition, to: CanvasPosition) {
   };
 }
 
-function objectTargetFromEvent(event: PointerEvent) {
-  const directTarget = event.target instanceof Element ? event.target : null;
-  const directObject = directTarget?.closest<HTMLElement>(
-    "[data-canvas-object-id]",
-  );
-  if (directObject?.dataset.canvasObjectId) {
-    return {
-      id: directObject.dataset.canvasObjectId,
-      kind: directObject.dataset.canvasObjectKind as CanvasDragKind,
-    };
-  }
+function objectTargetFromElement(element: Element | null): CanvasObjectTarget | null {
+  const objectElement = element?.closest<HTMLElement>("[data-canvas-object-id]");
+  if (!objectElement?.dataset.canvasObjectId) return null;
 
-  const elementAtPoint = document.elementFromPoint(
-    event.clientX,
-    event.clientY,
-  );
-  const pointedObject = elementAtPoint?.closest<HTMLElement>(
-    "[data-canvas-object-id]",
-  );
-  if (!pointedObject?.dataset.canvasObjectId) return null;
+  const connectorElement = element?.closest<HTMLElement>("[data-connector-side]");
+  const connectorSide = connectorElement?.dataset.connectorSide;
   return {
-    id: pointedObject.dataset.canvasObjectId,
-    kind: pointedObject.dataset.canvasObjectKind as CanvasDragKind,
+    id: objectElement.dataset.canvasObjectId,
+    kind: objectElement.dataset.canvasObjectKind as CanvasObjectKind,
+    side: isCanvasConnectionSide(connectorSide) ? connectorSide : undefined,
   };
+}
+
+function objectTargetFromEvent(event: PointerEvent): CanvasObjectTarget | null {
+  const directTarget =
+    event.target instanceof Element ? objectTargetFromElement(event.target) : null;
+  if (directTarget) return directTarget;
+
+  const elementAtPoint = document.elementFromPoint(event.clientX, event.clientY);
+  return objectTargetFromElement(elementAtPoint);
 }
 
 export function CanvasView({
@@ -162,17 +278,18 @@ export function CanvasView({
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const [dragPreview, setDragPreview] = useState<{
     id: string;
-    kind: CanvasDragKind;
+    kind: CanvasObjectKind;
     position: CanvasPosition;
   } | null>(null);
   const [edgeDraft, setEdgeDraft] = useState<{
     fromId: string;
+    fromSide: CanvasConnectionSide;
     toPoint: CanvasPosition;
   } | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const [edgeLabelDraft, setEdgeLabelDraft] = useState("");
-  const [penMode, setPenMode] = useState(false);
+  const [activeTool, setActiveTool] = useState<CanvasTool>("select");
   const [strokePreview, setStrokePreview] = useState<CanvasStroke | null>(null);
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
   const [boardBrowserOpen, setBoardBrowserOpen] = useState(true);
@@ -186,7 +303,7 @@ export function CanvasView({
   const [canvasZoom, setCanvasZoom] = useState(1);
   const canvasZoomRef = useRef(1);
   const lastCanvasDetailRequestIdRef = useRef(canvasDetailRequestId);
-  const draggedObjectRef = useRef<{ kind: CanvasDragKind; id: string } | null>(
+  const draggedObjectRef = useRef<{ kind: CanvasObjectKind; id: string } | null>(
     null,
   );
 
@@ -276,6 +393,7 @@ export function CanvasView({
   const activeNotes = activeCanvas?.notes ?? [];
   const activeEdges = activeCanvas?.edges ?? [];
   const activeStrokes = activeCanvas?.strokes ?? [];
+  const activeTexts = activeCanvas?.texts ?? [];
 
   const browserEditCanvas =
     data.canvases.find((canvas) => canvas.id === browserEditCanvasId) ?? null;
@@ -489,46 +607,45 @@ export function CanvasView({
     [dragPreview],
   );
 
+  const positionForText = useCallback(
+    (textElement: CanvasTextElement): CanvasPosition => {
+      if (
+        dragPreview?.kind === "text"
+        && dragPreview.id === textElement.id
+      ) {
+        return dragPreview.position;
+      }
+      return { x: textElement.x, y: textElement.y };
+    },
+    [dragPreview],
+  );
+
   const canvasObjectLayouts = useMemo(() => {
     const layouts = new Map<string, CanvasObjectLayout>();
 
     activeItems.forEach((item, index) => {
       const position = positionForItem(item, index);
-      const size = CANVAS_OBJECT_SIZES.item;
-      layouts.set(item.id, {
-        id: item.id,
-        kind: "item",
-        center: {
-          x: position.x + CANVAS_WORLD_ORIGIN + size.width / 2,
-          y: position.y + CANVAS_WORLD_ORIGIN + size.height / 2,
-        },
-      });
+      layouts.set(item.id, objectLayoutFromPosition(item.id, "item", position));
     });
 
     activeReferences.forEach((reference) => {
       const position = positionForReference(reference);
-      const size = CANVAS_OBJECT_SIZES.reference;
       layouts.set(reference.id, {
-        id: reference.id,
-        kind: "reference",
-        center: {
-          x: position.x + CANVAS_WORLD_ORIGIN + size.width / 2,
-          y: position.y + CANVAS_WORLD_ORIGIN + size.height / 2,
-        },
+        ...objectLayoutFromPosition(reference.id, "reference", position),
       });
     });
 
     activeNotes.forEach((note) => {
       const position = positionForNote(note);
-      const size = CANVAS_OBJECT_SIZES.note;
-      layouts.set(note.id, {
-        id: note.id,
-        kind: "note",
-        center: {
-          x: position.x + CANVAS_WORLD_ORIGIN + size.width / 2,
-          y: position.y + CANVAS_WORLD_ORIGIN + size.height / 2,
-        },
-      });
+      layouts.set(note.id, objectLayoutFromPosition(note.id, "note", position));
+    });
+
+    activeTexts.forEach((textElement) => {
+      const position = positionForText(textElement);
+      layouts.set(
+        textElement.id,
+        objectLayoutFromPosition(textElement.id, "text", position),
+      );
     });
 
     return layouts;
@@ -536,9 +653,11 @@ export function CanvasView({
     activeItems,
     activeNotes,
     activeReferences,
+    activeTexts,
     positionForItem,
     positionForNote,
     positionForReference,
+    positionForText,
   ]);
 
   const edgeRenderModels = useMemo(
@@ -548,10 +667,16 @@ export function CanvasView({
           const from = canvasObjectLayouts.get(edge.fromId);
           const to = canvasObjectLayouts.get(edge.toId);
           if (!from || !to) return null;
+          const fromSide =
+            edge.fromSide ?? bestConnectionSide(from.center, to.center);
+          const toSide = edge.toSide ?? bestConnectionSide(to.center, from.center);
+          const fromPoint = from.sides[fromSide];
+          const toPoint = to.sides[toSide];
           return {
             edge,
-            path: buildEdgePath(from.center, to.center),
-            labelPosition: edgeLabelPosition(from.center, to.center),
+            path: buildEdgePath(fromPoint, toPoint, fromSide, toSide),
+            labelPosition: edgeLabelPosition(fromPoint, toPoint),
+            direction: edgeDirection(edge),
           };
         })
         .filter(Boolean) as EdgeRenderModel[],
@@ -605,11 +730,25 @@ export function CanvasView({
     setEdgeLabelDraft(edge.label ?? "");
   }, []);
 
+  const updateEdgeDirection = useCallback(
+    (edgeId: string, direction: CanvasEdgeDirection) => {
+      if (!activeCanvas) return;
+      updateCanvas(activeCanvas.id, (canvas) => ({
+        ...canvas,
+        edges: (canvas.edges ?? []).map((edge) =>
+          edge.id === edgeId ? { ...edge, direction } : edge,
+        ),
+      }), "Edge direction updated");
+    },
+    [activeCanvas, updateCanvas],
+  );
+
   const startEdgeDrag = useCallback(
     (
       event: React.PointerEvent,
-      kind: CanvasDragKind,
+      kind: CanvasObjectKind,
       objectId: string,
+      preferredFromSide?: CanvasConnectionSide,
     ) => {
       if (!activeCanvas) return;
       if (event.button !== 0) return;
@@ -618,20 +757,32 @@ export function CanvasView({
       event.stopPropagation();
 
       const source = canvasObjectLayouts.get(objectId);
+      const initialFromSide =
+        preferredFromSide
+        ?? (source ? bestConnectionSide(source.center, {
+          x: surfacePointFromClient(event.clientX, event.clientY).x,
+          y: surfacePointFromClient(event.clientX, event.clientY).y,
+        }) : "right");
       const startPoint =
-        source?.center ?? surfacePointFromClient(event.clientX, event.clientY);
+        source?.sides[initialFromSide]
+        ?? surfacePointFromClient(event.clientX, event.clientY);
       const previousCursor = document.body.style.cursor;
       const previousUserSelect = document.body.style.userSelect;
       document.body.style.cursor = "crosshair";
       document.body.style.userSelect = "none";
       setSelectedEdgeId(null);
       setEditingEdgeId(null);
-      setEdgeDraft({ fromId: objectId, toPoint: startPoint });
+      setEdgeDraft({
+        fromId: objectId,
+        fromSide: initialFromSide,
+        toPoint: startPoint,
+      });
 
       const onPointerMove = (moveEvent: PointerEvent) => {
         moveEvent.preventDefault();
         setEdgeDraft({
           fromId: objectId,
+          fromSide: initialFromSide,
           toPoint: surfacePointFromClient(moveEvent.clientX, moveEvent.clientY),
         });
       };
@@ -644,10 +795,17 @@ export function CanvasView({
         setEdgeDraft(null);
 
         const target = objectTargetFromEvent(upEvent);
-        if (!target || target.id === objectId || !canvasObjectLayouts.has(target.id)) {
+        const latestSource = canvasObjectLayouts.get(objectId);
+        const latestTarget = target ? canvasObjectLayouts.get(target.id) : null;
+        if (!target || target.id === objectId || !latestSource || !latestTarget) {
           return;
         }
 
+        const fromSide =
+          preferredFromSide
+          ?? bestConnectionSide(latestSource.center, latestTarget.center);
+        const toSide =
+          target.side ?? bestConnectionSide(latestTarget.center, latestSource.center);
         const edgeId = createId("edge");
         updateCanvas(
           activeCanvas.id,
@@ -661,10 +819,20 @@ export function CanvasView({
             if (alreadyConnected) return canvas;
             return {
               ...canvas,
-              edges: [...edges, { id: edgeId, fromId: objectId, toId: target.id }],
+              edges: [
+                ...edges,
+                {
+                  id: edgeId,
+                  fromId: objectId,
+                  toId: target.id,
+                  fromSide,
+                  toSide,
+                  direction: "forward",
+                },
+              ],
             };
           },
-          `${kind === "reference" ? "Reference" : "Card"} linked`,
+          `${kind === "text" ? "Text" : "Canvas object"} linked`,
         );
         setSelectedEdgeId(edgeId);
       };
@@ -675,6 +843,19 @@ export function CanvasView({
     [activeCanvas, canvasObjectLayouts, surfacePointFromClient, updateCanvas],
   );
 
+  const startConnectorDrag = useCallback(
+    (
+      event: React.PointerEvent<HTMLButtonElement>,
+      objectId: string,
+      fromSide: CanvasConnectionSide,
+    ) => {
+      const source = canvasObjectLayouts.get(objectId);
+      if (!source) return;
+      startEdgeDrag(event, source.kind, objectId, fromSide);
+    },
+    [canvasObjectLayouts, startEdgeDrag],
+  );
+
   const undoLastStroke = useCallback(() => {
     if (!activeCanvas || !activeStrokes.length) return;
     updateCanvas(activeCanvas.id, (canvas) => ({
@@ -683,15 +864,44 @@ export function CanvasView({
     }), "Stroke removed");
   }, [activeCanvas, activeStrokes.length, updateCanvas]);
 
+  const removeStroke = useCallback(
+    (strokeId: string) => {
+      if (!activeCanvas) return;
+      updateCanvas(activeCanvas.id, (canvas) => ({
+        ...canvas,
+        strokes: (canvas.strokes ?? []).filter((stroke) => stroke.id !== strokeId),
+      }), "Stroke erased");
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const addTextAtPoint = useCallback(
+    (point: CanvasPosition) => {
+      if (!activeCanvas) return;
+      const textElement: CanvasTextElement = {
+        id: createId("text"),
+        text: "Text",
+        x: point.x - CANVAS_WORLD_ORIGIN,
+        y: point.y - CANVAS_WORLD_ORIGIN,
+      };
+      updateCanvas(activeCanvas.id, (canvas) => ({
+        ...canvas,
+        texts: [...(canvas.texts ?? []), textElement],
+      }), "Text added");
+      setActiveTool("select");
+    },
+    [activeCanvas, updateCanvas],
+  );
+
   const handleSurfacePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (!penMode || !activeCanvas) return;
+      if (activeTool === "select" || !activeCanvas) return;
       if (event.button !== 0) return;
       const target = event.target;
       if (
         target instanceof Element
         && target.closest(
-          ".canvas-card, .canvas-note, .canvas-edge-label, button, input, textarea, select",
+          ".canvas-card, .canvas-note, .canvas-text-card, .canvas-edge-label, button, input, textarea, select",
         )
       ) {
         return;
@@ -699,6 +909,13 @@ export function CanvasView({
 
       event.preventDefault();
       event.stopPropagation();
+
+      if (activeTool === "text") {
+        addTextAtPoint(surfacePointFromClient(event.clientX, event.clientY));
+        return;
+      }
+
+      if (activeTool === "eraser") return;
 
       const strokeId = createId("stroke");
       const color = activeCanvas.color ?? CANVAS_COLORS[0];
@@ -749,7 +966,7 @@ export function CanvasView({
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
     },
-    [activeCanvas, penMode, surfacePointFromClient, updateCanvas],
+    [activeCanvas, activeTool, addTextAtPoint, surfacePointFromClient, updateCanvas],
   );
 
   useEffect(() => {
@@ -799,7 +1016,7 @@ export function CanvasView({
   const startDrag = useCallback(
     (
       event: React.PointerEvent,
-      kind: CanvasDragKind,
+      kind: CanvasObjectKind,
       objectId: string,
       startPosition: CanvasPosition,
     ) => {
@@ -841,6 +1058,16 @@ export function CanvasView({
                   reference.id === objectId
                     ? { ...reference, ...finalPosition }
                     : reference,
+                ),
+              };
+            }
+            if (kind === "text") {
+              return {
+                ...canvas,
+                texts: (canvas.texts ?? []).map((textElement) =>
+                  textElement.id === objectId
+                    ? { ...textElement, ...finalPosition }
+                    : textElement,
                 ),
               };
             }
@@ -907,7 +1134,7 @@ export function CanvasView({
   const suppressClickAfterDrag = useCallback(
     (
       event: React.MouseEvent,
-      kind: CanvasDragKind,
+      kind: CanvasObjectKind,
       objectId: string,
     ) => {
       if (
@@ -1052,6 +1279,35 @@ export function CanvasView({
           (edge) => edge.fromId !== noteId && edge.toId !== noteId,
         ),
       }), "Note deleted");
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const updateTextElement = useCallback(
+    (textElementId: string, text: string) => {
+      if (!activeCanvas) return;
+      updateCanvas(activeCanvas.id, (canvas) => ({
+        ...canvas,
+        texts: (canvas.texts ?? []).map((textElement) =>
+          textElement.id === textElementId ? { ...textElement, text } : textElement,
+        ),
+      }));
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const deleteTextElement = useCallback(
+    (textElementId: string) => {
+      if (!activeCanvas) return;
+      updateCanvas(activeCanvas.id, (canvas) => ({
+        ...canvas,
+        texts: (canvas.texts ?? []).filter(
+          (textElement) => textElement.id !== textElementId,
+        ),
+        edges: (canvas.edges ?? []).filter(
+          (edge) => edge.fromId !== textElementId && edge.toId !== textElementId,
+        ),
+      }), "Text deleted");
     },
     [activeCanvas, updateCanvas],
   );
@@ -1502,15 +1758,47 @@ export function CanvasView({
             </button>
             <button
               className={`canvas-board-action-button ${
-                penMode ? "canvas-board-action-active" : ""
+                activeTool === "pen" ? "canvas-board-action-active" : ""
               }`}
               type="button"
               aria-label="Pen tool"
-              aria-pressed={penMode}
+              aria-pressed={activeTool === "pen"}
               title="Pen tool"
-              onClick={() => setPenMode((current) => !current)}
+              onClick={() =>
+                setActiveTool((current) => (current === "pen" ? "select" : "pen"))
+              }
             >
               <ButtonIcon icon={PenLine} />
+            </button>
+            <button
+              className={`canvas-board-action-button ${
+                activeTool === "eraser" ? "canvas-board-action-active" : ""
+              }`}
+              type="button"
+              aria-label="Eraser tool"
+              aria-pressed={activeTool === "eraser"}
+              title="Eraser tool"
+              onClick={() =>
+                setActiveTool((current) =>
+                  current === "eraser" ? "select" : "eraser",
+                )
+              }
+            >
+              <ButtonIcon icon={Eraser} />
+            </button>
+            <button
+              className={`canvas-board-action-button ${
+                activeTool === "text" ? "canvas-board-action-active" : ""
+              }`}
+              type="button"
+              aria-label="Text tool"
+              aria-pressed={activeTool === "text"}
+              title="Text tool"
+              onClick={() =>
+                setActiveTool((current) => (current === "text" ? "select" : "text"))
+              }
+            >
+              <ButtonIcon icon={Type} />
             </button>
             <button
               className="canvas-board-action-button"
@@ -1567,12 +1855,33 @@ export function CanvasView({
             viewBox={`0 0 ${CANVAS_WORLD_WIDTH} ${CANVAS_WORLD_HEIGHT}`}
             aria-hidden="true"
           >
+            <defs>
+              <marker
+                id="canvas-edge-arrow"
+                markerHeight="8"
+                markerWidth="8"
+                orient="auto-start-reverse"
+                refX="7"
+                refY="4"
+                viewBox="0 0 8 8"
+              >
+                <path d="M 0 0 L 8 4 L 0 8 z" />
+              </marker>
+            </defs>
             {activeStrokes.map((stroke) => (
               <path
-                className="canvas-stroke-path"
+                className={`canvas-stroke-path ${
+                  activeTool === "eraser" ? "canvas-stroke-erasable" : ""
+                }`}
                 d={stroke.path}
                 key={stroke.id}
                 stroke={stroke.color}
+                onPointerDown={(event) => {
+                  if (activeTool !== "eraser") return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  removeStroke(stroke.id);
+                }}
               />
             ))}
             {strokePreview ? (
@@ -1602,17 +1911,36 @@ export function CanvasView({
                     startEdgeLabelEdit(model.edge);
                   }}
                 />
-                <path className="canvas-edge-path" d={model.path} />
+                <path
+                  className="canvas-edge-path"
+                  d={model.path}
+                  markerEnd={
+                    model.direction === "forward"
+                    || model.direction === "bidirectional"
+                      ? "url(#canvas-edge-arrow)"
+                      : undefined
+                  }
+                  markerStart={
+                    model.direction === "bidirectional"
+                      ? "url(#canvas-edge-arrow)"
+                      : undefined
+                  }
+                />
               </g>
             ))}
             {edgeDraft && canvasObjectLayouts.get(edgeDraft.fromId) ? (
               <path
                 className="canvas-edge-path canvas-edge-draft"
-                d={buildEdgePath(
-                  canvasObjectLayouts.get(edgeDraft.fromId)?.center
-                    ?? edgeDraft.toPoint,
-                  edgeDraft.toPoint,
-                )}
+                d={(() => {
+                  const source = canvasObjectLayouts.get(edgeDraft.fromId);
+                  if (!source) return "";
+                  return buildEdgePath(
+                    source.sides[edgeDraft.fromSide],
+                    edgeDraft.toPoint,
+                    edgeDraft.fromSide,
+                    bestConnectionSide(edgeDraft.toPoint, source.center),
+                  );
+                })()}
               />
             ) : null}
           </svg>
@@ -1668,6 +1996,65 @@ export function CanvasView({
                       <span>{model.edge.label || "Link"}</span>
                     </button>
                   )}
+                  {selectedEdgeId === model.edge.id && !editing ? (
+                    <span
+                      className="canvas-edge-direction-bar"
+                      role="toolbar"
+                      aria-label="Edge direction"
+                    >
+                      <button
+                        className={
+                          model.direction === "none"
+                            ? "canvas-edge-direction-active"
+                            : ""
+                        }
+                        type="button"
+                        aria-label="No direction"
+                        aria-pressed={model.direction === "none"}
+                        title="No direction"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          updateEdgeDirection(model.edge.id, "none");
+                        }}
+                      >
+                        <ButtonIcon icon={Minus} size={12} />
+                      </button>
+                      <button
+                        className={
+                          model.direction === "forward"
+                            ? "canvas-edge-direction-active"
+                            : ""
+                        }
+                        type="button"
+                        aria-label="Single direction"
+                        aria-pressed={model.direction === "forward"}
+                        title="Single direction"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          updateEdgeDirection(model.edge.id, "forward");
+                        }}
+                      >
+                        <ButtonIcon icon={ArrowRight} size={12} />
+                      </button>
+                      <button
+                        className={
+                          model.direction === "bidirectional"
+                            ? "canvas-edge-direction-active"
+                            : ""
+                        }
+                        type="button"
+                        aria-label="Bidirectional"
+                        aria-pressed={model.direction === "bidirectional"}
+                        title="Bidirectional"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          updateEdgeDirection(model.edge.id, "bidirectional");
+                        }}
+                      >
+                        <ButtonIcon icon={ArrowLeftRight} size={12} />
+                      </button>
+                    </span>
+                  ) : null}
                 </span>
               );
             })}
@@ -1684,6 +2071,9 @@ export function CanvasView({
                 setThumbUrls={setThumbUrls}
                 onOpen={onOpenItem}
                 onRemove={removeItem}
+                onConnectorPointerDown={(event, side) =>
+                  startConnectorDrag(event, item.id, side)
+                }
                 onPointerDown={(event) =>
                   startDrag(event, "item", item.id, position)
                 }
@@ -1702,6 +2092,9 @@ export function CanvasView({
                 reference={reference}
                 position={position}
                 onRemove={removeReference}
+                onConnectorPointerDown={(event, side) =>
+                  startConnectorDrag(event, reference.id, side)
+                }
                 onPointerDown={(event) =>
                   startDrag(event, "reference", reference.id, position)
                 }
@@ -1718,6 +2111,9 @@ export function CanvasView({
               note={{ ...note, ...positionForNote(note) }}
               onChange={updateNote}
               onDelete={deleteNote}
+              onConnectorPointerDown={(event, side) =>
+                startConnectorDrag(event, note.id, side)
+              }
               onPointerDown={(event) =>
                 startDrag(event, "note", note.id, positionForNote(note))
               }
@@ -1726,6 +2122,27 @@ export function CanvasView({
               }
             />
           ))}
+
+          {activeTexts.map((textElement) => {
+            const position = positionForText(textElement);
+            return (
+              <CanvasTextCard
+                key={textElement.id}
+                textElement={{ ...textElement, ...position }}
+                onChange={updateTextElement}
+                onDelete={deleteTextElement}
+                onConnectorPointerDown={(event, side) =>
+                  startConnectorDrag(event, textElement.id, side)
+                }
+                onPointerDown={(event) =>
+                  startDrag(event, "text", textElement.id, position)
+                }
+                onClickCapture={(event) =>
+                  suppressClickAfterDrag(event, "text", textElement.id)
+                }
+              />
+            );
+          })}
         </CanvasViewport>
       </div>
     </section>

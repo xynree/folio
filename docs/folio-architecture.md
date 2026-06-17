@@ -155,6 +155,8 @@ interface Canvas {
   notes: CanvasNote[];
   edges: CanvasEdge[];
   references: CanvasReference[];
+  strokes?: CanvasStroke[];
+  texts?: CanvasTextElement[];
 }
 ```
 
@@ -403,11 +405,13 @@ Edges should remain attached to canvases because their meaning is spatial and co
 
 `CanvasEdge` already exists in the schema. Rendering should be implemented as an SVG overlay inside the same zoomed canvas surface as cards:
 
-- Compute endpoints from each connected object's current position and card bounds.
+- Compute endpoints from each connected object's current position, card bounds, and optional `fromSide`/`toSide` side handles.
 - Render curves below cards and above the dotted background.
 - Keep edge path data derived, not persisted.
-- Store only semantic edge data: IDs, endpoints, type, label, and timestamps.
+- Store only semantic edge data: IDs, side endpoints, direction, type, label, and timestamps.
 - Recompute paths while dragging so edges stay attached.
+- Support current board object endpoints: archive items, references, notes, and board text elements.
+- Render `direction: "none" | "forward" | "bidirectional"` with no arrow, end arrow, or both arrows.
 
 Selection should be local renderer state until the user edits or deletes an edge. Edge creation, label edits, type edits, and deletes should persist through `saveFolioData`.
 
@@ -488,8 +492,10 @@ Likely future JSON files, only if needed:
 Completed MVP foundation:
 
 - Board-local reference capture from drag/drop and file dialog.
-- SVG edge rendering and editing for item, reference, and note connections.
-- Freehand canvas strokes with board-color ink and Cmd+Z undo.
+- SVG edge rendering and editing for item, reference, note, and text connections.
+- Side connector nodes with no-direction, single-direction, and bidirectional edge modes.
+- Freehand canvas strokes with board-color ink, eraser, and Cmd+Z undo.
+- Editable board text elements that can be dragged, connected, and deleted.
 - Local archive import, board membership, notes, thumbnails, tags, and reconciliation.
 
 Near-term roadmap:

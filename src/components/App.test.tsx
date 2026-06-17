@@ -1273,6 +1273,16 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
         "references/board-1/reference.png",
       );
     });
+    const thumbnail = await waitFor(() => {
+      const image = document.querySelector(
+        '[data-canvas-object-id="ref-1"] .thumb-shell img',
+      ) as HTMLImageElement | null;
+      expect(image).not.toBeNull();
+      return image as HTMLImageElement;
+    });
+    expect(thumbnail.getAttribute("src")).toBe(
+      "folio://thumb/reference-ref-1.jpg",
+    );
     expect(window.folio.getFileDataUrl).not.toHaveBeenCalledWith(
       "references/board-1/reference.png",
     );
@@ -1368,19 +1378,60 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(alphaCard).not.toBeNull();
     expect(bravoCard).not.toBeNull();
 
-    fireEvent.pointerDown(alphaCard, {
+    const alphaRightConnector = within(alphaCard).getByRole("button", {
+      name: /connect alpha from right/i,
+    });
+    const bravoLeftConnector = within(bravoCard).getByRole("button", {
+      name: /connect bravo from left/i,
+    });
+
+    fireEvent.pointerDown(alphaRightConnector, {
       button: 0,
-      shiftKey: true,
-      clientX: 100,
-      clientY: 100,
+      clientX: 242,
+      clientY: 185,
     });
     fireEvent.pointerMove(window, { clientX: 320, clientY: 140 });
-    fireEvent.pointerUp(bravoCard, { clientX: 320, clientY: 140 });
+    fireEvent.pointerUp(bravoLeftConnector, { clientX: 320, clientY: 140 });
 
     await waitFor(() => {
       expect(app.data.canvases[0].edges).toHaveLength(1);
     });
-    expect(document.querySelector(".canvas-edge-path")).not.toBeNull();
+    expect(app.data.canvases[0].edges[0]).toMatchObject({
+      fromId: "alpha",
+      toId: "bravo",
+      fromSide: "right",
+      toSide: "left",
+      direction: "forward",
+    });
+    const edgePath = document.querySelector(
+      ".canvas-edge .canvas-edge-path",
+    ) as SVGPathElement | null;
+    expect(edgePath).not.toBeNull();
+    expect(edgePath?.getAttribute("marker-end")).toBe("url(#canvas-edge-arrow)");
+
+    await user.click(screen.getByRole("button", { name: /bidirectional/i }));
+    await waitFor(() => {
+      expect(app.data.canvases[0].edges[0].direction).toBe("bidirectional");
+    });
+    expect(
+      (document.querySelector(".canvas-edge .canvas-edge-path") as SVGPathElement)
+        .getAttribute("marker-start"),
+    ).toBe("url(#canvas-edge-arrow)");
+
+    await user.click(screen.getByRole("button", { name: /no direction/i }));
+    await waitFor(() => {
+      expect(app.data.canvases[0].edges[0].direction).toBe("none");
+    });
+    const undirectedPath = document.querySelector(
+      ".canvas-edge .canvas-edge-path",
+    ) as SVGPathElement;
+    expect(undirectedPath.getAttribute("marker-start")).toBeNull();
+    expect(undirectedPath.getAttribute("marker-end")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /single direction/i }));
+    await waitFor(() => {
+      expect(app.data.canvases[0].edges[0].direction).toBe("forward");
+    });
 
     const edgeLabelButton = await screen.findByRole("button", {
       name: /edge label: link/i,
@@ -1403,7 +1454,158 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("draws freehand canvas strokes and supports stroke undo", async () => {
+  it("connects item, reference, note, and text objects through side nodes", async () => {
+    const app = setupFolio({
+      data: makeData({
+        canvases: [
+          {
+            ...makeData().canvases[0],
+            itemIds: ["alpha"],
+            positions: { alpha: { x: 80, y: 90 } },
+            references: [
+              {
+                id: "ref-a",
+                filename: "swatch.png",
+                path: "references/board-1/swatch.png",
+                x: 320,
+                y: 90,
+              },
+            ],
+            notes: [
+              {
+                id: "note-a",
+                text: "Check this",
+                x: 80,
+                y: 340,
+              },
+            ],
+            texts: [
+              {
+                id: "text-a",
+                text: "Direction",
+                x: 340,
+                y: 360,
+              },
+            ],
+          },
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openActiveBoardCanvas(user);
+
+    const alphaCard = document.querySelector(
+      '[data-canvas-object-id="alpha"]',
+    ) as HTMLElement;
+    const referenceCard = document.querySelector(
+      '[data-canvas-object-id="ref-a"]',
+    ) as HTMLElement;
+    const noteCard = document.querySelector(
+      '[data-canvas-object-id="note-a"]',
+    ) as HTMLElement;
+    const textCard = document.querySelector(
+      '[data-canvas-object-id="text-a"]',
+    ) as HTMLElement;
+
+    fireEvent.pointerDown(
+      within(alphaCard).getByRole("button", {
+        name: /connect alpha from right/i,
+      }),
+      { button: 0, clientX: 242, clientY: 185 },
+    );
+    fireEvent.pointerMove(window, { clientX: 320, clientY: 185 });
+    fireEvent.pointerUp(
+      within(referenceCard).getByRole("button", {
+        name: /connect swatch\.png from left/i,
+      }),
+      { clientX: 320, clientY: 185 },
+    );
+
+    fireEvent.pointerDown(
+      within(noteCard).getByRole("button", {
+        name: /connect note from right/i,
+      }),
+      { button: 0, clientX: 300, clientY: 415 },
+    );
+    fireEvent.pointerMove(window, { clientX: 340, clientY: 408 });
+    fireEvent.pointerUp(
+      within(textCard).getByRole("button", {
+        name: /connect text from left/i,
+      }),
+      { clientX: 340, clientY: 408 },
+    );
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].edges).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            fromId: "alpha",
+            toId: "ref-a",
+            fromSide: "right",
+            toSide: "left",
+          }),
+          expect.objectContaining({
+            fromId: "note-a",
+            toId: "text-a",
+            fromSide: "right",
+            toSide: "left",
+          }),
+        ]),
+      );
+    });
+  });
+
+  it("adds, edits, and deletes board text with the text tool", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openActiveBoardCanvas(user);
+    const surface = document.querySelector(".canvas-surface") as HTMLElement;
+    expect(surface).not.toBeNull();
+    surface.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        right: CANVAS_WORLD_ORIGIN * 2,
+        bottom: CANVAS_WORLD_ORIGIN * 2,
+        width: CANVAS_WORLD_ORIGIN * 2,
+        height: CANVAS_WORLD_ORIGIN * 2,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    await user.click(screen.getByRole("button", { name: /text tool/i }));
+    fireEvent.pointerDown(surface, { button: 0, clientX: 20160, clientY: 20180 });
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].texts).toHaveLength(1);
+    });
+    expect(app.data.canvases[0].texts?.[0]).toMatchObject({
+      text: "Text",
+      x: 160,
+      y: 180,
+    });
+
+    const textArea = await screen.findByLabelText(/board text/i);
+    await user.clear(textArea);
+    await user.type(textArea, "Open question");
+    fireEvent.blur(textArea);
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].texts?.[0].text).toBe("Open question");
+    });
+
+    await user.click(screen.getByRole("button", { name: /delete text/i }));
+    await waitFor(() => {
+      expect(app.data.canvases[0].texts).toHaveLength(0);
+    });
+  });
+
+  it("draws freehand canvas strokes and supports eraser and stroke undo", async () => {
     const app = setupFolio();
     const user = userEvent.setup();
 
@@ -1434,7 +1636,25 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.canvases[0].strokes).toHaveLength(1);
       expect(app.data.canvases[0].strokes?.[0].path).toContain("M 20110 20120");
     });
-    expect(document.querySelector(".canvas-stroke-path")).not.toBeNull();
+    const firstStrokePath = document.querySelector(".canvas-stroke-path");
+    expect(firstStrokePath).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /eraser tool/i }));
+    fireEvent.pointerDown(firstStrokePath as Element, { button: 0 });
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].strokes).toHaveLength(0);
+    });
+
+    await user.click(screen.getByRole("button", { name: /pen tool/i }));
+    fireEvent.pointerDown(surface, { button: 0, clientX: 20110, clientY: 20120 });
+    fireEvent.pointerMove(window, { clientX: 20130, clientY: 20144 });
+    fireEvent.pointerMove(window, { clientX: 20160, clientY: 20170 });
+    fireEvent.pointerUp(window, { clientX: 20160, clientY: 20170 });
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].strokes).toHaveLength(1);
+    });
 
     fireEvent.keyDown(window, { key: "z", metaKey: true });
     await waitFor(() => {

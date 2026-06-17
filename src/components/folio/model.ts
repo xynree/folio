@@ -124,6 +124,7 @@ export function createCanvas(
     edges: [],
     references: [],
     strokes: [],
+    texts: [],
   };
 }
 

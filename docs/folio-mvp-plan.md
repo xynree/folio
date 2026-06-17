@@ -279,19 +279,24 @@ Reference images belong to a canvas, not to items. They are first-class position
 - [x] Browse reference button: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)` — drops new reference at a default position near the centre of the current viewport
 - [x] References copy to `~/Documents/Folio/references/<board-id>/` on disk, never into the main archive
 - [x] Reference card on canvas: generated small thumbnail, pinned remove button, and drag-anywhere behavior
+- [x] Reference thumbnails render from `ensureReferenceThumbnail(referenceId, path)` on the board surface instead of falling back to full source files
 - [x] Reference cards can be moved freely like item cards — position saved to `canvas.references[].x/y`
-- [x] Edges can connect reference cards to item cards (same `CanvasEdge` mechanism — `fromId`/`toId` can point to either)
+- [x] Edges can connect reference cards to item cards, notes, and text elements through the shared `CanvasEdge` mechanism
 
-### 3.5 Edges (connections between items)
+### 3.5 Edges and side connectors
 
-- [x] Hold Shift and drag from one item, note, or reference card to another to draw a connection edge
-- [x] Edge renders as a curved line between the two cards, with an optional label
+- [x] Each card-like canvas object exposes FigJam-style side connector nodes at the middle of the top, right, bottom, and left edges
+- [x] Connector nodes work for archive item cards, reference cards, notes, and board text elements
+- [x] Drag from one connector node to another to draw a connection edge
+- [x] Hold Shift and drag from one item, note, reference, or text card to another as a shortcut to draw a connection edge
+- [x] Edge renders as a derived SVG curve between the selected sides, with an optional label
+- [x] Edge direction can be changed between no direction, single direction, and bidirectional; arrows render only for directed modes
 - [x] Click an edge to select it; double-click to edit the label inline
 - [x] Delete selected edge with Backspace/Delete
-- [x] Edges stored as `{ id, fromId, toId, label? }` in `canvas.edges[]`
+- [x] Edges stored as `{ id, fromId, toId, fromSide?, toSide?, direction?, label? }` in `canvas.edges[]`
 - [x] Edges update position dynamically as cards are dragged
 
-### 3.6 Freehand strokes
+### 3.6 Freehand strokes and board text
 
 - [x] Pen tool in canvas toolbar toggles freehand drawing mode
 - [x] Draw directly on the canvas surface — to circle items, annotate, sketch quick marks
@@ -299,6 +304,9 @@ Reference images belong to a canvas, not to items. They are first-class position
 - [x] Stroke color inherits canvas color by default
 - [x] Strokes stored as `{ id, path, color }` in `canvas.strokes[]`
 - [x] Undo (⌘Z) removes last stroke
+- [x] Eraser tool deletes individual freehand strokes from the board
+- [x] Text tool places editable text elements directly on the canvas surface
+- [x] Text elements can be edited, dragged, connected, and deleted; text is stored in `canvas.texts[]`
 
 ---
 
@@ -374,7 +382,7 @@ This phase makes references and inspiration first-class. The goal is to move fro
 
 ### 5.1 Reference capture
 
-- [ ] Finish Browse reference button: `window.folio.openFileDialog()` -> `copyReference(canvasId, paths)` -> place at the center of the visible canvas viewport.
+- [x] Finish Browse reference button: `window.folio.openFileDialog()` -> `copyReference(canvasId, paths)` -> place at the center of the visible canvas viewport.
 - [ ] Add paste-from-clipboard support for images and copied files.
 - [ ] Add URL reference capture: store URL, title, source domain, optional image, and captured date.
 - [ ] Add reference metadata: `sourceUrl`, `sourceTitle`, `author`, `capturedAt`, `notes`, and `tagIds`.
@@ -384,13 +392,14 @@ This phase makes references and inspiration first-class. The goal is to move fro
 
 ### 5.2 Edge drawing and rendering
 
-- [ ] Render `canvas.edges[]` as SVG curves above the canvas background and below cards.
-- [ ] Edges can connect any canvas object: archive item, reference, note, and later section/frame nodes.
-- [ ] Hold Shift and drag from a source card to a target card to create an edge.
-- [ ] Add visible connection handles on hover or while Shift is held.
-- [ ] Update edge endpoints live when connected cards move.
-- [ ] Support edge selection, keyboard delete, and click-away deselection.
-- [ ] Store edge geometry as derived layout, not persisted absolute path data, unless manual bend points are added later.
+- [x] Render `canvas.edges[]` as SVG curves above the canvas background and below cards.
+- [x] Edges can connect current canvas objects: archive item, reference, note, and board text elements.
+- [x] Hold Shift and drag from a source card to a target card to create an edge.
+- [x] Add visible connection handles on hover/focus for each card side.
+- [x] Update edge endpoints live when connected cards move.
+- [x] Support edge selection, keyboard delete, and click-away deselection.
+- [x] Store edge geometry as derived layout, not persisted absolute path data, unless manual bend points are added later.
+- [x] Support no-direction, single-direction, and bidirectional edge rendering.
 
 ### 5.3 Relationship labels and types
 

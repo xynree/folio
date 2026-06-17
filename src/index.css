@@ -2646,11 +2646,21 @@ button svg {
   stroke-linejoin: round;
   stroke-opacity: 0.82;
   stroke-width: 5;
+  pointer-events: none;
   vector-effect: non-scaling-stroke;
+}
+
+.canvas-stroke-erasable {
+  cursor: cell;
+  pointer-events: stroke;
 }
 
 .canvas-stroke-preview {
   stroke-dasharray: 8 7;
+}
+
+.canvas-ink-layer marker path {
+  fill: #8a6a4d;
 }
 
 .canvas-edge {
@@ -2700,12 +2710,12 @@ button svg {
   pointer-events: auto;
 }
 
-.canvas-edge-label button,
-.canvas-edge-label input {
+.canvas-edge-label > button,
+.canvas-edge-label > input {
   transform: translate(-50%, -50%);
 }
 
-.canvas-edge-label button {
+.canvas-edge-label > button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -2721,20 +2731,20 @@ button svg {
   font-weight: 760;
 }
 
-.canvas-edge-label button span {
+.canvas-edge-label > button span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.canvas-edge-label-selected button {
+.canvas-edge-label-selected > button {
   color: #fffaf0;
   border-color: #385d56;
   background: #385d56;
 }
 
-.canvas-edge-label input {
+.canvas-edge-label > input {
   width: 132px;
   min-height: 28px;
   padding: 4px 7px;
@@ -2743,8 +2753,42 @@ button svg {
   box-shadow: 0 8px 24px rgba(56, 40, 24, 0.14);
 }
 
+.canvas-edge-direction-bar {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(202, 185, 161, 0.92);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.96);
+  box-shadow: 0 8px 20px rgba(56, 40, 24, 0.12);
+  transform: translateX(-50%);
+}
+
+.canvas-edge-direction-bar button {
+  width: 24px;
+  min-width: 24px;
+  min-height: 22px;
+  padding: 3px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.canvas-edge-direction-bar button:hover,
+.canvas-edge-direction-bar button:focus-visible,
+.canvas-edge-direction-bar .canvas-edge-direction-active {
+  color: #fffaf0;
+  outline: 0;
+  background: #385d56;
+}
+
 .canvas-card,
-.canvas-note {
+.canvas-note,
+.canvas-text-card {
   position: absolute;
   top: 0;
   left: 0;
@@ -2886,6 +2930,103 @@ button svg {
   min-height: 24px;
   padding: 3px 7px;
   background: #fffaf0;
+}
+
+.canvas-text-card {
+  display: grid;
+  width: 220px;
+  min-height: 96px;
+  padding: 10px 34px 10px 10px;
+  border-color: #b9c6be;
+  background: rgba(255, 253, 248, 0.94);
+}
+
+.canvas-text-card textarea {
+  min-height: 74px;
+  border: 0;
+  color: #2f2a25;
+  cursor: text;
+  background: transparent;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 680;
+  line-height: 1.2;
+  outline: 0;
+  resize: vertical;
+}
+
+.canvas-text-delete-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 4;
+  width: 26px;
+  min-width: 26px;
+  min-height: 24px;
+  padding: 3px;
+}
+
+.canvas-connector-nodes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.canvas-connector-node {
+  position: absolute;
+  z-index: 5;
+  width: 12px;
+  min-width: 12px;
+  height: 12px;
+  min-height: 12px;
+  padding: 0;
+  border: 2px solid #385d56;
+  border-radius: 999px;
+  background: #fffdf8;
+  box-shadow: 0 2px 8px rgba(56, 40, 24, 0.18);
+  cursor: crosshair;
+  opacity: 0;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
+}
+
+.canvas-connector-node-top {
+  top: 0;
+  left: 50%;
+}
+
+.canvas-connector-node-right {
+  top: 50%;
+  left: 100%;
+}
+
+.canvas-connector-node-bottom {
+  top: 100%;
+  left: 50%;
+}
+
+.canvas-connector-node-left {
+  top: 50%;
+  left: 0;
+}
+
+.canvas-card:hover .canvas-connector-node,
+.canvas-card:focus-within .canvas-connector-node,
+.canvas-note:hover .canvas-connector-node,
+.canvas-note:focus-within .canvas-connector-node,
+.canvas-text-card:hover .canvas-connector-node,
+.canvas-text-card:focus-within .canvas-connector-node {
+  opacity: 1;
+}
+
+.canvas-connector-node:hover,
+.canvas-connector-node:focus-visible {
+  opacity: 1;
+  outline: 0;
+  transform: translate(-50%, -50%) scale(1.18);
 }
 
 @keyframes view-item-enter {

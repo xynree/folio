@@ -29,6 +29,7 @@ export function makeCanvas(id: string, overrides: Partial<Canvas> = {}): Canvas 
     edges: [],
     references: [],
     strokes: [],
+    texts: [],
     ...overrides,
   };
 }

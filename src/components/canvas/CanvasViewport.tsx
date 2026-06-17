@@ -219,7 +219,7 @@ export function CanvasViewport({
       if (!(target instanceof Element)) return;
       if (
         target.closest(
-          ".canvas-card, .canvas-note, button, input, textarea, select, [data-no-canvas-pan]",
+          ".canvas-card, .canvas-note, .canvas-text-card, button, input, textarea, select, [data-no-canvas-pan]",
         )
       ) {
         return;
