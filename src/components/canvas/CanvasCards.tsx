@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { GripVertical, Maximize2, Trash2, X } from "lucide-react";
+import { GripVertical, Trash2, X } from "lucide-react";
 import type {
   CanvasConnectionSide,
   CanvasNote,
@@ -23,7 +23,7 @@ type ConnectorPointerDownHandler = (
 ) => void;
 
 type ResizePointerDownHandler = (
-  event: React.PointerEvent<HTMLButtonElement>,
+  event: React.PointerEvent<HTMLElement>,
 ) => void;
 
 const CONNECTOR_SIDES: CanvasConnectionSide[] = ["top", "right", "bottom", "left"];
@@ -72,7 +72,7 @@ function ConnectionHandles({
   );
 }
 
-function ResizeHandle({
+function ResizeCorner({
   label,
   onPointerDown,
 }: {
@@ -80,16 +80,12 @@ function ResizeHandle({
   onPointerDown: ResizePointerDownHandler;
 }) {
   return (
-    <button
-      className="icon-button canvas-card-resize-handle"
-      type="button"
-      aria-label={`Resize ${label}`}
-      title="Resize"
+    <span
+      className="canvas-card-resize-corner"
+      title={`Resize ${label}`}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={onPointerDown}
-    >
-      <ButtonIcon icon={Maximize2} size={13} />
-    </button>
+    />
   );
 }
 
@@ -127,27 +123,24 @@ export function CanvasItemCard({
       onClickCapture={onClickCapture}
       onClick={() => onOpen(item.id)}
     >
-      <div className="canvas-card-media">
-        <LazyThumbnail
-          item={item}
-          thumbUrls={thumbUrls}
-          setThumbUrls={setThumbUrls}
-        />
-        <button
-          className="icon-button canvas-card-remove-button"
-          type="button"
-          aria-label={`Remove ${item.title || basename(item.path)} from board`}
-          title="Remove from board"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove(item.id);
-          }}
-        >
-          <ButtonIcon icon={X} />
-        </button>
-      </div>
-      <strong>{label}</strong>
-      <ResizeHandle label={label} onPointerDown={onResizePointerDown} />
+      <LazyThumbnail
+        item={item}
+        thumbUrls={thumbUrls}
+        setThumbUrls={setThumbUrls}
+      />
+      <button
+        className="icon-button canvas-card-remove-button"
+        type="button"
+        aria-label={`Remove ${item.title || basename(item.path)} from board`}
+        title="Remove from board"
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove(item.id);
+        }}
+      >
+        <ButtonIcon icon={X} />
+      </button>
+      <ResizeCorner label={label} onPointerDown={onResizePointerDown} />
       <ConnectionHandles
         label={label}
         onConnectorPointerDown={onConnectorPointerDown}
@@ -199,21 +192,6 @@ export function ReferenceCard({
       onPointerDown={onPointerDown}
       onClickCapture={onClickCapture}
     >
-      <div className="canvas-card-handle">
-        <span>Reference</span>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label={`Remove ${reference.filename}`}
-          title="Remove reference"
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove(reference.id);
-          }}
-        >
-          <ButtonIcon icon={X} />
-        </button>
-      </div>
       <span className="thumb-shell">
         {src ? (
           <img loading="lazy" src={src} alt="" draggable={false} />
@@ -221,8 +199,19 @@ export function ReferenceCard({
           <span className="thumb-placeholder">Ref</span>
         )}
       </span>
-      <strong>{reference.filename}</strong>
-      <ResizeHandle
+      <button
+        className="icon-button canvas-card-remove-button"
+        type="button"
+        aria-label={`Remove ${reference.filename}`}
+        title="Remove reference"
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove(reference.id);
+        }}
+      >
+        <ButtonIcon icon={X} />
+      </button>
+      <ResizeCorner
         label={reference.filename}
         onPointerDown={onResizePointerDown}
       />
@@ -296,7 +285,7 @@ export function CanvasNoteCard({
         }}
         onChange={(event) => setDraft(event.target.value)}
       />
-      <ResizeHandle label="note" onPointerDown={onResizePointerDown} />
+      <ResizeCorner label="note" onPointerDown={onResizePointerDown} />
       <ConnectionHandles
         label="note"
         onConnectorPointerDown={onConnectorPointerDown}
@@ -388,7 +377,7 @@ export function CanvasTextCard({
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
       />
-      <ResizeHandle label="text" onPointerDown={onResizePointerDown} />
+      <ResizeCorner label="text" onPointerDown={onResizePointerDown} />
       <ConnectionHandles
         label="text"
         onConnectorPointerDown={onConnectorPointerDown}

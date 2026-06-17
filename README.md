@@ -9,7 +9,7 @@ Folio is a local-first Electron app for collecting visual work, browsing it by t
 - A persistent bottom heatmap inspired by GitHub activity grids, with upload intensity capped at 8 items per day.
 - A resizable tags sidebar with per-tag counts and thumbnail previews.
 - A right-side board dock that opens to a board browser or a focused canvas board.
-- Canvas boards with draggable and resizable archive cards, reference images, notes, and text.
+- Canvas boards with image-only draggable and resizable archive cards, reference images, notes, and text.
 - Board headers show when each board was created and when it was last saved.
 - Side-node connection edges between canvas items, references, notes, and board text, with inline labels and direction modes.
 - Freehand pen strokes on boards with an eraser and Cmd+Z undo.

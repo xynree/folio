@@ -359,16 +359,20 @@ describe("canvas components", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Alpha"));
+    const itemCard = document.querySelector(".canvas-card") as HTMLElement;
+    const resizeCorner = itemCard.querySelector(
+      ".canvas-card-resize-corner",
+    ) as HTMLElement;
+    expect(screen.queryByText("Alpha")).toBeNull();
+    fireEvent.click(itemCard);
     fireEvent.pointerDown(screen.getByLabelText("Connect Alpha from right"));
-    fireEvent.pointerDown(screen.getByLabelText("Resize Alpha"));
+    fireEvent.pointerDown(resizeCorner);
     fireEvent.click(screen.getByLabelText("Remove Alpha from board"));
 
     expect(onOpen).toHaveBeenCalledWith("alpha");
     expect(onConnector).toHaveBeenCalledWith(expect.any(Object), "right");
     expect(onResizePointerDown).toHaveBeenCalledWith(expect.any(Object));
     expect(onRemove).toHaveBeenCalledWith("alpha");
-    const itemCard = document.querySelector(".canvas-card") as HTMLElement;
     expect(itemCard.style.height).toBe("280px");
     expect(itemCard.style.width).toBe("240px");
 
@@ -388,8 +392,14 @@ describe("canvas components", () => {
         "folio://thumb/reference.jpg",
       ),
     );
-    expect(screen.getByLabelText("Resize reference.png")).not.toBeNull();
+    expect(screen.queryByText("reference.png")).toBeNull();
+    const referenceCard = document.querySelector(".reference-card") as HTMLElement;
+    const referenceResizeCorner = referenceCard.querySelector(
+      ".canvas-card-resize-corner",
+    ) as HTMLElement;
+    fireEvent.pointerDown(referenceResizeCorner);
     fireEvent.click(screen.getByLabelText("Remove reference.png"));
+    expect(onResizePointerDown).toHaveBeenCalledWith(expect.any(Object));
     expect(onRemove).toHaveBeenCalledWith("reference-1");
   });
 
@@ -487,9 +497,16 @@ describe("canvas components", () => {
       />,
     );
 
-    fireEvent.pointerDown(screen.getByText("Alpha"));
-    fireEvent.pointerDown(screen.getByLabelText("Resize Alpha"));
-    fireEvent.click(screen.getByText("Alpha"));
+    const itemCard = document.querySelector(
+      '[data-canvas-object-id="alpha"]',
+    ) as HTMLElement;
+    const resizeCorner = itemCard.querySelector(
+      ".canvas-card-resize-corner",
+    ) as HTMLElement;
+
+    fireEvent.pointerDown(itemCard);
+    fireEvent.pointerDown(resizeCorner);
+    fireEvent.click(itemCard);
 
     expect(onStartDrag).toHaveBeenCalledWith(
       expect.any(Object),
@@ -504,7 +521,7 @@ describe("canvas components", () => {
       { x: 1, y: 2, width: 210, height: 246 },
     );
     expect(onOpenItem).toHaveBeenCalledWith("alpha");
-    expect(screen.getByText("reference.png")).not.toBeNull();
+    expect(screen.queryByText("reference.png")).toBeNull();
   });
 
   it("zooms and pans the canvas viewport", () => {

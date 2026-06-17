@@ -95,9 +95,7 @@ button svg {
 .canvas-board-menu-button,
 .canvas-board-menu-popover button,
 .board-edit-popover button,
-.canvas-card-resize-handle,
 .canvas-text-size-control button,
-.canvas-card-handle button,
 .canvas-note button {
   display: inline-flex;
   align-items: center;
@@ -203,9 +201,7 @@ button svg {
 .canvas-board-menu-button:hover,
 .canvas-board-menu-popover button:hover,
 .board-edit-popover button:hover,
-.canvas-card-resize-handle:hover,
 .canvas-text-size-control button:hover,
-.canvas-card-handle button:hover,
 .canvas-note button:hover {
   transform: translateY(-1px);
 }
@@ -1969,9 +1965,7 @@ button svg {
 .canvas-board-minimize-button,
 .canvas-board-new-button,
 .board-edit-popover button,
-.canvas-card-resize-handle,
 .canvas-text-size-control button,
-.canvas-card-handle button,
 .canvas-note button {
   min-height: 30px;
   padding: 6px 10px;
@@ -2924,10 +2918,10 @@ button svg {
 
 .canvas-card {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 8px;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
-  padding: 8px 8px 24px;
+  padding: 0;
+  overflow: hidden;
   animation: board-card-enter var(--motion-medium) var(--motion-pop) backwards;
   transition:
     border-color var(--motion-fast) var(--motion-ease),
@@ -2935,22 +2929,15 @@ button svg {
 }
 
 .reference-card {
-  grid-template-rows: auto minmax(0, 1fr) auto;
   border-color: #b9c6be;
 }
 
-.canvas-card-media {
-  position: relative;
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-}
-
-.canvas-card-media .thumb-shell,
+.canvas-card > .thumb-shell,
 .reference-card > .thumb-shell {
   height: 100%;
   min-height: 0;
   aspect-ratio: auto;
+  border-radius: 7px;
 }
 
 .canvas-card .thumb-shell img {
@@ -2971,46 +2958,25 @@ button svg {
   background: rgba(255, 253, 248, 0.92);
   box-shadow: 0 2px 8px rgba(55, 38, 21, 0.08);
   cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.canvas-card:hover .canvas-card-remove-button,
+.canvas-card:focus-within .canvas-card-remove-button,
+.canvas-note:hover .canvas-note-handle button,
+.canvas-note:focus-within .canvas-note-handle button,
+.canvas-card-remove-button:hover,
+.canvas-card-remove-button:focus-visible {
+  outline: 0;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .canvas-card-remove-button:hover,
 .canvas-card-remove-button:focus-visible {
-  outline: 0;
   background: #fff8eb;
   transform: translateY(-1px);
-}
-
-.canvas-card-handle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 30px;
-  cursor: grab;
-}
-
-.canvas-card-handle span {
-  color: #7c6f61;
-  font-size: 11px;
-  font-weight: 760;
-}
-
-.canvas-card-handle button {
-  width: 26px;
-  min-width: 26px;
-  min-height: 24px;
-  padding: 3px;
-}
-
-.canvas-card strong {
-  min-width: 0;
-  overflow: hidden;
-  padding-right: 22px;
-  font-size: 10px;
-  font-weight: 760;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .canvas-note {
@@ -3047,6 +3013,8 @@ button svg {
   min-width: 26px;
   min-height: 24px;
   padding: 3px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .canvas-note textarea {
@@ -3075,10 +3043,10 @@ button svg {
   display: grid;
   width: 220px;
   min-height: 96px;
-  padding: 0;
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
+  padding: 8px;
+  border: 1px solid rgba(56, 93, 86, 0.42);
+  background: rgba(255, 253, 248, 0.44);
+  box-shadow: 0 4px 16px rgba(56, 40, 24, 0.06);
 }
 
 .canvas-text-card textarea {
@@ -3119,6 +3087,7 @@ button svg {
   min-height: 24px;
   padding: 3px;
   opacity: 0;
+  pointer-events: none;
 }
 
 .canvas-text-size-control {
@@ -3135,6 +3104,7 @@ button svg {
   background: rgba(255, 253, 248, 0.94);
   box-shadow: 0 2px 8px rgba(55, 38, 21, 0.08);
   opacity: 0;
+  pointer-events: none;
 }
 
 .canvas-text-size-control button {
@@ -3160,39 +3130,40 @@ button svg {
 
 .canvas-text-card:hover .canvas-text-delete-button,
 .canvas-text-card:hover .canvas-text-size-control,
-.canvas-text-card:hover .canvas-card-resize-handle,
 .canvas-text-card:focus-within .canvas-text-delete-button,
-.canvas-text-card:focus-within .canvas-text-size-control,
-.canvas-text-card:focus-within .canvas-card-resize-handle {
+.canvas-text-card:focus-within .canvas-text-size-control {
   opacity: 1;
+  pointer-events: auto;
 }
 
-.canvas-card-resize-handle {
+.canvas-card-resize-corner {
   position: absolute;
-  right: 6px;
-  bottom: 6px;
+  right: 0;
+  bottom: 0;
   z-index: 6;
-  width: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  padding: 3px;
-  border: 1px solid rgba(215, 201, 180, 0.88);
-  border-radius: 7px;
-  color: #6d5d4b;
-  background: rgba(255, 253, 248, 0.94);
-  box-shadow: 0 2px 8px rgba(55, 38, 21, 0.08);
+  width: 28px;
+  height: 28px;
   cursor: nwse-resize;
+  touch-action: none;
 }
 
-.canvas-text-card .canvas-card-resize-handle {
-  opacity: 0;
+.canvas-text-card .canvas-card-resize-corner::before,
+.canvas-text-card .canvas-card-resize-corner::after {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  content: "";
+  background: rgba(56, 93, 86, 0.58);
 }
 
-.canvas-card-resize-handle:hover,
-.canvas-card-resize-handle:focus-visible {
-  outline: 0;
-  background: #fff8eb;
-  transform: translateY(-1px);
+.canvas-text-card .canvas-card-resize-corner::before {
+  width: 11px;
+  height: 1px;
+}
+
+.canvas-text-card .canvas-card-resize-corner::after {
+  width: 1px;
+  height: 11px;
 }
 
 .canvas-connector-nodes {

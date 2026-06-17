@@ -1794,10 +1794,11 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(alphaCard.style.width).toBe("162px");
     expect(alphaCard.style.height).toBe("190px");
 
-    const resizeHandle = within(alphaCard).getByRole("button", {
-      name: /resize alpha/i,
-    });
-    fireEvent.pointerDown(resizeHandle, { button: 0, clientX: 100, clientY: 100 });
+    const resizeCorner = alphaCard.querySelector(
+      ".canvas-card-resize-corner",
+    ) as HTMLElement;
+    expect(resizeCorner).not.toBeNull();
+    fireEvent.pointerDown(resizeCorner, { button: 0, clientX: 100, clientY: 100 });
     fireEvent.pointerMove(window, { clientX: 262, clientY: 100 });
 
     await waitFor(() => {
