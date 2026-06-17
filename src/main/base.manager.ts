@@ -52,7 +52,9 @@ export interface FolioManagerInterface {
   saveFolioData(data: FolioData): Promise<void>;
   createProject(input: CreateProjectInput): Promise<FolioData>;
   copyToFolio(filePaths: string[]): Promise<FolioItem[]>;
+  copyToProject(projectId: string, filePaths: string[]): Promise<FolioItem[]>;
   importToFolio(): Promise<FolioItem[]>;
+  importToProject(projectId: string): Promise<FolioItem[]>;
   copyReference(
     canvasId: string,
     filePaths: string[],
@@ -111,6 +113,19 @@ export class FolioManager implements FolioManagerInterface {
       this.copyToFolio(filePaths),
     );
     ipcMain.handle("folio:import-to-folio", () => this.importToFolio());
+    ipcMain.handle(
+      "folio:copy-to-project",
+      (_: unknown, projectId: string, filePaths: string[]) =>
+        this.copyToProject(projectId, filePaths),
+    );
+    ipcMain.handle("folio:import-to-project", (_: unknown, projectId: string) =>
+      this.importToProject(projectId),
+    );
+    ipcMain.handle(
+      "folio:import-sources-to-project",
+      (_: unknown, projectId: string, sources: ImportSource[]) =>
+        this.importSourcesToProject(projectId, sources),
+    );
     ipcMain.handle(
       "folio:copy-reference",
       (_: unknown, canvasId: string, filePaths: string[]) =>
@@ -372,6 +387,42 @@ export class FolioManager implements FolioManagerInterface {
     return this.currentData();
   }
 
+  private async appendItemsToProject(
+    projectId: string,
+    items: FolioItem[],
+  ): Promise<void> {
+    if (!items.length) return;
+
+    const itemIds = items.map((item) => item.id);
+    const savedAt = new Date().toISOString();
+    this.projects = this.projects.map((project) =>
+      project.id === projectId
+        ? {
+            ...project,
+            imageIds: Array.from(new Set([...project.imageIds, ...itemIds])),
+            updatedAt: savedAt,
+          }
+        : project,
+    );
+
+    await Promise.all([
+      this.archiveManager.save(this.version),
+      this.storageManager.saveProjects(
+        this.projectsPath,
+        this.projects,
+        this.version,
+      ),
+    ]);
+  }
+
+  private getProjectOrThrow(projectId: string): Project {
+    const project = this.projects.find((candidate) => candidate.id === projectId);
+    if (!project) {
+      throw new Error(`Project ${projectId} was not found.`);
+    }
+    return project;
+  }
+
   async saveItems(items: FolioItem[]): Promise<void> {
     this.archiveManager.setItems(items);
     await this.archiveManager.save(this.version);
@@ -402,6 +453,22 @@ export class FolioManager implements FolioManagerInterface {
     return items;
   }
 
+  async copyToProject(projectId: string, filePaths: string[]): Promise<FolioItem[]> {
+    const project = this.getProjectOrThrow(projectId);
+    const items = await this.archiveManager.copyToProject(
+      project.id,
+      project.folderPath,
+      filePaths,
+    );
+    await this.appendItemsToProject(project.id, items);
+
+    void this.archiveManager
+      .ensureThumbnails(items.map((item) => item.id))
+      .catch((error) => console.error("Thumbnail generation failed", error));
+
+    return items;
+  }
+
   async importToFolio(): Promise<FolioItem[]> {
     const selection = await this.chooseImportFilePaths();
     if (!selection.filePaths.length) return [];
@@ -413,6 +480,38 @@ export class FolioManager implements FolioManagerInterface {
         await this.removeTemporaryDirectory(selection.cleanupDir);
       }
     }
+  }
+
+  async importToProject(projectId: string): Promise<FolioItem[]> {
+    const selection = await this.chooseImportFilePaths();
+    if (!selection.filePaths.length) return [];
+
+    try {
+      return await this.copyToProject(projectId, selection.filePaths);
+    } finally {
+      if (selection.cleanupDir) {
+        await this.removeTemporaryDirectory(selection.cleanupDir);
+      }
+    }
+  }
+
+  async importSourcesToProject(
+    projectId: string,
+    sources: ImportSource[],
+  ): Promise<FolioItem[]> {
+    const project = this.getProjectOrThrow(projectId);
+    const items = await this.archiveManager.importProjectItems(
+      project.id,
+      project.folderPath,
+      sources,
+    );
+    await this.appendItemsToProject(project.id, items);
+
+    void this.archiveManager
+      .ensureThumbnails(items.map((item) => item.id))
+      .catch((error) => console.error("Thumbnail generation failed", error));
+
+    return items;
   }
 
   async copyReference(
@@ -700,7 +799,12 @@ export class FolioManager implements FolioManagerInterface {
 
   private async scanArchiveFiles(): Promise<ReconciliationFile[]> {
     const folioRoot = this.folioRoot;
-    const archiveRoot = path.join(folioRoot, "items");
+    const roots = [
+      path.join(folioRoot, "items"),
+      ...this.projects.map((project) =>
+        path.join(folioRoot, project.folderPath, "images"),
+      ),
+    ];
     const files: ReconciliationFile[] = [];
 
     async function walk(dir: string): Promise<void> {
@@ -734,7 +838,9 @@ export class FolioManager implements FolioManagerInterface {
       }
     }
 
-    await walk(archiveRoot);
+    for (const root of roots) {
+      await walk(root);
+    }
     return files;
   }
 

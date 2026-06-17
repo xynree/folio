@@ -2,4 +2,9 @@
 // "path" = drag & drop or file picker; "buffer" = clipboard paste.
 export type ImportSource =
   | { kind: "path"; filePath: string }
-  | { kind: "buffer"; data: Buffer; ext: string; filename?: string };
+  | {
+      kind: "buffer";
+      data: Buffer | Uint8Array | ArrayBuffer;
+      ext: string;
+      filename?: string;
+    };

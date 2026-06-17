@@ -3,6 +3,7 @@ import type {
   CanvasReference,
   FolioData,
   FolioItem,
+  ImportSource,
   ProjectStatus,
   ReconciliationResult,
   ThumbnailUrls,
@@ -27,6 +28,18 @@ const folioApi = {
 
   importToFolio: (): Promise<FolioItem[]> =>
     ipcRenderer.invoke("folio:import-to-folio"),
+
+  copyToProject: (projectId: string, filePaths: string[]): Promise<FolioItem[]> =>
+    ipcRenderer.invoke("folio:copy-to-project", projectId, filePaths),
+
+  importToProject: (projectId: string): Promise<FolioItem[]> =>
+    ipcRenderer.invoke("folio:import-to-project", projectId),
+
+  importSourcesToProject: (
+    projectId: string,
+    sources: ImportSource[],
+  ): Promise<FolioItem[]> =>
+    ipcRenderer.invoke("folio:import-sources-to-project", projectId, sources),
 
   copyReference: (
     canvasId: string,

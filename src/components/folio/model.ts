@@ -1,4 +1,4 @@
-import type { Canvas, CanvasPosition, FolioItem, Tag } from "../../types";
+import type { Canvas, CanvasPosition, FolioData, FolioItem, Tag } from "../../types";
 import { CANVAS_COLORS, IMAGE_FILE_PATTERN } from "./constants";
 
 export function createId(prefix: string) {
@@ -15,6 +15,39 @@ export function mergeItems(
   const byId = new Map(current.map((item) => [item.id, item]));
   incoming.forEach((item) => byId.set(item.id, item));
   return Array.from(byId.values());
+}
+
+export function mergeImportedItemsIntoProject(
+  current: FolioData,
+  imported: FolioItem[],
+  projectId?: string | null,
+  savedAt = new Date().toISOString(),
+): FolioData {
+  const items = mergeItems(current.items, imported);
+  if (!projectId || !imported.length) {
+    return { ...current, items };
+  }
+
+  const importedIds = imported.map((item) => item.id);
+  const importedIdSet = new Set(importedIds);
+
+  return {
+    ...current,
+    items: items.map((item) =>
+      importedIdSet.has(item.id) && !item.projectId
+        ? { ...item, projectId }
+        : item,
+    ),
+    projects: current.projects.map((project) =>
+      project.id === projectId
+        ? {
+            ...project,
+            imageIds: Array.from(new Set([...project.imageIds, ...importedIds])),
+            updatedAt: savedAt,
+          }
+        : project,
+    ),
+  };
 }
 
 export function dateKeyFromDate(date: Date): string {

@@ -20,6 +20,7 @@ import type {
   Canvas,
   FolioData,
   FolioItem,
+  ImportSource,
   ReconciliationResult,
   ThumbnailUrls,
 } from "../types";
@@ -36,6 +37,7 @@ import {
   CANVAS_DOCK_MIN_WIDTH,
   CANVAS_SPLITTER_WIDTH,
   EMPTY_DATA,
+  IMAGE_FILE_PATTERN,
   ITEM_DRAG_MIME,
 } from "./folio/constants";
 import type {
@@ -59,6 +61,7 @@ import {
   formatCount,
   getGaps,
   markCanvasSaved,
+  mergeImportedItemsIntoProject,
   mergeItems,
 } from "./folio/model";
 import { ReconciliationNotice } from "./layout/ReconciliationNotice";
@@ -74,6 +77,16 @@ const TAGS_SIDEBAR_DEFAULT_WIDTH = 176;
 const TAGS_SIDEBAR_MIN_WIDTH = 132;
 const TAGS_SIDEBAR_MAX_WIDTH = 360;
 type WorkspacePanelMode = "left" | "split" | "right";
+
+function clipboardImageExtension(file: File) {
+  const filenameExt = file.name.match(/\.[a-z0-9]+$/i)?.[0];
+  if (filenameExt) return filenameExt.toLowerCase();
+  if (file.type === "image/jpeg") return ".jpg";
+  if (file.type === "image/png") return ".png";
+  if (file.type === "image/webp") return ".webp";
+  if (file.type === "image/gif") return ".gif";
+  return ".png";
+}
 
 function normalizeFolioData(data: FolioData): FolioData {
   return {
@@ -155,32 +168,6 @@ export function AppShell() {
     [saveData],
   );
 
-  const appendItemsToActiveProject = useCallback(
-    (current: FolioData, imported: FolioItem[]) => {
-      if (!activeProjectId || !imported.length) return current;
-      const importedIds = imported.map((item) => item.id);
-      const importedIdSet = new Set(importedIds);
-      return {
-        ...current,
-        items: current.items.map((item) =>
-          importedIdSet.has(item.id) && !item.projectId
-            ? { ...item, projectId: activeProjectId }
-            : item,
-        ),
-        projects: current.projects.map((project) =>
-          project.id === activeProjectId
-            ? {
-                ...project,
-                imageIds: Array.from(new Set([...project.imageIds, ...importedIds])),
-                updatedAt: new Date().toISOString(),
-              }
-            : project,
-        ),
-      };
-    },
-    [activeProjectId],
-  );
-
   const importFilePaths = useCallback(
     async (filePaths: string[]) => {
       const uniquePaths = Array.from(new Set(filePaths.filter(Boolean)));
@@ -188,16 +175,15 @@ export function AppShell() {
 
       setBusy(true);
       try {
-        const imported = await window.folio.copyToFolio(uniquePaths);
+        const imported = activeProjectId && window.folio.copyToProject
+          ? await window.folio.copyToProject(activeProjectId, uniquePaths)
+          : await window.folio.copyToFolio(uniquePaths);
         if (imported.length) {
-          const current = dataRef.current;
           putData(
-            appendItemsToActiveProject(
-              {
-                ...current,
-                items: mergeItems(current.items, imported),
-              },
+            mergeImportedItemsIntoProject(
+              dataRef.current,
               imported,
+              activeProjectId,
             ),
           );
           setToast(`${formatCount(imported.length, "item")} added to today`);
@@ -211,7 +197,7 @@ export function AppShell() {
         setBusy(false);
       }
     },
-    [appendItemsToActiveProject, putData],
+    [activeProjectId, putData],
   );
 
   useEffect(() => {
@@ -584,17 +570,14 @@ export function AppShell() {
   const handleOpenDialog = useCallback(async () => {
     setBusy(true);
     try {
-      const imported = await chooseAndImportItems();
+      const imported = await chooseAndImportItems(activeProjectId);
       if (!imported.length) return;
 
-      const current = dataRef.current;
       putData(
-        appendItemsToActiveProject(
-          {
-            ...current,
-            items: mergeItems(current.items, imported),
-          },
+        mergeImportedItemsIntoProject(
+          dataRef.current,
           imported,
+          activeProjectId,
         ),
       );
       setToast(`${formatCount(imported.length, "item")} added to today`);
@@ -604,7 +587,7 @@ export function AppShell() {
     } finally {
       setBusy(false);
     }
-  }, [appendItemsToActiveProject, putData]);
+  }, [activeProjectId, putData]);
 
   const handleDrop = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
@@ -621,6 +604,79 @@ export function AppShell() {
     },
     [importFilePaths],
   );
+
+  const handlePaste = useCallback(
+    async (event: ClipboardEvent) => {
+      if (!activeProjectId || !event.clipboardData) return;
+
+      const files = Array.from(event.clipboardData.files).filter((file) => {
+        const filePath = window.folio.getPathForFile(file);
+        return IMAGE_FILE_PATTERN.test(filePath || file.name) ||
+          file.type.startsWith("image/");
+      });
+      if (!files.length) return;
+
+      const filePaths: string[] = [];
+      const sources: ImportSource[] = [];
+
+      for (const file of files) {
+        const filePath = window.folio.getPathForFile(file);
+        if (filePath) {
+          filePaths.push(filePath);
+          continue;
+        }
+
+        if (file.type.startsWith("image/")) {
+          sources.push({
+            kind: "buffer",
+            data: await file.arrayBuffer(),
+            ext: clipboardImageExtension(file),
+            filename: file.name || "pasted-image",
+          });
+        }
+      }
+
+      if (!filePaths.length && !sources.length) return;
+
+      event.preventDefault();
+      setBusy(true);
+      try {
+        const importedFromPaths = filePaths.length && window.folio.copyToProject
+          ? await window.folio.copyToProject(activeProjectId, filePaths)
+          : [];
+        const importedFromSources =
+          sources.length && window.folio.importSourcesToProject
+            ? await window.folio.importSourcesToProject(activeProjectId, sources)
+            : [];
+        const imported = [...importedFromPaths, ...importedFromSources];
+
+        if (!imported.length) {
+          setToast("No new items added");
+          return;
+        }
+
+        putData(
+          mergeImportedItemsIntoProject(
+            dataRef.current,
+            imported,
+            activeProjectId,
+          ),
+        );
+        setToast(`${formatCount(imported.length, "item")} pasted`);
+      } catch (error) {
+        console.error(error);
+        setToast(getImportFailureMessage(error, "Paste failed"));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [activeProjectId, putData],
+  );
+
+  useEffect(() => {
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [handlePaste]);
 
   const handleDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -971,6 +1027,7 @@ export function AppShell() {
             Projects
           </button>
           <strong className="active-project-title">{activeProject.title}</strong>
+          <span className="active-project-surface">All Images</span>
           <div
             className="view-tabs workspace-panel-mode-control"
             aria-label="Workspace panel view"
@@ -1230,6 +1287,7 @@ export function AppShell() {
               <CanvasView
                 data={data}
                 activeCanvasId={activeCanvasId}
+                activeProjectId={activeProjectId}
                 canvasDetailRequestId={canvasDetailRequestId}
                 setActiveCanvasId={setActiveCanvasId}
                 onOpenItem={openItemDetails}

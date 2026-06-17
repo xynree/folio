@@ -487,6 +487,14 @@ button svg {
   white-space: nowrap;
 }
 
+.active-project-surface {
+  position: absolute;
+  right: 16px;
+  color: #6f6255;
+  font-size: 12px;
+  font-weight: 720;
+}
+
 .workspace-panel-mode-control {
   justify-self: center;
   z-index: 5;

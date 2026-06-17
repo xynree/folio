@@ -331,13 +331,13 @@ This phase turns the current archive and board system into a project-based creat
 
 ### 4.2 Project image intake
 
-- [ ] Add an All Images view inside each project, backed by `Project.imageIds`.
-- [ ] Dragging image files into an open project should copy them into `projects/<project>/images/`, create `FolioItem` records, and append them to `Project.imageIds`.
-- [ ] Pasting images or copied image files into an open project should use the same import path as drag/drop.
-- [ ] The Import button and macOS Photos picker should import into the active project when a project is open.
-- [ ] Dropping a new image directly onto a project board should first add it to the project's All Images list, then place it on the board.
-- [ ] Imported project images should continue to store optional `mediaWidth` and `mediaHeight` for proportional canvas card sizing.
-- [ ] Reconciliation should scan project `images/` folders in addition to the legacy archive `items/` folder.
+- [x] Add an All Images view inside each project, backed by `Project.imageIds`.
+- [x] Dragging image files into an open project should copy them into `projects/<project>/images/`, create `FolioItem` records, and append them to `Project.imageIds`.
+- [x] Pasting images or copied image files into an open project should use the same import path as drag/drop.
+- [x] The Import button and macOS Photos picker should import into the active project when a project is open.
+- [x] Dropping a new image directly onto a project board should first add it to the project's All Images list, then place it on the board.
+- [x] Imported project images should continue to store optional `mediaWidth` and `mediaHeight` for proportional canvas card sizing.
+- [x] Reconciliation should scan project `images/` folders in addition to the legacy archive `items/` folder.
 
 ### 4.3 Works view
 

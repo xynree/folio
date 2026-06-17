@@ -24,7 +24,7 @@ export class JsonSaveStrategy<T> implements SaveStrategy<T> {
  */
 export interface FileSaveSource {
   kind: "path" | "buffer";
-  source: string | Buffer;
+  source: string | Buffer | Uint8Array | ArrayBuffer;
 }
 
 export class FileSaveStrategy implements SaveStrategy<FileSaveSource> {
@@ -32,7 +32,11 @@ export class FileSaveStrategy implements SaveStrategy<FileSaveSource> {
     if (data.kind === "path") {
       await fs.copyFile(data.source as string, destPath);
     } else {
-      await fs.writeFile(destPath, data.source as Buffer);
+      const source = data.source as Buffer | Uint8Array | ArrayBuffer;
+      await fs.writeFile(
+        destPath,
+        source instanceof ArrayBuffer ? Buffer.from(source) : source,
+      );
     }
   }
 }

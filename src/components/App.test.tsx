@@ -61,6 +61,9 @@ function setupFolio({
   vi.mocked(window.folio.openFileDialog).mockResolvedValue(dialogPaths);
   vi.mocked(window.folio.copyToFolio).mockResolvedValue(importedItems);
   vi.mocked(window.folio.importToFolio).mockResolvedValue(importedItems);
+  vi.mocked(window.folio.copyToProject).mockResolvedValue(importedItems);
+  vi.mocked(window.folio.importToProject).mockResolvedValue(importedItems);
+  vi.mocked(window.folio.importSourcesToProject).mockResolvedValue(importedItems);
   vi.mocked(window.folio.copyReference).mockResolvedValue([]);
   vi.mocked(window.folio.deleteItems).mockImplementation(async (itemIds) => {
     currentData = {
@@ -447,7 +450,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(window.folio.getFileDataUrl).not.toHaveBeenCalled();
   });
 
-  it("imports files from the import button into the archive", async () => {
+  it("imports files from the import button into the active project", async () => {
     setupFolio({
       dialogPaths: ["/tmp/delta.png"],
       importedItems: [
@@ -463,14 +466,16 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await waitForArchive();
     await user.click(screen.getByRole("button", { name: /import/i }));
 
-    expect(window.folio.importToFolio).toHaveBeenCalledTimes(1);
+    expect(window.folio.importToProject).toHaveBeenCalledWith("project-1");
+    expect(window.folio.importToFolio).not.toHaveBeenCalled();
     expect(window.folio.openFileDialog).not.toHaveBeenCalled();
     expect(window.folio.copyToFolio).not.toHaveBeenCalled();
     expect(await screen.findByText("Delta")).not.toBeNull();
+    expect(screen.getAllByText("4 items").length).toBeGreaterThan(0);
     expect(screen.getByText("1 item added to today")).not.toBeNull();
   });
 
-  it("falls back to the file dialog if the import bridge is not registered yet", async () => {
+  it("falls back to the file dialog if the project import bridge is not registered yet", async () => {
     setupFolio({
       dialogPaths: ["/tmp/delta.png"],
       importedItems: [
@@ -481,18 +486,82 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
         }),
       ],
     });
-    vi.mocked(window.folio.importToFolio).mockRejectedValueOnce(
-      new Error("No handler registered for 'folio:import-to-folio'"),
+    vi.mocked(window.folio.importToProject).mockRejectedValueOnce(
+      new Error("No handler registered for 'folio:import-to-project'"),
     );
     const user = userEvent.setup();
 
     await waitForArchive();
     await user.click(screen.getByRole("button", { name: /import/i }));
 
-    expect(window.folio.importToFolio).toHaveBeenCalledTimes(1);
+    expect(window.folio.importToProject).toHaveBeenCalledWith("project-1");
     expect(window.folio.openFileDialog).toHaveBeenCalledTimes(1);
-    expect(window.folio.copyToFolio).toHaveBeenCalledWith(["/tmp/delta.png"]);
+    expect(window.folio.copyToProject).toHaveBeenCalledWith("project-1", [
+      "/tmp/delta.png",
+    ]);
+    expect(window.folio.copyToFolio).not.toHaveBeenCalled();
     expect(await screen.findByText("Delta")).not.toBeNull();
+    expect(screen.getAllByText("4 items").length).toBeGreaterThan(0);
+  });
+
+  it("drags image files into the open project All Images view", async () => {
+    setupFolio({
+      importedItems: [
+        makeItem("delta", {
+          title: "Delta",
+          path: "projects/studio-archive/images/delta.png",
+          date: "2026-06-15T11:00:00.000Z",
+        }),
+      ],
+    });
+
+    await waitForArchive();
+    fireEvent.drop(document.querySelector(".app-shell") as HTMLElement, {
+      dataTransfer: {
+        files: [new File(["delta"], "delta.png", { type: "image/png" })],
+        types: ["Files"],
+      },
+    });
+
+    await waitFor(() => {
+      expect(window.folio.copyToProject).toHaveBeenCalledWith("project-1", [
+        "delta.png",
+      ]);
+    });
+    expect(await screen.findByText("Delta")).not.toBeNull();
+    expect(screen.getAllByText("4 items").length).toBeGreaterThan(0);
+  });
+
+  it("pastes copied image files into the open project", async () => {
+    setupFolio({
+      importedItems: [
+        makeItem("pasted", {
+          title: "Pasted",
+          path: "projects/studio-archive/images/pasted.png",
+          date: "2026-06-15T11:00:00.000Z",
+        }),
+      ],
+    });
+
+    await waitForArchive();
+    const pasteEvent = new Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    }) as ClipboardEvent;
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        files: [new File(["pasted"], "pasted.png", { type: "image/png" })],
+      },
+    });
+    window.dispatchEvent(pasteEvent);
+
+    await waitFor(() => {
+      expect(window.folio.copyToProject).toHaveBeenCalledWith("project-1", [
+        "pasted.png",
+      ]);
+    });
+    expect(await screen.findByText("Pasted")).not.toBeNull();
+    expect(screen.getAllByText("4 items").length).toBeGreaterThan(0);
   });
 
   it("sorts grid results by most recent first and hides image type labels", async () => {
@@ -1122,8 +1191,10 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await user.click(screen.getByRole("button", { name: /import images/i }));
     await waitFor(() => {
-      expect(window.folio.importToFolio).toHaveBeenCalledTimes(1);
+      expect(window.folio.importToProject).toHaveBeenCalledWith("project-1");
+      expect(window.folio.importToFolio).not.toHaveBeenCalled();
       expect(app.data.items.some((item) => item.id === "echo")).toBe(true);
+      expect(app.data.projects[0].imageIds).toContain("echo");
       expect(app.data.canvases[0].itemIds).toContain("echo");
     });
 
@@ -1394,18 +1465,17 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("drops external image references onto the canvas with thumbnail previews", async () => {
-    const app = setupFolio();
-    vi.mocked(window.folio.getPathForFile).mockReturnValue("/tmp/reference.png");
-    vi.mocked(window.folio.copyReference).mockResolvedValueOnce([
-      {
-        id: "ref-1",
-        filename: "reference.png",
-        path: "references/board-1/reference.png",
-        x: 0,
-        y: 0,
-      },
-    ]);
+  it("drops external images onto a project board as project images", async () => {
+    const app = setupFolio({
+      importedItems: [
+        makeItem("board-image", {
+          title: "Board Image",
+          path: "projects/studio-archive/images/board-image.png",
+          date: "2026-06-15T11:00:00.000Z",
+        }),
+      ],
+    });
+    vi.mocked(window.folio.getPathForFile).mockReturnValue("/tmp/board-image.png");
     const user = userEvent.setup();
 
     await waitForArchive();
@@ -1418,32 +1488,20 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       clientY: 20140,
       dataTransfer: {
         getData: () => "",
-        files: [new File(["reference"], "reference.png", { type: "image/png" })],
+        files: [new File(["board-image"], "board-image.png", { type: "image/png" })],
       },
     });
 
     await waitFor(() => {
-      expect(app.data.canvases[0].references).toHaveLength(1);
+      expect(window.folio.copyToProject).toHaveBeenCalledWith("project-1", [
+        "/tmp/board-image.png",
+      ]);
+      expect(window.folio.copyReference).not.toHaveBeenCalled();
+      expect(app.data.projects[0].imageIds).toContain("board-image");
+      expect(app.data.canvases[0].itemIds).toEqual(["alpha", "board-image"]);
+      expect(app.data.canvases[0].positions["board-image"]).toBeTruthy();
     });
-    await waitFor(() => {
-      expect(window.folio.ensureReferenceThumbnail).toHaveBeenCalledWith(
-        "ref-1",
-        "references/board-1/reference.png",
-      );
-    });
-    const thumbnail = await waitFor(() => {
-      const image = document.querySelector(
-        '[data-canvas-object-id="ref-1"] .thumb-shell img',
-      ) as HTMLImageElement | null;
-      expect(image).not.toBeNull();
-      return image as HTMLImageElement;
-    });
-    expect(thumbnail.getAttribute("src")).toBe(
-      "folio://thumb/reference-ref-1.jpg",
-    );
-    expect(window.folio.getFileDataUrl).not.toHaveBeenCalledWith(
-      "references/board-1/reference.png",
-    );
+    expect(await screen.findByText("Board Image")).not.toBeNull();
   });
 
   it("imports reference images from the focused board toolbar", async () => {

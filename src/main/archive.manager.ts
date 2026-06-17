@@ -75,7 +75,27 @@ export class ArchiveManager {
    * registered in place, which is used by reconciliation's "add to archive" UI.
    */
   async copyToFolio(filePaths: string[]): Promise<FolioItem[]> {
-    const result = await this.importFilePaths(filePaths, "copy-external");
+    const result = await this.importFilePaths(filePaths, {
+      mode: "copy-external",
+      destination: "archive",
+    });
+    return result.items;
+  }
+
+  /**
+   * Copy files into a project's readable images folder.
+   */
+  async copyToProject(
+    projectId: string,
+    projectFolderPath: string,
+    filePaths: string[],
+  ): Promise<FolioItem[]> {
+    const result = await this.importFilePaths(filePaths, {
+      mode: "copy-external",
+      destination: "project",
+      projectId,
+      destDir: path.join(this.folioRoot, projectFolderPath, "images"),
+    });
     return result.items;
   }
 
@@ -83,7 +103,10 @@ export class ArchiveManager {
    * Track files that appeared directly in Folio/items via Finder or launch reconciliation.
    */
   async trackExistingFiles(filePaths: string[]): Promise<ImportResult> {
-    return this.importFilePaths(filePaths, "register-in-place");
+    return this.importFilePaths(filePaths, {
+      mode: "register-in-place",
+      destination: "archive",
+    });
   }
 
   /**
@@ -99,6 +122,34 @@ export class ArchiveManager {
       const result = await this.registerArchivedFile(destPath, filename, true);
 
       if (result.created) {
+        imported.push(result.item);
+      }
+      this.trackRecentlyCopied(destPath);
+    }
+
+    return imported;
+  }
+
+  async importProjectItems(
+    projectId: string,
+    projectFolderPath: string,
+    sources: ImportSource[],
+  ): Promise<FolioItem[]> {
+    const destDir = path.join(this.folioRoot, projectFolderPath, "images");
+    await fs.mkdir(destDir, { recursive: true });
+    const imported: FolioItem[] = [];
+
+    for (const source of sources) {
+      const { filename, ext } = this.resolveSourceMeta(source);
+      const destPath = await this.saveToDirectory(source, filename, ext, destDir);
+      const result = await this.registerArchivedFile(
+        destPath,
+        filename,
+        true,
+        projectId,
+      );
+
+      if (result.created || result.changed) {
         imported.push(result.item);
       }
       this.trackRecentlyCopied(destPath);
@@ -127,6 +178,7 @@ export class ArchiveManager {
     ext: string,
     destDir: string,
   ): Promise<string> {
+    await fs.mkdir(destDir, { recursive: true });
     const sanitizedName = sanitizeFileBaseName(filename);
     const normalizedExt = ext.toLowerCase();
     let destFilename = `${sanitizedName}${normalizedExt}`;
@@ -191,6 +243,11 @@ export class ArchiveManager {
 
   public isInArchiveItems(filePath: string): boolean {
     const relative = path.relative(path.join(this.folioRoot, "items"), filePath);
+    return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+  }
+
+  public isInDirectory(filePath: string, directory: string): boolean {
+    const relative = path.relative(directory, filePath);
     return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
   }
 
@@ -298,27 +355,46 @@ export class ArchiveManager {
 
   private async importFilePaths(
     filePaths: string[],
-    mode: "copy-external" | "register-in-place",
+    options: {
+      mode: "copy-external" | "register-in-place";
+      destination: "archive" | "project";
+      destDir?: string;
+      projectId?: string;
+    },
   ): Promise<ImportResult> {
     const imported: FolioItem[] = [];
     let changed = false;
 
     for (const filePath of filePaths) {
       const absoluteSource = path.resolve(filePath);
-      const sourceExt = path.extname(absoluteSource).toLowerCase();
-      const sourceFilename = path.basename(absoluteSource, sourceExt);
+      const originalSourceExt = path.extname(absoluteSource);
+      const sourceExt = originalSourceExt.toLowerCase();
+      const sourceFilename = path.basename(absoluteSource, originalSourceExt);
       let archivedPath = absoluteSource;
       let copied = false;
 
-      if (mode === "copy-external" && !this.isInArchiveItems(absoluteSource)) {
+      const sourceAlreadyInDestination =
+        options.destination === "project" && options.destDir
+          ? this.isInDirectory(absoluteSource, options.destDir)
+          : this.isInArchiveItems(absoluteSource);
+
+      if (options.mode === "copy-external" && !sourceAlreadyInDestination) {
         const sourceHash = await computeHash(absoluteSource);
         const duplicate = this.items.find((item) => item.hash === sourceHash);
 
         if (duplicate && !duplicate.missing) {
+          if (options.projectId && !duplicate.projectId) {
+            duplicate.projectId = options.projectId;
+            changed = true;
+          }
+          imported.push(duplicate);
           continue;
         }
 
-        const destDir = await createDirectoryByDate(this.folioRoot);
+        const destDir =
+          options.destination === "project" && options.destDir
+            ? options.destDir
+            : await createDirectoryByDate(this.folioRoot);
         archivedPath = await this.saveToDirectory(
           { kind: "path", filePath: absoluteSource },
           sourceFilename,
@@ -333,6 +409,7 @@ export class ArchiveManager {
         archivedPath,
         sourceFilename,
         copied,
+        options.projectId,
       );
       if (result.created || result.changed) {
         imported.push(result.item);
@@ -347,6 +424,7 @@ export class ArchiveManager {
     filePath: string,
     fallbackTitle: string,
     recentlyCopied: boolean,
+    projectId?: string,
   ): Promise<{ item: FolioItem; created: boolean; changed: boolean }> {
     const absolutePath = path.resolve(filePath);
     const relativePath = path.relative(this.folioRoot, absolutePath);
@@ -361,6 +439,10 @@ export class ArchiveManager {
         pathMatch,
         readImageDimensionsForFile(absolutePath),
       );
+      if (projectId && !pathMatch.projectId) {
+        pathMatch.projectId = projectId;
+        changed = true;
+      }
       if (pathMatch.missing) {
         pathMatch.missing = false;
         changed = true;
@@ -370,16 +452,20 @@ export class ArchiveManager {
 
     const hashMatch = this.items.find((item) => item.hash === hash);
     if (hashMatch) {
-      this.applyMediaDimensions(
+      let changed = this.applyMediaDimensions(
         hashMatch,
         readImageDimensionsForFile(absolutePath),
       );
       hashMatch.path = relativePath;
       hashMatch.missing = false;
-      return { item: hashMatch, created: false, changed: true };
+      if (projectId && !hashMatch.projectId) {
+        hashMatch.projectId = projectId;
+        changed = true;
+      }
+      return { item: hashMatch, created: false, changed: true || changed };
     }
 
-    const item = this.buildItem(absolutePath, fallbackTitle, ext, hash);
+    const item = this.buildItem(absolutePath, fallbackTitle, ext, hash, projectId);
     this.items.push(item);
 
     if (recentlyCopied) {
@@ -394,6 +480,7 @@ export class ArchiveManager {
     filename: string,
     ext: string,
     hash: string,
+    projectId?: string,
   ): FolioItem {
     return {
       id: nanoid(),
@@ -404,6 +491,8 @@ export class ArchiveManager {
       title: filename,
       tagIds: [],
       description: "",
+      projectId,
+      updatedAt: new Date().toISOString(),
       ...readImageDimensionsForFile(destPath),
       missing: false,
     };

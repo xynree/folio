@@ -14,6 +14,7 @@ import type {
 import {
   CANVAS_COLORS,
   CANVAS_WORLD_ORIGIN,
+  IMAGE_FILE_PATTERN,
   ITEM_DRAG_MIME,
 } from "../folio/constants";
 import type { DataUpdater, ItemDetailsOpenHandler } from "../folio/types";
@@ -23,6 +24,7 @@ import {
   createId,
   formatCount,
   markCanvasSaved,
+  mergeImportedItemsIntoProject,
   mergeItems,
 } from "../folio/model";
 import { chooseAndImportItems } from "../folio/importing";
@@ -64,6 +66,7 @@ const BOARD_BROWSER_PREVIEW_LIMIT = 3;
 export function CanvasView({
   data,
   activeCanvasId,
+  activeProjectId,
   canvasDetailRequestId,
   setActiveCanvasId,
   onOpenItem,
@@ -77,6 +80,7 @@ export function CanvasView({
 }: {
   data: FolioData;
   activeCanvasId: string | null;
+  activeProjectId?: string | null;
   canvasDetailRequestId: number;
   setActiveCanvasId: React.Dispatch<React.SetStateAction<string | null>>;
   onOpenItem: ItemDetailsOpenHandler;
@@ -253,10 +257,17 @@ export function CanvasView({
     if (!activeCanvas) return;
 
     try {
-      const imported = await chooseAndImportItems();
+      const imported = await chooseAndImportItems(activeProjectId);
       if (!imported.length) return;
 
-      const nextItems = mergeItems(data.items, imported);
+      const dataWithImports = mergeImportedItemsIntoProject(
+        {
+          ...data,
+          items: mergeItems(data.items, imported),
+        },
+        imported,
+        activeProjectId,
+      );
       const nextCanvas = imported.reduce(
         (canvas, item) => addItemToCanvas(canvas, item.id),
         activeCanvas,
@@ -265,9 +276,8 @@ export function CanvasView({
 
       saveData(
         {
-          ...data,
-          items: nextItems,
-          canvases: data.canvases.map((canvas) =>
+          ...dataWithImports,
+          canvases: dataWithImports.canvases.map((canvas) =>
             canvas.id === activeCanvas.id
               ? markCanvasSaved(nextCanvas, savedAt)
               : canvas,
@@ -278,7 +288,7 @@ export function CanvasView({
     } catch (error) {
       console.error(error);
     }
-  }, [activeCanvas, data, saveData]);
+  }, [activeCanvas, activeProjectId, data, saveData]);
 
   const removeItem = useCallback(
     (itemId: string) => {
@@ -586,6 +596,46 @@ export function CanvasView({
     [activeCanvas, commitData],
   );
 
+  const addProjectImagesAtPosition = useCallback(
+    async (filePaths: string[], point: CanvasPosition) => {
+      if (!activeCanvas || !activeProjectId || !window.folio.copyToProject) return false;
+      const uniquePaths = Array.from(new Set(filePaths.filter(Boolean)));
+      const imagePaths = uniquePaths.filter((filePath) =>
+        IMAGE_FILE_PATTERN.test(filePath),
+      );
+      if (!imagePaths.length || imagePaths.length !== uniquePaths.length) return false;
+
+      const imported = await window.folio.copyToProject(activeProjectId, imagePaths);
+      if (!imported.length) return true;
+
+      const dataWithImports = mergeImportedItemsIntoProject(
+        data,
+        imported,
+        activeProjectId,
+      );
+      const nextCanvas = addItemsToCanvas(
+        activeCanvas,
+        imported.map((item) => item.id),
+        point,
+      );
+      const savedAt = new Date().toISOString();
+
+      saveData(
+        {
+          ...dataWithImports,
+          canvases: dataWithImports.canvases.map((canvas) =>
+            canvas.id === activeCanvas.id
+              ? markCanvasSaved(nextCanvas, savedAt)
+              : canvas,
+          ),
+        },
+        `${formatCount(imported.length, "item")} added to board`,
+      );
+      return true;
+    },
+    [activeCanvas, activeProjectId, data, saveData],
+  );
+
   const importReferencesToBoard = useCallback(async () => {
     if (!activeCanvas) return;
     try {
@@ -623,11 +673,16 @@ export function CanvasView({
         .filter(Boolean);
       if (!filePaths.length) return;
 
+      if (await addProjectImagesAtPosition(filePaths, canvasPointFromEvent(event))) {
+        return;
+      }
+
       await addReferencesAtPosition(filePaths, canvasPointFromEvent(event));
     },
     [
       activeCanvas,
       addDroppedItems,
+      addProjectImagesAtPosition,
       addReferencesAtPosition,
       canvasPointFromEvent,
       clearDragState,

@@ -9,9 +9,11 @@ import {
   groupItemsByDate,
   itemCanUseDirectPreview,
   markCanvasSaved,
+  mergeImportedItemsIntoProject,
   mergeItems,
   tagTextsForItem,
 } from "./model";
+import { makeData, makeProject } from "../../test/fixtures";
 
 function item(id: string, date: string, tagIds: string[] = []): FolioItem {
   return {
@@ -71,6 +73,32 @@ describe("folio model helpers", () => {
         ],
       ).map((entry) => entry.title),
     ).toEqual(["updated", "two"]);
+  });
+
+  it("merges imported items into a project image list", () => {
+    const imported = {
+      ...item("new-image", "2026-06-15T11:00:00.000Z"),
+      path: "projects/studio/images/new-image.png",
+    };
+    const next = mergeImportedItemsIntoProject(
+      makeData({
+        projects: [
+          makeProject("project-1", {
+            imageIds: ["alpha"],
+            updatedAt: "2026-06-15T09:00:00.000Z",
+          }),
+        ],
+      }),
+      [imported],
+      "project-1",
+      "2026-06-15T12:00:00.000Z",
+    );
+
+    expect(next.items.find((entry) => entry.id === "new-image")?.projectId).toBe(
+      "project-1",
+    );
+    expect(next.projects[0].imageIds).toEqual(["alpha", "new-image"]);
+    expect(next.projects[0].updatedAt).toBe("2026-06-15T12:00:00.000Z");
   });
 
   it("adds canvas items once and assigns drop-relative positions", () => {
