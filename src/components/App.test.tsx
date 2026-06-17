@@ -2326,7 +2326,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const movedImage = document.querySelector(
       ".canvas-card .thumb-shell img",
     ) as HTMLElement;
-    fireEvent.click(movedImage);
+    fireEvent.doubleClick(movedImage);
 
     expect(await screen.findByRole("dialog", { name: /item details/i })).not.toBeNull();
   });

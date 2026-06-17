@@ -3,6 +3,7 @@ import type {
   FolioData,
   FolioItem,
   ImportSource,
+  LinkMetadata,
   ProjectStatus,
   ReconciliationResult,
   ThumbnailUrls,
@@ -19,8 +20,7 @@ const folioApi = {
     title: string;
     description?: string;
     status?: ProjectStatus;
-  }): Promise<FolioData> =>
-    ipcRenderer.invoke("folio:create-project", input),
+  }): Promise<FolioData> => ipcRenderer.invoke("folio:create-project", input),
 
   copyToFolio: (filePaths: string[]): Promise<FolioItem[]> =>
     ipcRenderer.invoke("folio:copy-to-folio", filePaths),
@@ -28,7 +28,10 @@ const folioApi = {
   importToFolio: (): Promise<FolioItem[]> =>
     ipcRenderer.invoke("folio:import-to-folio"),
 
-  copyToProject: (projectId: string, filePaths: string[]): Promise<FolioItem[]> =>
+  copyToProject: (
+    projectId: string,
+    filePaths: string[],
+  ): Promise<FolioItem[]> =>
     ipcRenderer.invoke("folio:copy-to-project", projectId, filePaths),
 
   importToProject: (projectId: string): Promise<FolioItem[]> =>
@@ -63,6 +66,9 @@ const folioApi = {
 
   openInFinder: (filePath: string): Promise<void> =>
     ipcRenderer.invoke("folio:open-in-finder", filePath),
+
+  fetchLinkMetadata: (url: string): Promise<LinkMetadata> =>
+    ipcRenderer.invoke("folio:fetch-link-metadata", url),
 
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
 

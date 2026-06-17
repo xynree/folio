@@ -171,6 +171,19 @@ export function updateCanvasNoteText(
   };
 }
 
+export function updateCanvasNoteSize(
+  canvas: Canvas,
+  noteId: string,
+  size: CanvasTextSize,
+): Canvas {
+  return {
+    ...canvas,
+    notes: canvas.notes.map((note) =>
+      note.id === noteId ? updateTimestamp({ ...note, size }) : note,
+    ),
+  };
+}
+
 export function deleteCanvasNote(canvas: Canvas, noteId: string): Canvas {
   return {
     ...canvas,
@@ -209,7 +222,17 @@ export const addLinkToCanvas = addCanvasLink;
 export function updateCanvasLink(
   canvas: Canvas,
   linkId: string,
-  patch: Partial<Pick<CanvasLink, "title" | "description" | "url">>,
+  patch: Partial<
+    Pick<
+      CanvasLink,
+      | "title"
+      | "description"
+      | "url"
+      | "imageUrl"
+      | "faviconUrl"
+      | "sourceDomain"
+    >
+  >,
 ): Canvas {
   return {
     ...canvas,
@@ -247,7 +270,9 @@ export function updateCanvasSection(
   return {
     ...canvas,
     sections: (canvas.sections ?? []).map((section) =>
-      section.id === sectionId ? updateTimestamp({ ...section, ...patch }) : section,
+      section.id === sectionId
+        ? updateTimestamp({ ...section, ...patch })
+        : section,
     ),
   };
 }
@@ -255,7 +280,9 @@ export function updateCanvasSection(
 export function deleteCanvasSection(canvas: Canvas, sectionId: string): Canvas {
   return {
     ...canvas,
-    sections: (canvas.sections ?? []).filter((section) => section.id !== sectionId),
+    sections: (canvas.sections ?? []).filter(
+      (section) => section.id !== sectionId,
+    ),
     edges: removeEdgesForObject(canvas.edges ?? [], sectionId),
   };
 }
@@ -489,7 +516,9 @@ export function removeCanvasStrokes(
 ): Canvas {
   return {
     ...canvas,
-    strokes: (canvas.strokes ?? []).filter((stroke) => !strokeIds.has(stroke.id)),
+    strokes: (canvas.strokes ?? []).filter(
+      (stroke) => !strokeIds.has(stroke.id),
+    ),
   };
 }
 
@@ -576,11 +605,11 @@ export function reverseCanvasEdgeDirection(
             ...edge,
             fromId: edge.toId,
             toId: edge.fromId,
-          fromSide: edge.toSide,
-          toSide: edge.fromSide,
-          direction: "forward",
-          updatedAt: new Date().toISOString(),
-        }
+            fromSide: edge.toSide,
+            toSide: edge.fromSide,
+            direction: "forward",
+            updatedAt: new Date().toISOString(),
+          }
         : edge,
     ),
   };
@@ -593,10 +622,7 @@ export function deleteCanvasEdge(canvas: Canvas, edgeId: string): Canvas {
   };
 }
 
-export function replaceCanvasNote(
-  canvas: Canvas,
-  note: CanvasNote,
-): Canvas {
+export function replaceCanvasNote(canvas: Canvas, note: CanvasNote): Canvas {
   return {
     ...canvas,
     notes: canvas.notes.map((currentNote) =>

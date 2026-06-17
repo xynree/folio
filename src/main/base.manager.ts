@@ -21,6 +21,7 @@ import {
   ThumbnailUrls,
 } from "../types";
 import { ArchiveManager } from "./archive.manager";
+import { fetchLinkMetadata } from "./linkMetadata";
 import { FolioStorage } from "./storage.manager";
 
 const execFileAsync = promisify(execFile);
@@ -58,7 +59,10 @@ export interface FolioManagerInterface {
   copyToProject(projectId: string, filePaths: string[]): Promise<FolioItem[]>;
   importToFolio(): Promise<FolioItem[]>;
   importToProject(projectId: string): Promise<FolioItem[]>;
-  setProjectWorkItems(projectId: string, workItemIds: string[]): Promise<FolioData>;
+  setProjectWorkItems(
+    projectId: string,
+    workItemIds: string[],
+  ): Promise<FolioData>;
   deleteItems(itemIds: string[]): Promise<FolioData>;
   startWatcher(mainWindow: BrowserWindow): void;
 }
@@ -75,7 +79,8 @@ export class FolioManager implements FolioManagerInterface {
   private tags: Tag[] = [];
   private projects: Project[] = [];
   private version: number = SCHEMA_VERSION;
-  private reconciliationResult: ReconciliationResult = emptyReconciliationResult();
+  private reconciliationResult: ReconciliationResult =
+    emptyReconciliationResult();
   private pendingWatcherAdds = new Set<string>();
   private watcherFlushTimer?: ReturnType<typeof setTimeout>;
 
@@ -105,8 +110,9 @@ export class FolioManager implements FolioManagerInterface {
     ipcMain.handle("folio:save-folio-data", (_: unknown, data: FolioData) =>
       this.saveFolioData(data),
     );
-    ipcMain.handle("folio:create-project", (_: unknown, input: CreateProjectInput) =>
-      this.createProject(input),
+    ipcMain.handle(
+      "folio:create-project",
+      (_: unknown, input: CreateProjectInput) => this.createProject(input),
     );
     ipcMain.handle("folio:copy-to-folio", (_: unknown, filePaths: string[]) =>
       this.copyToFolio(filePaths),
@@ -146,6 +152,9 @@ export class FolioManager implements FolioManagerInterface {
     ipcMain.handle("folio:open-in-finder", (_: unknown, filePath: string) =>
       this.openInFinder(filePath),
     );
+    ipcMain.handle("folio:fetch-link-metadata", (_: unknown, url: string) =>
+      fetchLinkMetadata(url),
+    );
 
     // Compatibility with the earlier prototype bridge.
     ipcMain.handle("folio:get-data", () => this.loadData());
@@ -180,7 +189,9 @@ export class FolioManager implements FolioManagerInterface {
         let absolutePath: string | null = null;
 
         if (url.hostname === "thumb") {
-          const filename = path.basename(decodeURIComponent(url.pathname.slice(1)));
+          const filename = path.basename(
+            decodeURIComponent(url.pathname.slice(1)),
+          );
           absolutePath = path.join(this.dotFolio, "thumbs", filename);
         }
 
@@ -242,7 +253,8 @@ export class FolioManager implements FolioManagerInterface {
         .getItems()
         .find(
           (candidate) =>
-            path.resolve(this.folioRoot, candidate.path) === path.resolve(filePath),
+            path.resolve(this.folioRoot, candidate.path) ===
+            path.resolve(filePath),
         );
 
       if (!item || item.missing) return;
@@ -281,7 +293,8 @@ export class FolioManager implements FolioManagerInterface {
     const migratedProjects = await this.migrateProjectData();
     const removedLegacyCanvasReferences = this.removeLegacyCanvasReferences();
     const migratedMediaFiles = await this.migrateMediaFilesToFlatFolders();
-    const repairedMissingFlags = await this.repairMissingFlagsForExistingFiles();
+    const repairedMissingFlags =
+      await this.repairMissingFlagsForExistingFiles();
     const repairedMediaDimensions =
       await this.archiveManager.repairMissingMediaDimensions();
 
@@ -341,8 +354,12 @@ export class FolioManager implements FolioManagerInterface {
     }));
 
     await this.ensureMediaDirectories();
-    await Promise.all(this.projects.map((project) => this.ensureProjectDirectories(project)));
-    await Promise.all(this.projects.map((project) => this.syncProjectReviewFiles(project)));
+    await Promise.all(
+      this.projects.map((project) => this.ensureProjectDirectories(project)),
+    );
+    await Promise.all(
+      this.projects.map((project) => this.syncProjectReviewFiles(project)),
+    );
     await Promise.all(
       this.projects.map((project) => this.syncProjectWorksFolder(project)),
     );
@@ -422,7 +439,9 @@ export class FolioManager implements FolioManagerInterface {
   }
 
   private getProjectOrThrow(projectId: string): Project {
-    const project = this.projects.find((candidate) => candidate.id === projectId);
+    const project = this.projects.find(
+      (candidate) => candidate.id === projectId,
+    );
     if (!project) {
       throw new Error(`Project ${projectId} was not found.`);
     }
@@ -467,7 +486,10 @@ export class FolioManager implements FolioManagerInterface {
     return this.copyToProject(project.id, filePaths);
   }
 
-  async copyToProject(projectId: string, filePaths: string[]): Promise<FolioItem[]> {
+  async copyToProject(
+    projectId: string,
+    filePaths: string[],
+  ): Promise<FolioItem[]> {
     const project = this.getProjectOrThrow(projectId);
     const items = await this.archiveManager.copyToProject(
       project.id,
@@ -590,9 +612,9 @@ export class FolioManager implements FolioManagerInterface {
         (edge) => !ids.has(edge.fromId) && !ids.has(edge.toId),
       );
       const changed =
-        itemIds.length !== canvas.itemIds.length
-        || edges.length !== canvas.edges.length
-        || Object.keys(positions).length !== Object.keys(canvas.positions).length;
+        itemIds.length !== canvas.itemIds.length ||
+        edges.length !== canvas.edges.length ||
+        Object.keys(positions).length !== Object.keys(canvas.positions).length;
 
       const nextCanvas = {
         ...canvas,
@@ -702,7 +724,8 @@ export class FolioManager implements FolioManagerInterface {
         await dialog.showMessageBox({
           type: "warning",
           message: "No Photos items were exported",
-          detail: "Select one or more items in the Photos picker and try again.",
+          detail:
+            "Select one or more items in the Photos picker and try again.",
         });
         return { filePaths: [] };
       }
@@ -963,7 +986,11 @@ export class FolioManager implements FolioManagerInterface {
 
   private isPathInsideDirectory(filePath: string, directory: string): boolean {
     const relative = path.relative(directory, filePath);
-    return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+    return (
+      Boolean(relative) &&
+      !relative.startsWith("..") &&
+      !path.isAbsolute(relative)
+    );
   }
 
   private async moveFileToDirectory(
@@ -1005,9 +1032,15 @@ export class FolioManager implements FolioManagerInterface {
 
   private async removeLegacyMediaDirectories(): Promise<void> {
     await this.removeEmptyDirectoryTree(path.join(this.folioRoot, "items"));
-    await this.removeEmptyDirectoryTree(path.join(this.folioRoot, IMAGES_DIR_NAME));
-    await this.removeGeneratedWorksDirectory(path.join(this.folioRoot, WORKS_DIR_NAME));
-    await this.removeDirectoryIfEmpty(path.join(this.folioRoot, WORKS_DIR_NAME));
+    await this.removeEmptyDirectoryTree(
+      path.join(this.folioRoot, IMAGES_DIR_NAME),
+    );
+    await this.removeGeneratedWorksDirectory(
+      path.join(this.folioRoot, WORKS_DIR_NAME),
+    );
+    await this.removeDirectoryIfEmpty(
+      path.join(this.folioRoot, WORKS_DIR_NAME),
+    );
     await this.removeEmptyDirectoryTree(
       path.join(this.folioRoot, LEGACY_REFERENCES_DIR_NAME),
     );
@@ -1019,7 +1052,12 @@ export class FolioManager implements FolioManagerInterface {
         await Promise.all(
           project.boardIds.map((boardId) =>
             this.removeDirectoryIfEmpty(
-              path.join(projectRoot, "boards", boardId, LEGACY_REFERENCES_DIR_NAME),
+              path.join(
+                projectRoot,
+                "boards",
+                boardId,
+                LEGACY_REFERENCES_DIR_NAME,
+              ),
             ),
           ),
         );
@@ -1050,7 +1088,9 @@ export class FolioManager implements FolioManagerInterface {
     await Promise.all(
       entries
         .filter((entry) => entry.isDirectory())
-        .map((entry) => this.removeEmptyDirectoryTree(path.join(directory, entry.name))),
+        .map((entry) =>
+          this.removeEmptyDirectoryTree(path.join(directory, entry.name)),
+        ),
     );
 
     await this.removeDirectoryIfEmpty(directory);
@@ -1064,7 +1104,9 @@ export class FolioManager implements FolioManagerInterface {
       return;
     }
 
-    const knownItemIds = new Set(this.archiveManager.getItems().map((item) => item.id));
+    const knownItemIds = new Set(
+      this.archiveManager.getItems().map((item) => item.id),
+    );
     await Promise.all(
       entries.map(async (entry) => {
         if (!entry.isFile() && !entry.isSymbolicLink()) return;
@@ -1181,7 +1223,9 @@ export class FolioManager implements FolioManagerInterface {
           ...project,
           status: project.status ?? "active",
           imageIds,
-          workItemIds: project.workItemIds.filter((id) => imageIds.includes(id)),
+          workItemIds: project.workItemIds.filter((id) =>
+            imageIds.includes(id),
+          ),
           boardIds,
           reviews: normalizedReviews,
         };
@@ -1193,7 +1237,8 @@ export class FolioManager implements FolioManagerInterface {
           previousReviews !== project.reviews ||
           normalizedProject.reviews.some(
             (review, index) =>
-              review.workItemIds.length !== previousReviews[index]?.workItemIds.length,
+              review.workItemIds.length !==
+              previousReviews[index]?.workItemIds.length,
           )
         ) {
           changed = true;
@@ -1279,7 +1324,9 @@ export class FolioManager implements FolioManagerInterface {
       fs.mkdir(path.join(projectRoot, "boards"), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "reviews"), { recursive: true }),
       ...project.boardIds.map((boardId) =>
-        fs.mkdir(path.join(projectRoot, "boards", boardId), { recursive: true }),
+        fs.mkdir(path.join(projectRoot, "boards", boardId), {
+          recursive: true,
+        }),
       ),
     ]);
   }
@@ -1323,13 +1370,20 @@ export class FolioManager implements FolioManagerInterface {
 
     await Promise.all(
       (project.reviews ?? []).map((review) =>
-        fs.writeFile(path.join(reviewsDir, `review-${review.id}.md`), review.markdown),
+        fs.writeFile(
+          path.join(reviewsDir, `review-${review.id}.md`),
+          review.markdown,
+        ),
       ),
     );
   }
 
   private async syncProjectWorksFolder(project: Project): Promise<void> {
-    const worksDir = path.join(this.folioRoot, project.folderPath, WORKS_DIR_NAME);
+    const worksDir = path.join(
+      this.folioRoot,
+      project.folderPath,
+      WORKS_DIR_NAME,
+    );
     await fs.mkdir(worksDir, { recursive: true });
 
     const desiredIds = new Set(project.workItemIds);
@@ -1363,7 +1417,10 @@ export class FolioManager implements FolioManagerInterface {
       const baseName = sanitizeFileBaseName(
         item.title || path.basename(item.path, extension) || item.id,
       );
-      const destPath = path.join(worksDir, `${baseName}-${item.id}${extension}`);
+      const destPath = path.join(
+        worksDir,
+        `${baseName}-${item.id}${extension}`,
+      );
       if (await this.fileExists(destPath)) continue;
 
       try {
@@ -1386,13 +1443,9 @@ export class FolioManager implements FolioManagerInterface {
       );
     }
 
-    const { stdout } = await execFileAsync(
-      helperPath,
-      [exportDir],
-      {
-        timeout: 300000,
-      },
-    );
+    const { stdout } = await execFileAsync(helperPath, [exportDir], {
+      timeout: 300000,
+    });
 
     return stdout.includes(PHOTOS_PICKER_CANCELLED) ? "cancelled" : "exported";
   }
@@ -1434,7 +1487,11 @@ export class FolioManager implements FolioManagerInterface {
     try {
       await fs.rm(directory, { recursive: true, force: true });
     } catch (error) {
-      console.error("Unable to clean Photos import directory", directory, error);
+      console.error(
+        "Unable to clean Photos import directory",
+        directory,
+        error,
+      );
     }
   }
 
@@ -1444,8 +1501,11 @@ export class FolioManager implements FolioManagerInterface {
       typeof structuredError?.stderr === "string"
         ? structuredError.stderr.trim()
         : "";
-    const message = stderr || (error instanceof Error ? error.message : String(error));
-    const executionError = message.match(/execution error: (.*?)(?: \(-?\d+\))?$/);
+    const message =
+      stderr || (error instanceof Error ? error.message : String(error));
+    const executionError = message.match(
+      /execution error: (.*?)(?: \(-?\d+\))?$/,
+    );
 
     return executionError?.[1]?.trim() ?? message.trim();
   }

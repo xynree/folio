@@ -50,6 +50,7 @@ export function CanvasViewport({
   const backgroundRef = useRef<HTMLCanvasElement | null>(null);
   const drawFrameRef = useRef<number | null>(null);
   const zoomAnchorRef = useRef<{ x: number; y: number } | null>(null);
+  const spaceHeldRef = useRef(false);
   const [isCanvasPanning, setIsCanvasPanning] = useState(false);
 
   const drawBackground = useCallback(() => {
@@ -126,6 +127,31 @@ export function CanvasViewport({
       if (drawFrameRef.current !== null) {
         window.cancelAnimationFrame(drawFrameRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== "Space" && event.key !== " ") return;
+      const target = event.target;
+      if (
+        target instanceof Element
+        && target.closest("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      spaceHeldRef.current = true;
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== "Space" && event.key !== " ") return;
+      spaceHeldRef.current = false;
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
     };
   }, []);
 
@@ -239,7 +265,11 @@ export function CanvasViewport({
 
   const startCanvasPan = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (event.button !== 0) return;
+      // Pan with middle mouse button, or space + left-drag. Plain left-drag is
+      // reserved for marquee selection on the canvas surface.
+      const panWithMiddleButton = event.button === 1;
+      const panWithSpace = event.button === 0 && spaceHeldRef.current;
+      if (!panWithMiddleButton && !panWithSpace) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
       if (

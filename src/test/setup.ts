@@ -80,6 +80,7 @@ const folioMock: FolioApi = {
   getFileDataUrl: vi.fn(),
   getReconciliationResult: vi.fn(),
   openInFinder: vi.fn(),
+  fetchLinkMetadata: vi.fn(async (url: string) => ({ url })),
   getPathForFile: vi.fn(),
   onFilesAdded: vi.fn(),
 };

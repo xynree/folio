@@ -146,7 +146,6 @@ export function CanvasItemCard({
         style={objectCardStyle("document", position)}
         onPointerDown={onPointerDown}
         onClickCapture={onClickCapture}
-        onClick={() => onOpen(item.id)}
         onDoubleClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -191,7 +190,6 @@ export function CanvasItemCard({
       style={objectCardStyle("item", position)}
       onPointerDown={onPointerDown}
       onClickCapture={onClickCapture}
-      onClick={() => onOpen(item.id)}
       onDoubleClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -279,7 +277,16 @@ export function CanvasLinkCard({
     >
       <div className="canvas-link-header">
         <span>
-          <ButtonIcon icon={LinkIcon} size={14} />
+          {link.faviconUrl ? (
+            <img
+              className="canvas-link-favicon"
+              src={link.faviconUrl}
+              alt=""
+              draggable={false}
+            />
+          ) : (
+            <ButtonIcon icon={LinkIcon} size={14} />
+          )}
           {link.sourceDomain || "Link"}
         </span>
         <button
@@ -296,6 +303,15 @@ export function CanvasLinkCard({
           <ButtonIcon icon={Trash2} />
         </button>
       </div>
+      {link.imageUrl ? (
+        <img
+          className="canvas-link-preview"
+          src={link.imageUrl}
+          alt=""
+          draggable={false}
+          onPointerDown={(event) => event.stopPropagation()}
+        />
+      ) : null}
       <input
         aria-label="Link title"
         value={titleDraft}
@@ -432,6 +448,7 @@ export function CanvasNoteCard({
   isSelected = false,
   onChange,
   onDelete,
+  onSizeChange,
   onConnectorPointerDown,
   onPointerDown,
   onResizePointerDown,
@@ -442,12 +459,14 @@ export function CanvasNoteCard({
   isSelected?: boolean;
   onChange: (noteId: string, text: string) => void;
   onDelete: (noteId: string) => void;
+  onSizeChange: (noteId: string, size: CanvasTextSize) => void;
   onConnectorPointerDown: ConnectorPointerDownHandler;
   onPointerDown: (event: React.PointerEvent) => void;
   onResizePointerDown: ResizePointerDownHandler;
   onClickCapture: (event: React.MouseEvent) => void;
 }) {
   const [draft, setDraft] = useState(note.text);
+  const noteSize = note.size ?? "md";
 
   useEffect(() => {
     setDraft(note.text);
@@ -455,9 +474,9 @@ export function CanvasNoteCard({
 
   return (
     <div
-      className={`canvas-note ${isSelected ? "canvas-object-selected" : ""} ${
-        isMatched ? "canvas-object-search-match" : ""
-      }`}
+      className={`canvas-note canvas-note-size-${noteSize} ${
+        isSelected ? "canvas-object-selected" : ""
+      } ${isMatched ? "canvas-object-search-match" : ""}`}
       data-canvas-object-id={note.id}
       data-canvas-object-kind="note"
       style={objectCardStyle("note", note)}
@@ -469,18 +488,40 @@ export function CanvasNoteCard({
           <ButtonIcon icon={GripVertical} size={14} />
           Note
         </span>
-        <button
-          className="icon-button"
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDelete(note.id);
-          }}
-          aria-label="Delete note"
-          title="Delete note"
-        >
-          <ButtonIcon icon={Trash2} />
-        </button>
+        <span className="canvas-note-handle-actions">
+          <span className="canvas-note-size-control" aria-label="Note text size">
+            {TEXT_SIZE_OPTIONS.map((option) => (
+              <button
+                className={
+                  option.size === noteSize ? "canvas-text-size-active" : ""
+                }
+                key={option.size}
+                type="button"
+                aria-label={`${option.label} note text`}
+                aria-pressed={option.size === noteSize}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSizeChange(note.id, option.size);
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </span>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(note.id);
+            }}
+            aria-label="Delete note"
+            title="Delete note"
+          >
+            <ButtonIcon icon={Trash2} />
+          </button>
+        </span>
       </div>
       <textarea
         placeholder="Note"

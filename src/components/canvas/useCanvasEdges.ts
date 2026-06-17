@@ -5,7 +5,6 @@ import type {
   CanvasEdge,
   CanvasEdgeDirection,
   CanvasPosition,
-  CanvasRelationshipType,
 } from "../../types";
 import { createId } from "../folio/model";
 import { objectTargetFromEvent } from "./canvasDom";
@@ -15,7 +14,6 @@ import {
   reverseCanvasEdgeDirection,
   updateCanvasEdgeDirection,
   updateCanvasEdgeLabel,
-  updateCanvasEdgeRelationshipType,
 } from "./canvasModel";
 import type { CanvasObjectKind, CanvasObjectLayout } from "./canvasTypes";
 
@@ -90,19 +88,6 @@ export function useCanvasEdges({
     [activeCanvas, updateCanvas],
   );
 
-  const updateEdgeRelationshipType = useCallback(
-    (edgeId: string, relationshipType: CanvasRelationshipType) => {
-      if (!activeCanvas) return;
-      updateCanvas(
-        activeCanvas.id,
-        (canvas) =>
-          updateCanvasEdgeRelationshipType(canvas, edgeId, relationshipType),
-        "Relationship updated",
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
   const reverseEdgeDirection = useCallback(
     (edgeId: string) => {
       if (!activeCanvas) return;
@@ -146,8 +131,8 @@ export function useCanvasEdges({
       const source = canvasObjectLayouts.get(objectId);
       const eventPoint = surfacePointFromClient(event.clientX, event.clientY);
       const initialFromSide =
-        preferredFromSide
-        ?? (source ? bestConnectionSide(source.center, eventPoint) : "right");
+        preferredFromSide ??
+        (source ? bestConnectionSide(source.center, eventPoint) : "right");
       const startPoint = source?.sides[initialFromSide] ?? eventPoint;
       const previousCursor = document.body.style.cursor;
       const previousUserSelect = document.body.style.userSelect;
@@ -180,15 +165,21 @@ export function useCanvasEdges({
         const target = objectTargetFromEvent(upEvent);
         const latestSource = canvasObjectLayouts.get(objectId);
         const latestTarget = target ? canvasObjectLayouts.get(target.id) : null;
-        if (!target || target.id === objectId || !latestSource || !latestTarget) {
+        if (
+          !target ||
+          target.id === objectId ||
+          !latestSource ||
+          !latestTarget
+        ) {
           return;
         }
 
         const fromSide =
-          preferredFromSide
-          ?? bestConnectionSide(latestSource.center, latestTarget.center);
+          preferredFromSide ??
+          bestConnectionSide(latestSource.center, latestTarget.center);
         const toSide =
-          target.side ?? bestConnectionSide(latestTarget.center, latestSource.center);
+          target.side ??
+          bestConnectionSide(latestTarget.center, latestSource.center);
         const edgeId = createId("edge");
         const createdAt = new Date().toISOString();
         updateCanvas(
@@ -197,8 +188,8 @@ export function useCanvasEdges({
             const edges = canvas.edges ?? [];
             const alreadyConnected = edges.some(
               (edge) =>
-                (edge.fromId === objectId && edge.toId === target.id)
-                || (edge.fromId === target.id && edge.toId === objectId),
+                (edge.fromId === objectId && edge.toId === target.id) ||
+                (edge.fromId === target.id && edge.toId === objectId),
             );
             if (alreadyConnected) return canvas;
             return {
@@ -258,6 +249,5 @@ export function useCanvasEdges({
     startEdgeLabelEdit,
     stopEdgeLabelEdit,
     updateEdgeDirection,
-    updateEdgeRelationshipType,
   };
 }

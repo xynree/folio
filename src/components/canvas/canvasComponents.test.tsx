@@ -240,7 +240,6 @@ describe("canvas components", () => {
     const onSelectEdge = vi.fn();
     const onStartEdgeLabelEdit = vi.fn();
     const onUpdateEdgeDirection = vi.fn();
-    const onUpdateEdgeRelationshipType = vi.fn();
     const onReverseEdgeDirection = vi.fn();
     const onDeleteEdge = vi.fn();
 
@@ -258,23 +257,15 @@ describe("canvas components", () => {
         onStartEdgeLabelEdit={onStartEdgeLabelEdit}
         onStopEdgeLabelEdit={vi.fn()}
         onUpdateEdgeDirection={onUpdateEdgeDirection}
-        onUpdateEdgeRelationshipType={onUpdateEdgeRelationshipType}
       />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "No direction" }));
-    fireEvent.change(screen.getByLabelText("Relationship type"), {
-      target: { value: "version-of" },
-    });
     fireEvent.click(screen.getByRole("button", { name: "Reverse direction" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
     fireEvent.doubleClick(screen.getByRole("button", { name: "Edge label: Link" }));
 
     expect(onUpdateEdgeDirection).toHaveBeenCalledWith("edge-1", "none");
-    expect(onUpdateEdgeRelationshipType).toHaveBeenCalledWith(
-      "edge-1",
-      "version-of",
-    );
     expect(onReverseEdgeDirection).toHaveBeenCalledWith("edge-1");
     expect(onDeleteEdge).toHaveBeenCalledWith("edge-1");
     expect(onStartEdgeLabelEdit).toHaveBeenCalledWith(edge);
@@ -296,7 +287,6 @@ describe("canvas components", () => {
         onStartEdgeLabelEdit={onStartEdgeLabelEdit}
         onStopEdgeLabelEdit={onStop}
         onUpdateEdgeDirection={onUpdateEdgeDirection}
-        onUpdateEdgeRelationshipType={onUpdateEdgeRelationshipType}
       />,
     );
 
@@ -406,7 +396,7 @@ describe("canvas components", () => {
     fireEvent.click(screen.getByLabelText("Remove Alpha from board"));
 
     expect(onOpen).toHaveBeenCalledWith("alpha");
-    expect(onOpen).toHaveBeenCalledTimes(2);
+    expect(onOpen).toHaveBeenCalledTimes(1);
     expect(onConnector).toHaveBeenCalledWith(expect.any(Object), "right");
     expect(onResizePointerDown).toHaveBeenCalledWith(expect.any(Object));
     expect(onRemove).toHaveBeenCalledWith("alpha");
@@ -445,7 +435,7 @@ describe("canvas components", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("Brief"));
+    fireEvent.doubleClick(screen.getByText("Brief"));
     fireEvent.pointerDown(screen.getByTitle("Resize Brief"));
     fireEvent.click(screen.getByLabelText("Remove Brief from board"));
 
@@ -498,6 +488,36 @@ describe("canvas components", () => {
     expect(onLinkDelete).toHaveBeenCalledWith("link-1");
 
     rerender(
+      <CanvasLinkCard
+        link={{
+          id: "link-1",
+          title: "Example",
+          description: "An example",
+          sourceDomain: "example.com",
+          url: "https://example.com/",
+          faviconUrl: "data:image/png;base64,AAAA",
+          imageUrl: "data:image/png;base64,BBBB",
+          capturedAt: "2026-06-17T08:00:00.000Z",
+          x: 10,
+          y: 20,
+        }}
+        onChange={onLinkChange}
+        onDelete={onLinkDelete}
+        onConnectorPointerDown={onConnector}
+        onPointerDown={vi.fn()}
+        onResizePointerDown={onResizePointerDown}
+        onClickCapture={vi.fn()}
+      />,
+    );
+
+    expect(
+      document.querySelector(".canvas-link-preview")?.getAttribute("src"),
+    ).toBe("data:image/png;base64,BBBB");
+    expect(
+      document.querySelector(".canvas-link-favicon")?.getAttribute("src"),
+    ).toBe("data:image/png;base64,AAAA");
+
+    rerender(
       <CanvasSectionFrame
         section={{
           id: "section-1",
@@ -544,6 +564,7 @@ describe("canvas components", () => {
           note={board.notes[0]}
           onChange={onChange}
           onDelete={onDelete}
+          onSizeChange={onSizeChange}
           onConnectorPointerDown={onConnector}
           onPointerDown={vi.fn()}
           onResizePointerDown={onResizePointerDown}
@@ -555,6 +576,7 @@ describe("canvas components", () => {
         target: { value: "Updated note" },
       });
       fireEvent.blur(screen.getByPlaceholderText("Note"));
+      fireEvent.click(screen.getByLabelText("Large note text"));
       fireEvent.change(screen.getByPlaceholderText("Note"), { target: { value: "" } });
       fireEvent.blur(screen.getByPlaceholderText("Note"));
 
@@ -590,6 +612,7 @@ describe("canvas components", () => {
       expect(onChange).toHaveBeenCalledWith("note-1", "Updated note");
       expect(onChange).toHaveBeenCalledWith("text-1", "Updated text");
       expect(onResizePointerDown).toHaveBeenCalledWith(expect.any(Object));
+      expect(onSizeChange).toHaveBeenCalledWith("note-1", "large");
       expect(onSizeChange).toHaveBeenCalledWith("text-1", "large");
       expect(onDelete).toHaveBeenCalledWith("note-1");
       expect(onDelete).toHaveBeenCalledWith("text-1");
@@ -660,7 +683,7 @@ describe("canvas components", () => {
 
     fireEvent.pointerDown(itemCard);
     fireEvent.pointerDown(resizeCorner);
-    fireEvent.click(itemCard);
+    fireEvent.doubleClick(itemCard);
     fireEvent.pointerDown(
       document.querySelector('[data-canvas-object-id="link-1"]') as HTMLElement,
     );
@@ -727,6 +750,7 @@ describe("canvas components", () => {
         toJSON: () => ({}),
       }) as DOMRect;
     const scrollRef = { current: scroll };
+    const onFocusViewport = vi.fn();
 
     render(
       <>
@@ -758,7 +782,7 @@ describe("canvas components", () => {
           ]}
           scrollRef={scrollRef}
           zoom={1}
-          onFocusViewport={vi.fn()}
+          onFocusViewport={onFocusViewport}
         />
       </>,
     );
@@ -766,7 +790,27 @@ describe("canvas components", () => {
     fireEvent.click(screen.getByLabelText("Arrange by type"));
 
     expect(screen.getByText("2 selected")).not.toBeNull();
-    expect(screen.getByLabelText("Minimap")).not.toBeNull();
+    const minimap = screen.getByLabelText("Minimap");
+    expect(minimap).not.toBeNull();
+
+    minimap.getBoundingClientRect = () =>
+      ({
+        bottom: 116,
+        height: 116,
+        left: 0,
+        right: 164,
+        top: 0,
+        width: 164,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireEvent.pointerDown(minimap, { button: 0, clientX: 90, clientY: 70 });
+    fireEvent.pointerMove(window, { clientX: 110, clientY: 80 });
+    fireEvent.pointerUp(window);
+
+    expect(onFocusViewport).toHaveBeenCalled();
     expect(onArrangeByType).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText("Organize into section")).toBeNull();
   });

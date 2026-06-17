@@ -17,10 +17,12 @@ import {
 describe("canvas geometry helpers", () => {
   it("builds rounded polyline stroke paths from points", () => {
     expect(buildPolylinePath([])).toBe("");
-    expect(buildPolylinePath([
-      { x: 10.2, y: 20.6 },
-      { x: 31.4, y: 42.5 },
-    ])).toBe("M 10 21 L 31 43");
+    expect(
+      buildPolylinePath([
+        { x: 10.2, y: 20.6 },
+        { x: 31.4, y: 42.5 },
+      ]),
+    ).toBe("M 10 21 L 31 43");
   });
 
   it("chooses the side facing a target point", () => {
@@ -58,28 +60,40 @@ describe("canvas geometry helpers", () => {
   it("resolves default object sizes when geometry has no dimensions", () => {
     expect(sizeForCanvasObject("text", { width: 300 })).toEqual({
       width: 300,
-      height: 96,
+      height: 64,
     });
   });
 
   it("scales image object defaults from natural media proportions", () => {
     expect(
-      sizeForCanvasImageObject("item", { x: 0, y: 0 }, {
-        width: 400,
-        height: 200,
-      }),
+      sizeForCanvasImageObject(
+        "item",
+        { x: 0, y: 0 },
+        {
+          width: 400,
+          height: 200,
+        },
+      ),
     ).toEqual({ width: 190, height: 95 });
     expect(
-      sizeForCanvasImageObject("item", { x: 0, y: 0, width: 240 }, {
-        width: 400,
-        height: 200,
-      }),
+      sizeForCanvasImageObject(
+        "item",
+        { x: 0, y: 0, width: 240 },
+        {
+          width: 400,
+          height: 200,
+        },
+      ),
     ).toEqual({ width: 240, height: 120 });
     expect(
-      sizeForCanvasImageObject("item", { x: 0, y: 0, width: 162, height: 190 }, {
-        width: 4032,
-        height: 3024,
-      }),
+      sizeForCanvasImageObject(
+        "item",
+        { x: 0, y: 0, width: 162, height: 190 },
+        {
+          width: 4032,
+          height: 3024,
+        },
+      ),
     ).toEqual({ width: 190, height: 143 });
   });
 
@@ -109,12 +123,9 @@ describe("canvas geometry helpers", () => {
   });
 
   it("builds curved edge paths from side vectors", () => {
-    expect(buildEdgePath(
-      { x: 0, y: 50 },
-      { x: 100, y: 50 },
-      "right",
-      "left",
-    )).toBe("M 0 50 C 48 50 52 50 100 50");
+    expect(
+      buildEdgePath({ x: 0, y: 50 }, { x: 100, y: 50 }, "right", "left"),
+    ).toBe("M 0 50 C 48 50 52 50 100 50");
   });
 
   it("parses stroke points and measures segment distance", () => {
@@ -123,11 +134,9 @@ describe("canvas geometry helpers", () => {
       { x: 30, y: 40 },
       { x: 50, y: 20 },
     ]);
-    expect(distanceToSegment(
-      { x: 10, y: 10 },
-      { x: 0, y: 0 },
-      { x: 20, y: 0 },
-    )).toBe(10);
+    expect(
+      distanceToSegment({ x: 10, y: 10 }, { x: 0, y: 0 }, { x: 20, y: 0 }),
+    ).toBe(10);
   });
 
   it("detects eraser intersections against stroke segments", () => {

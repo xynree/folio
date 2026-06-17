@@ -7,7 +7,12 @@
   --motion-ease: cubic-bezier(0.2, 0, 0.16, 1);
   --motion-pop: cubic-bezier(0.2, 0.8, 0.2, 1);
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -1828,7 +1833,10 @@ button svg {
 
 .item-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--archive-grid-card-min), 1fr));
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--archive-grid-card-min), 1fr)
+  );
   gap: var(--archive-grid-gap);
   transition:
     gap var(--motion-medium) var(--motion-ease),
@@ -2222,7 +2230,8 @@ button svg {
   justify-items: center;
   gap: 20px;
   background:
-    radial-gradient(circle at 1px 1px, #d6cbbd 1px, transparent 0) 0 0 / 24px 24px,
+    radial-gradient(circle at 1px 1px, #d6cbbd 1px, transparent 0) 0 0 / 24px
+      24px,
     #f7f3ec;
 }
 
@@ -2430,7 +2439,11 @@ button svg {
   padding: 14px;
   border-right: 1px solid #e4d8ca;
   background:
-    radial-gradient(circle at 30% 20%, rgba(255, 253, 248, 0.76), transparent 34%),
+    radial-gradient(
+      circle at 30% 20%,
+      rgba(255, 253, 248, 0.76),
+      transparent 34%
+    ),
     #efe7dc;
 }
 
@@ -3000,6 +3013,38 @@ button svg {
   font-weight: 650;
 }
 
+.canvas-project-image-grid-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: 8px 10px 0;
+  padding: 3px;
+  border: 1px solid #ded2c2;
+  border-radius: 8px;
+  background: #fffdf8;
+}
+
+.canvas-project-image-grid-control button {
+  min-width: 28px;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 5px;
+  color: #6d5d4b;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.canvas-project-image-grid-control button:hover,
+.canvas-project-image-grid-control button:focus-visible,
+.canvas-project-image-grid-control .canvas-project-image-grid-active {
+  outline: 0;
+  color: #fffaf0;
+  background: #385d56;
+}
+
 .canvas-project-image-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3342,7 +3387,8 @@ button svg {
   left: 50%;
   z-index: 16;
   width: min(360px, calc(100% - 36px));
-  animation: board-browser-dialog-in var(--motion-fast) var(--motion-pop) backwards;
+  animation: board-browser-dialog-in var(--motion-fast) var(--motion-pop)
+    backwards;
   transform: translateX(-50%);
   transform-origin: top center;
 }
@@ -4037,6 +4083,23 @@ button svg {
   white-space: nowrap;
 }
 
+.canvas-link-favicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.canvas-link-preview {
+  width: 100%;
+  max-height: 140px;
+  border: 1px solid #e1d3c2;
+  border-radius: 7px;
+  object-fit: cover;
+  background: #f3ead9;
+}
+
 .canvas-link-card input,
 .canvas-link-card textarea {
   width: 100%;
@@ -4188,14 +4251,72 @@ button svg {
   background: #fffaf0;
 }
 
+.canvas-note-handle-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.canvas-note-size-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: rgba(255, 250, 240, 0.9);
+}
+
+.canvas-note .canvas-note-size-control button {
+  min-width: 0;
+  min-height: 20px;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: 4px;
+  color: #7a5527;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 780;
+}
+
+.canvas-note .canvas-note-size-control button:hover,
+.canvas-note .canvas-note-size-control button:focus-visible,
+.canvas-note .canvas-note-size-control .canvas-text-size-active {
+  outline: 0;
+  color: #fffaf0;
+  background: #b77a37;
+}
+
+.canvas-note-size-sm textarea {
+  font-size: 12px;
+}
+
+.canvas-note-size-md textarea {
+  font-size: 14px;
+}
+
+.canvas-note-size-large textarea {
+  font-size: 20px;
+}
+
 .canvas-text-card {
   display: grid;
   width: 220px;
-  min-height: 96px;
-  padding: 8px;
-  border: 1px solid rgba(56, 93, 86, 0.42);
-  background: rgba(255, 253, 248, 0.44);
-  box-shadow: 0 4px 16px rgba(56, 40, 24, 0.06);
+  min-height: 56px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.canvas-text-card:hover,
+.canvas-text-card:focus-within {
+  border-color: rgba(56, 93, 86, 0.42);
+  background: rgba(255, 253, 248, 0.6);
+}
+
+.canvas-text-card.canvas-object-selected {
+  border-color: #385d56;
+  background: rgba(255, 253, 248, 0.7);
 }
 
 .canvas-text-card textarea {

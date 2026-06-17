@@ -18,12 +18,15 @@ export const CANVAS_OBJECT_SIZES: Record<CanvasObjectKind, CanvasObjectSize> = {
   item: { width: 162, height: 190 },
   document: { width: 190, height: 116 },
   note: { width: 220, height: 150 },
-  text: { width: 220, height: 96 },
+  text: { width: 220, height: 64 },
   link: { width: 240, height: 132 },
   section: { width: 520, height: 340 },
 };
 
-export const CANVAS_OBJECT_MIN_SIZES: Record<CanvasObjectKind, CanvasObjectSize> = {
+export const CANVAS_OBJECT_MIN_SIZES: Record<
+  CanvasObjectKind,
+  CanvasObjectSize
+> = {
   item: { width: 118, height: 138 },
   document: { width: 150, height: 88 },
   note: { width: 150, height: 104 },
@@ -66,8 +69,7 @@ export function isCanvasConnectionSide(
   value: string | undefined,
 ): value is CanvasConnectionSide {
   return Boolean(
-    value
-      && CANVAS_CONNECTION_SIDES.includes(value as CanvasConnectionSide),
+    value && CANVAS_CONNECTION_SIDES.includes(value as CanvasConnectionSide),
   );
 }
 
@@ -122,19 +124,13 @@ export function sizeForCanvasImageObject(
   if (validDimension(geometry?.width)) {
     return {
       width: Math.round(geometry.width),
-      height: Math.max(
-        1,
-        Math.round(geometry.width / mediaAspectRatio),
-      ),
+      height: Math.max(1, Math.round(geometry.width / mediaAspectRatio)),
     };
   }
 
   if (validDimension(geometry?.height)) {
     return {
-      width: Math.max(
-        1,
-        Math.round(geometry.height * mediaAspectRatio),
-      ),
+      width: Math.max(1, Math.round(geometry.height * mediaAspectRatio)),
       height: Math.round(geometry.height),
     };
   }
@@ -306,10 +302,10 @@ export function distanceToSegment(
     return Math.hypot(point.x - segmentStart.x, point.y - segmentStart.y);
   }
 
-  const projection = (
-    ((point.x - segmentStart.x) * segmentX)
-    + ((point.y - segmentStart.y) * segmentY)
-  ) / segmentLengthSquared;
+  const projection =
+    ((point.x - segmentStart.x) * segmentX +
+      (point.y - segmentStart.y) * segmentY) /
+    segmentLengthSquared;
   const clampedProjection = Math.max(0, Math.min(1, projection));
   const closestPoint = {
     x: segmentStart.x + clampedProjection * segmentX,
@@ -358,13 +354,9 @@ function segmentCircleIntersections(
   if (discriminant <= GEOMETRY_EPSILON) return [];
 
   const squareRoot = Math.sqrt(discriminant);
-  return [
-    (-b - squareRoot) / (2 * a),
-    (-b + squareRoot) / (2 * a),
-  ].filter(
+  return [(-b - squareRoot) / (2 * a), (-b + squareRoot) / (2 * a)].filter(
     (parameter) =>
-      parameter > GEOMETRY_EPSILON
-      && parameter < 1 - GEOMETRY_EPSILON,
+      parameter > GEOMETRY_EPSILON && parameter < 1 - GEOMETRY_EPSILON,
   );
 }
 
@@ -374,7 +366,8 @@ function uniqueSortedParameters(parameters: number[]) {
     .sort((first, second) => first - second)
     .filter(
       (parameter, index, sorted) =>
-        index === 0 || Math.abs(parameter - sorted[index - 1]) > GEOMETRY_EPSILON,
+        index === 0 ||
+        Math.abs(parameter - sorted[index - 1]) > GEOMETRY_EPSILON,
     );
 }
 
@@ -435,16 +428,21 @@ function remainingPolylinesOutsideEraser(
 
   const finishCurrentPolyline = () => {
     if (
-      currentPolyline.length >= 2
-      && strokeLength(currentPolyline) >= MIN_REMAINING_STROKE_LENGTH
+      currentPolyline.length >= 2 &&
+      strokeLength(currentPolyline) >= MIN_REMAINING_STROKE_LENGTH
     ) {
       polylines.push(currentPolyline);
     }
     currentPolyline = [];
   };
 
-  const appendPiece = (pieceStart: CanvasPosition, pieceEnd: CanvasPosition) => {
-    if (distanceBetweenPoints(pieceStart, pieceEnd) < MIN_REMAINING_STROKE_LENGTH) {
+  const appendPiece = (
+    pieceStart: CanvasPosition,
+    pieceEnd: CanvasPosition,
+  ) => {
+    if (
+      distanceBetweenPoints(pieceStart, pieceEnd) < MIN_REMAINING_STROKE_LENGTH
+    ) {
       return;
     }
 
@@ -454,7 +452,9 @@ function remainingPolylinesOutsideEraser(
       currentPolyline = [pieceStart];
     }
 
-    if (!pointsAreClose(currentPolyline[currentPolyline.length - 1], pieceEnd)) {
+    if (
+      !pointsAreClose(currentPolyline[currentPolyline.length - 1], pieceEnd)
+    ) {
       currentPolyline.push(pieceEnd);
     }
   };

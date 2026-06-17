@@ -8,11 +8,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type {
-  CanvasEdge,
-  CanvasEdgeDirection,
-  CanvasRelationshipType,
-} from "../../types";
+import type { CanvasEdge, CanvasEdgeDirection } from "../../types";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import type { EdgeRenderModel } from "./canvasTypes";
 
@@ -33,10 +29,6 @@ type CanvasEdgeLabelsProps = {
     edgeId: string,
     direction: CanvasEdgeDirection,
   ) => void;
-  onUpdateEdgeRelationshipType: (
-    edgeId: string,
-    relationshipType: CanvasRelationshipType,
-  ) => void;
 };
 
 export function CanvasEdgeLabels({
@@ -53,7 +45,6 @@ export function CanvasEdgeLabels({
   onStartEdgeLabelEdit,
   onStopEdgeLabelEdit,
   onUpdateEdgeDirection,
-  onUpdateEdgeRelationshipType,
 }: CanvasEdgeLabelsProps) {
   return (
     <div className="canvas-edge-label-layer" aria-live="polite">
@@ -134,25 +125,6 @@ export function CanvasEdgeLabels({
                     onUpdateEdgeDirection(model.edge.id, "bidirectional")
                   }
                 />
-                <select
-                  aria-label="Relationship type"
-                  value={model.edge.relationshipType ?? "related"}
-                  onChange={(event) =>
-                    onUpdateEdgeRelationshipType(
-                      model.edge.id,
-                      event.currentTarget.value as CanvasRelationshipType,
-                    )
-                  }
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <option value="related">Related</option>
-                  <option value="inspired-by">Inspired by</option>
-                  <option value="uses">Uses</option>
-                  <option value="variant-of">Variant of</option>
-                  <option value="version-of">Version of</option>
-                  <option value="response-to">Response to</option>
-                  <option value="part-of">Part of</option>
-                </select>
                 <span className="canvas-edge-action-divider" />
                 <button
                   type="button"

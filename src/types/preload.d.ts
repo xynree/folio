@@ -2,6 +2,7 @@ import type {
   FolioData,
   FolioItem,
   ImportSource,
+  LinkMetadata,
   ProjectStatus,
   ReconciliationResult,
   ThumbnailUrls,
@@ -17,7 +18,10 @@ export interface FolioApi {
   }) => Promise<FolioData>;
   copyToFolio: (filePaths: string[]) => Promise<FolioItem[]>;
   importToFolio?: () => Promise<FolioItem[]>;
-  copyToProject?: (projectId: string, filePaths: string[]) => Promise<FolioItem[]>;
+  copyToProject?: (
+    projectId: string,
+    filePaths: string[],
+  ) => Promise<FolioItem[]>;
   importToProject?: (projectId: string) => Promise<FolioItem[]>;
   importSourcesToProject?: (
     projectId: string,
@@ -33,6 +37,7 @@ export interface FolioApi {
   getFileDataUrl: (filePath: string) => Promise<string>;
   getReconciliationResult: () => Promise<ReconciliationResult>;
   openInFinder: (filePath: string) => Promise<void>;
+  fetchLinkMetadata: (url: string) => Promise<LinkMetadata>;
   getPathForFile: (file: File) => string;
   /** Subscribe to files-added events pushed from the main process. Returns an unsubscribe function. */
   onFilesAdded: (callback: (items: FolioItem[]) => void) => () => void;

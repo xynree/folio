@@ -72,6 +72,7 @@ import {
   moveCanvasObjects,
   removeItemFromCanvas,
   updateCanvasLink,
+  updateCanvasNoteSize,
   updateCanvasNoteText,
   updateCanvasSection,
   updateCanvasTextElementSize,
@@ -162,6 +163,7 @@ export function CanvasView({
   const [dragPreview, setDragPreview] = useState<CanvasDragPreview | null>(null);
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
   const [projectImagePickerOpen, setProjectImagePickerOpen] = useState(false);
+  const [projectImageColumns, setProjectImageColumns] = useState(2);
   const [boardBrowserOpen, setBoardBrowserOpen] = useState(
     () => canvasDetailRequestId === 0,
   );
@@ -180,6 +182,7 @@ export function CanvasView({
   const canvasZoomRef = useRef(1);
   const viewportSaveTimerRef = useRef<number | null>(null);
   const restoringViewportRef = useRef(false);
+  const spaceHeldRef = useRef(false);
   const lastCanvasDetailRequestIdRef = useRef(canvasDetailRequestId);
 
   const focusCanvasView = useCallback((canvas: Canvas | null) => {
@@ -213,6 +216,31 @@ export function CanvasView({
       if (viewportSaveTimerRef.current !== null) {
         window.clearTimeout(viewportSaveTimerRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== "Space" && event.key !== " ") return;
+      const target = event.target;
+      if (
+        target instanceof Element
+        && target.closest("input, textarea, select, [contenteditable='true']")
+      ) {
+        return;
+      }
+      spaceHeldRef.current = true;
+    };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== "Space" && event.key !== " ") return;
+      spaceHeldRef.current = false;
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
     };
   }, []);
 
@@ -940,7 +968,6 @@ export function CanvasView({
     startEdgeLabelEdit,
     stopEdgeLabelEdit,
     updateEdgeDirection,
-    updateEdgeRelationshipType,
   } = useCanvasEdges({
     activeCanvas,
     canvasObjectLayouts,
@@ -1004,13 +1031,15 @@ export function CanvasView({
   const startMarqueeSelection = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (event.button !== 0) return false;
+      // Space + drag pans the canvas, so it should not start a marquee.
+      if (spaceHeldRef.current) return false;
       const target = event.target;
       if (target !== surfaceRef.current) return false;
 
       event.preventDefault();
       event.stopPropagation();
       const startPoint = relativeCanvasPointFromClient(event.clientX, event.clientY);
-      const appendSelection = event.metaKey || event.ctrlKey;
+      const appendSelection = event.metaKey || event.ctrlKey || event.shiftKey;
       setSelectionMarquee({ x: startPoint.x, y: startPoint.y, width: 0, height: 0 });
 
       const onPointerMove = (moveEvent: PointerEvent) => {
@@ -1060,13 +1089,10 @@ export function CanvasView({
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (activeTool === "select") {
         const target = event.target;
-        if (target === surfaceRef.current) {
-          if (event.shiftKey || event.metaKey || event.ctrlKey) {
-            if (startMarqueeSelection(event)) return;
-          } else {
-            setSelectedObjects([]);
-            setSelectedEdgeId(null);
-          }
+        if (target === surfaceRef.current && event.button === 0) {
+          // A plain drag on empty canvas draws a selection box; modifier keys
+          // extend the current selection. Either way a marquee starts here.
+          if (startMarqueeSelection(event)) return;
         }
       }
 
@@ -1075,7 +1101,6 @@ export function CanvasView({
     [
       activeTool,
       handleSurfacePointerDown,
-      setSelectedEdgeId,
       startMarqueeSelection,
     ],
   );
@@ -1129,11 +1154,29 @@ export function CanvasView({
       const link = createCanvasLinkFromUrl(rawUrl, point);
       if (!link) return false;
 
+      const canvasId = activeCanvas.id;
       updateCanvas(
-        activeCanvas.id,
+        canvasId,
         (canvas) => addCanvasLink(canvas, link),
         "Link added to board",
       );
+
+      void window.folio
+        .fetchLinkMetadata(link.url)
+        .then((metadata) => {
+          const patch = {
+            title: metadata.title ?? link.title,
+            description: metadata.description,
+            sourceDomain: metadata.sourceDomain ?? link.sourceDomain,
+            imageUrl: metadata.imageUrl,
+            faviconUrl: metadata.faviconUrl,
+          };
+          updateCanvas(canvasId, (canvas) =>
+            updateCanvasLink(canvas, link.id, patch),
+          );
+        })
+        .catch(() => undefined);
+
       return true;
     },
     [activeCanvas, updateCanvas],
@@ -1434,6 +1477,18 @@ export function CanvasView({
     [activeCanvas, updateCanvas],
   );
 
+  const updateNoteSize = useCallback(
+    (noteId: string, size: CanvasTextSize) => {
+      if (!activeCanvas) return;
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => updateCanvasNoteSize(canvas, noteId, size),
+        "Note text size updated",
+      );
+    },
+    [activeCanvas, updateCanvas],
+  );
+
   const updateLink = useCallback(
     (
       linkId: string,
@@ -1725,7 +1780,39 @@ export function CanvasView({
               aria-label="Project images"
             >
               {projectImages.length ? (
-                <div className="canvas-project-image-list">
+                <>
+                  <div
+                    className="canvas-project-image-grid-control"
+                    role="group"
+                    aria-label="Image grid size"
+                  >
+                    {[
+                      { columns: 3, label: "S" },
+                      { columns: 2, label: "M" },
+                      { columns: 1, label: "L" },
+                    ].map((option) => (
+                      <button
+                        className={
+                          projectImageColumns === option.columns
+                            ? "canvas-project-image-grid-active"
+                            : ""
+                        }
+                        key={option.columns}
+                        type="button"
+                        aria-label={`${option.label} image grid`}
+                        aria-pressed={projectImageColumns === option.columns}
+                        onClick={() => setProjectImageColumns(option.columns)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    className="canvas-project-image-list"
+                    style={{
+                      gridTemplateColumns: `repeat(${projectImageColumns}, minmax(0, 1fr))`,
+                    }}
+                  >
                   {projectImages.map((item) => {
                     const itemTitle = item.title || basename(item.path);
                     const alreadyAdded = activeCanvasItemIds.has(item.id);
@@ -1766,7 +1853,8 @@ export function CanvasView({
                       </article>
                     );
                   })}
-                </div>
+                  </div>
+                </>
               ) : (
                 <p className="canvas-project-image-empty">
                   Import files to this project to add them to boards.
@@ -1828,7 +1916,6 @@ export function CanvasView({
             onStartEdgeLabelEdit={startEdgeLabelEdit}
             onStopEdgeLabelEdit={stopEdgeLabelEdit}
             onUpdateEdgeDirection={updateEdgeDirection}
-            onUpdateEdgeRelationshipType={updateEdgeRelationshipType}
           />
 
           <CanvasToolCursor
@@ -1877,6 +1964,7 @@ export function CanvasView({
             onSuppressClickAfterDrag={suppressClickAfterDrag}
             onUpdateLink={updateLink}
             onUpdateNote={updateNote}
+            onUpdateNoteSize={updateNoteSize}
             onUpdateSection={updateSection}
             onUpdateTextElement={updateTextElement}
             onUpdateTextElementSize={updateTextElementSize}

@@ -95,12 +95,44 @@ export function CanvasMinimap({
     height: logicalViewportHeight * scale,
   };
 
+  const focusFromMinimapPoint = (clientX: number, clientY: number, element: Element) => {
+    const rect = element.getBoundingClientRect();
+    const localX = clientX - rect.left;
+    const localY = clientY - rect.top;
+    // Convert the clicked minimap point into world coordinates and center the
+    // viewport on it.
+    const worldX = bounds.x + (localX - MINIMAP_PADDING) / scale;
+    const worldY = bounds.y + (localY - MINIMAP_PADDING) / scale;
+    onFocusViewport(
+      worldX - logicalViewportWidth / 2,
+      worldY - logicalViewportHeight / 2,
+    );
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const element = event.currentTarget;
+    focusFromMinimapPoint(event.clientX, event.clientY, element);
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
+      focusFromMinimapPoint(moveEvent.clientX, moveEvent.clientY, element);
+    };
+    const onPointerUp = () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  };
+
   return (
     <button
       className="canvas-minimap"
       type="button"
       aria-label="Minimap"
-      onClick={() => onFocusViewport(bounds.x, bounds.y)}
+      onPointerDown={handlePointerDown}
     >
       {objectViews.map((object) => (
         <span

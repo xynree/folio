@@ -69,6 +69,7 @@ export interface CanvasStroke {
 export interface CanvasNote extends CanvasObjectGeometry {
   id: string;
   text: string;
+  size?: CanvasTextSize;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -100,8 +101,19 @@ export interface CanvasLink extends CanvasObjectGeometry {
   description?: string;
   sourceDomain?: string;
   faviconUrl?: string;
+  imageUrl?: string;
   capturedAt: string;
   updatedAt?: string;
+}
+
+/** Fetched preview metadata for an outside link */
+export interface LinkMetadata {
+  url: string;
+  title?: string;
+  description?: string;
+  sourceDomain?: string;
+  faviconUrl?: string;
+  imageUrl?: string;
 }
 
 /** Last useful board viewport for returning to a large canvas */

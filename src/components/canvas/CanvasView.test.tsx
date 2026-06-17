@@ -209,6 +209,14 @@ describe("CanvasView Phase 5 interactions", () => {
 
   it("creates text from the text tool and links from the link action", async () => {
     vi.mocked(window.folio.ensureThumbnails).mockResolvedValue({});
+    vi.mocked(window.folio.fetchLinkMetadata).mockResolvedValue({
+      url: "https://example.com/source",
+      title: "Example Source",
+      description: "A fetched description",
+      sourceDomain: "example.com",
+      imageUrl: "data:image/png;base64,PREVIEW",
+      faviconUrl: "data:image/png;base64,ICON",
+    });
     const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("example.com/source");
     const { container } = renderCanvasView();
     const { surface } = setCanvasMeasurements(container);
@@ -218,10 +226,72 @@ describe("CanvasView Phase 5 interactions", () => {
     fireEvent.click(screen.getByLabelText("Add link"));
 
     expect(await screen.findByDisplayValue("Text")).not.toBeNull();
-    expect(await screen.findByDisplayValue("example.com")).not.toBeNull();
+    expect(await screen.findByDisplayValue("Example Source")).not.toBeNull();
+    expect(
+      container.querySelector(".canvas-link-preview")?.getAttribute("src"),
+    ).toBe("data:image/png;base64,PREVIEW");
     expect(screen.queryByLabelText("Section tool")).toBeNull();
     expect(promptSpy).toHaveBeenCalledWith("Add a link to this board");
+    expect(window.folio.fetchLinkMetadata).toHaveBeenCalledWith(
+      "https://example.com/source",
+    );
     promptSpy.mockRestore();
+  });
+
+  it("selects objects with a drag marquee and reserves space-drag for panning", () => {
+    vi.mocked(window.folio.ensureThumbnails).mockResolvedValue({});
+    const data = makeData({
+      canvases: [
+        makeCanvas("board-1", {
+          title: "Board 1",
+          itemIds: ["alpha"],
+          positions: { alpha: { x: 80, y: 90, width: 160, height: 180 } },
+        }),
+      ],
+    });
+    const { container } = renderCanvasView(data);
+    const { surface } = setCanvasMeasurements(container);
+
+    fireEvent.pointerDown(surface, { button: 0, clientX: 20000, clientY: 20000 });
+    fireEvent.pointerMove(window, { clientX: 20400, clientY: 20400 });
+    expect(container.querySelector(".canvas-selection-marquee")).not.toBeNull();
+    fireEvent.pointerUp(window, { clientX: 20400, clientY: 20400 });
+
+    expect(screen.getByText("1 selected")).not.toBeNull();
+    expect(container.querySelector(".canvas-selection-marquee")).toBeNull();
+
+    // Holding space turns a left drag into a pan, so no marquee should appear.
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.pointerDown(surface, { button: 0, clientX: 20000, clientY: 20000 });
+    fireEvent.pointerMove(window, { clientX: 20300, clientY: 20300 });
+    expect(container.querySelector(".canvas-selection-marquee")).toBeNull();
+    fireEvent.pointerUp(window, { clientX: 20300, clientY: 20300 });
+    fireEvent.keyUp(window, { key: " " });
+  });
+
+  it("changes the project image grid size from the picker", async () => {
+    vi.mocked(window.folio.ensureThumbnails).mockResolvedValue({});
+    const { container } = renderCanvasView();
+    setCanvasMeasurements(container);
+
+    fireEvent.click(screen.getByLabelText("Add images"));
+
+    const imageList = container.querySelector(
+      ".canvas-project-image-list",
+    ) as HTMLElement;
+    expect(imageList.style.gridTemplateColumns).toBe(
+      "repeat(2, minmax(0, 1fr))",
+    );
+
+    fireEvent.click(screen.getByLabelText("S image grid"));
+    expect(imageList.style.gridTemplateColumns).toBe(
+      "repeat(3, minmax(0, 1fr))",
+    );
+
+    fireEvent.click(screen.getByLabelText("L image grid"));
+    expect(imageList.style.gridTemplateColumns).toBe(
+      "repeat(1, minmax(0, 1fr))",
+    );
   });
 
   it("selects board objects and searches matches without section actions", async () => {

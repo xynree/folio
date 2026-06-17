@@ -84,6 +84,7 @@ type CanvasObjectLayerProps = {
     patch: Partial<Pick<CanvasLink, "title" | "description" | "url">>,
   ) => void;
   onUpdateNote: (noteId: string, text: string) => void;
+  onUpdateNoteSize: (noteId: string, size: CanvasTextSize) => void;
   onUpdateSection: (
     sectionId: string,
     patch: Partial<Pick<CanvasSection, "title" | "color" | "collapsed">>,
@@ -123,6 +124,7 @@ export function CanvasObjectLayer({
   onSuppressClickAfterDrag,
   onUpdateLink,
   onUpdateNote,
+  onUpdateNoteSize,
   onUpdateSection,
   onUpdateTextElement,
   onUpdateTextElementSize,
@@ -228,6 +230,7 @@ export function CanvasObjectLayer({
             isSelected={selectedObjectKeys.has(objectKey("note", note.id))}
             onChange={onUpdateNote}
             onDelete={onDeleteNote}
+            onSizeChange={onUpdateNoteSize}
             onConnectorPointerDown={(event, side) =>
               onStartConnectorDrag(event, note.id, side)
             }
