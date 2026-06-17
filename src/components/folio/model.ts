@@ -1,4 +1,4 @@
-import type { Canvas, CanvasPosition, FolioData, FolioItem, Tag } from "../../types";
+import type { Canvas, CanvasPosition, FolioData, FolioItem, Project, Tag } from "../../types";
 import { CANVAS_COLORS, IMAGE_FILE_PATTERN } from "./constants";
 
 export function createId(prefix: string) {
@@ -6,6 +6,37 @@ export function createId(prefix: string) {
     return `${prefix}_${crypto.randomUUID()}`;
   }
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+/** Fills in any missing top-level collections so the rest of the app can assume they exist. */
+export function normalizeFolioData(data: FolioData): FolioData {
+  return {
+    ...data,
+    items: data.items ?? [],
+    canvases: data.canvases ?? [],
+    tags: data.tags ?? [],
+    projects: data.projects ?? [],
+  };
+}
+
+/** Moves a board to the front of a project's board list, recording the change time. */
+export function assignBoardToProject(
+  projects: Project[],
+  projectId: string | null,
+  boardId: string,
+  savedAt: string,
+): Project[] {
+  if (!projectId) return projects;
+
+  return projects.map((project) =>
+    project.id === projectId
+      ? {
+          ...project,
+          boardIds: [boardId, ...project.boardIds.filter((id) => id !== boardId)],
+          updatedAt: savedAt,
+        }
+      : project,
+  );
 }
 
 export function mergeItems(

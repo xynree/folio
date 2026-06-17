@@ -8,10 +8,7 @@ import type {
 } from "../../types";
 import { CANVAS_COLORS, CANVAS_WORLD_ORIGIN } from "../folio/constants";
 import { createId } from "../folio/model";
-import {
-  buildPolylinePath,
-  eraseStrokePathAtPoint,
-} from "./canvasGeometry";
+import { buildPolylinePath, eraseStrokePathAtPoint } from "./canvasGeometry";
 import {
   addCanvasSection,
   addCanvasStroke,
@@ -160,12 +157,13 @@ export function useCanvasDrawingTools({
 
   const handleSurfacePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      if (activeTool === "select" || activeTool === "connect" || !activeCanvas) return;
+      if (activeTool === "select" || activeTool === "connect" || !activeCanvas)
+        return;
       if (event.button !== 0) return;
       const target = event.target;
       if (
-        target instanceof Element
-        && target.closest(NON_DRAWING_TARGET_SELECTOR)
+        target instanceof Element &&
+        target.closest(NON_DRAWING_TARGET_SELECTOR)
       ) {
         return;
       }
@@ -294,12 +292,12 @@ function startPenDrag({
   const onPointerMove = (moveEvent: PointerEvent) => {
     moveEvent.preventDefault();
     const point =
-      updateToolCursor(moveEvent.clientX, moveEvent.clientY)
-      ?? surfacePointFromClient(moveEvent.clientX, moveEvent.clientY);
+      updateToolCursor(moveEvent.clientX, moveEvent.clientY) ??
+      surfacePointFromClient(moveEvent.clientX, moveEvent.clientY);
     const lastPoint = points[points.length - 1];
     if (
-      Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y)
-      < STROKE_POINT_MIN_DISTANCE
+      Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y) <
+      STROKE_POINT_MIN_DISTANCE
     ) {
       return;
     }

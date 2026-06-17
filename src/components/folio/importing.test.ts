@@ -1,5 +1,9 @@
 import { makeItem } from "../../test/fixtures";
-import { chooseAndImportItems, getImportFailureMessage } from "./importing";
+import {
+  chooseAndImportItems,
+  clipboardImageExtension,
+  getImportFailureMessage,
+} from "./importing";
 
 describe("folio importing helpers", () => {
   it("uses the direct import bridge when available", async () => {
@@ -44,5 +48,23 @@ describe("folio importing helpers", () => {
       "Import failed: Denied",
     );
     expect(getImportFailureMessage({}, "Import failed")).toBe("Import failed");
+  });
+});
+
+describe("clipboardImageExtension", () => {
+  it("prefers the extension from the file name", () => {
+    const file = { name: "shot.JPEG", type: "image/png" } as File;
+    expect(clipboardImageExtension(file)).toBe(".jpeg");
+  });
+
+  it("falls back to the MIME type when there is no extension", () => {
+    expect(clipboardImageExtension({ name: "clip", type: "image/png" } as File)).toBe(".png");
+    expect(clipboardImageExtension({ name: "clip", type: "image/jpeg" } as File)).toBe(".jpg");
+    expect(clipboardImageExtension({ name: "clip", type: "image/webp" } as File)).toBe(".webp");
+    expect(clipboardImageExtension({ name: "clip", type: "image/gif" } as File)).toBe(".gif");
+  });
+
+  it("defaults to .png for unknown types", () => {
+    expect(clipboardImageExtension({ name: "clip", type: "image/bmp" } as File)).toBe(".png");
   });
 });

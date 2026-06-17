@@ -24,7 +24,6 @@ import type {
   FolioData,
   FolioItem,
   ImportSource,
-  Project,
   ProjectReviewDocument,
   ReconciliationResult,
   ThumbnailUrls,
@@ -55,11 +54,13 @@ import type {
 } from "./folio/types";
 import {
   chooseAndImportItems,
+  clipboardImageExtension,
   getImportFailureMessage,
 } from "./folio/importing";
 import {
   addItemToCanvas,
   addItemsToCanvas,
+  assignBoardToProject,
   basename,
   createCanvas,
   createId,
@@ -68,6 +69,7 @@ import {
   markCanvasSaved,
   mergeImportedItemsIntoProject,
   mergeItems,
+  normalizeFolioData,
 } from "./folio/model";
 import { ReconciliationNotice } from "./layout/ReconciliationNotice";
 import { SelectionBar } from "./layout/SelectionBar";
@@ -76,53 +78,12 @@ import { ProjectReviewEditorPage } from "./projects/ProjectReviewEditorPage";
 import { ProjectReviewView } from "./projects/ProjectReviewView";
 import { ProjectsView } from "./projects/ProjectsView";
 import { ButtonIcon } from "./shared/ButtonIcon";
+import { useTagsSidebarResize } from "./useTagsSidebarResize";
 
 const ARCHIVE_UI_SCALE_MIN = 50;
 const ARCHIVE_UI_SCALE_MAX = 200;
 const ARCHIVE_UI_SCALE_STEP = 5;
-const TAGS_SIDEBAR_DEFAULT_WIDTH = 148;
-const TAGS_SIDEBAR_MIN_WIDTH = 112;
-const TAGS_SIDEBAR_MAX_WIDTH = 260;
 type ProjectSurface = "images" | "works" | "boards" | "review";
-
-function clipboardImageExtension(file: File) {
-  const filenameExt = file.name.match(/\.[a-z0-9]+$/i)?.[0];
-  if (filenameExt) return filenameExt.toLowerCase();
-  if (file.type === "image/jpeg") return ".jpg";
-  if (file.type === "image/png") return ".png";
-  if (file.type === "image/webp") return ".webp";
-  if (file.type === "image/gif") return ".gif";
-  return ".png";
-}
-
-function normalizeFolioData(data: FolioData): FolioData {
-  return {
-    ...data,
-    items: data.items ?? [],
-    canvases: data.canvases ?? [],
-    tags: data.tags ?? [],
-    projects: data.projects ?? [],
-  };
-}
-
-function assignBoardToProject(
-  projects: Project[],
-  projectId: string | null,
-  boardId: string,
-  savedAt: string,
-): Project[] {
-  if (!projectId) return projects;
-
-  return projects.map((project) =>
-    project.id === projectId
-      ? {
-          ...project,
-          boardIds: [boardId, ...project.boardIds.filter((id) => id !== boardId)],
-          updatedAt: savedAt,
-        }
-      : project,
-  );
-}
 
 export function AppShell() {
   const [data, setData] = useState<FolioData>(EMPTY_DATA);
@@ -134,10 +95,6 @@ export function AppShell() {
   const [archiveUiScale, setArchiveUiScale] = useState(100);
   const [heatmapMinimized, setHeatmapMinimized] = useState(false);
   const [tagsCollapsed, setTagsCollapsed] = useState(true);
-  const [tagsSidebarWidth, setTagsSidebarWidth] = useState(
-    TAGS_SIDEBAR_DEFAULT_WIDTH,
-  );
-  const [tagsSidebarResizing, setTagsSidebarResizing] = useState(false);
   const [gridTagFilter, setGridTagFilter] = useState<GridTagFilter>("all");
   const [thumbUrls, setThumbUrls] = useState<ThumbnailUrls>({});
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
@@ -156,8 +113,14 @@ export function AppShell() {
   const [reconciliation, setReconciliation] =
     useState<ReconciliationResult | null>(null);
   const [reconciliationDismissed, setReconciliationDismissed] = useState(false);
-  const studioWorkspaceRef = useRef<HTMLElement | null>(null);
   const dragDepth = useRef(0);
+
+  const {
+    workspaceRef: studioWorkspaceRef,
+    width: tagsSidebarWidth,
+    resizing: tagsSidebarResizing,
+    startResize: startTagsSidebarResize,
+  } = useTagsSidebarResize(tagsCollapsed);
 
   useEffect(() => {
     dataRef.current = data;
@@ -262,56 +225,6 @@ export function AppShell() {
     const timeout = window.setTimeout(() => setToast(null), 2400);
     return () => window.clearTimeout(timeout);
   }, [toast]);
-
-  const clampTagsSidebarWidth = useCallback(
-    (width: number) =>
-      Math.round(
-        Math.min(
-          Math.max(width, TAGS_SIDEBAR_MIN_WIDTH),
-          TAGS_SIDEBAR_MAX_WIDTH,
-        ),
-      ),
-    [],
-  );
-
-  const startTagsSidebarResize = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (tagsCollapsed) return;
-      const workspace = studioWorkspaceRef.current;
-      if (!workspace) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      const previousCursor = document.body.style.cursor;
-      const previousUserSelect = document.body.style.userSelect;
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      setTagsSidebarResizing(true);
-
-      const resizeToPointer = (clientX: number) => {
-        const rect = workspace.getBoundingClientRect();
-        setTagsSidebarWidth(clampTagsSidebarWidth(clientX - rect.left));
-      };
-
-      const onPointerMove = (moveEvent: PointerEvent) => {
-        resizeToPointer(moveEvent.clientX);
-      };
-
-      const onPointerUp = () => {
-        document.body.style.cursor = previousCursor;
-        document.body.style.userSelect = previousUserSelect;
-        setTagsSidebarResizing(false);
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-      };
-
-      resizeToPointer(event.clientX);
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
-    },
-    [clampTagsSidebarWidth, tagsCollapsed],
-  );
 
   const activeProject = useMemo(
     () =>

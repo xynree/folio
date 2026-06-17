@@ -23,7 +23,10 @@ export function tidyCanvasObjectsIntoGrid(
 ): CanvasObjectMovePatch[] {
   if (!objects.length) return [];
 
-  const columns = Math.max(1, options.columns ?? Math.ceil(Math.sqrt(objects.length)));
+  const columns = Math.max(
+    1,
+    options.columns ?? Math.ceil(Math.sqrt(objects.length)),
+  );
   const gap = options.gap ?? 28;
   const origin = options.origin ?? {
     x: Math.min(...objects.map((object) => object.geometry.x)),
@@ -153,10 +156,14 @@ export function canvasObjectBounds(objects: ArrangeableCanvasObject[]) {
   const minX = Math.min(...objects.map((object) => object.geometry.x));
   const minY = Math.min(...objects.map((object) => object.geometry.y));
   const maxX = Math.max(
-    ...objects.map((object) => object.geometry.x + (object.geometry.width ?? 0)),
+    ...objects.map(
+      (object) => object.geometry.x + (object.geometry.width ?? 0),
+    ),
   );
   const maxY = Math.max(
-    ...objects.map((object) => object.geometry.y + (object.geometry.height ?? 0)),
+    ...objects.map(
+      (object) => object.geometry.y + (object.geometry.height ?? 0),
+    ),
   );
 
   return {
@@ -183,10 +190,7 @@ export function canvasObjectsWithinSection(
     const centerX = object.geometry.x + (object.geometry.width ?? 0) / 2;
     const centerY = object.geometry.y + (object.geometry.height ?? 0) / 2;
     return (
-      centerX >= left
-      && centerX <= right
-      && centerY >= top
-      && centerY <= bottom
+      centerX >= left && centerX <= right && centerY >= top && centerY <= bottom
     );
   });
 }

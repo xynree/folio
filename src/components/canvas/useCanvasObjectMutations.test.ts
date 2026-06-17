@@ -14,15 +14,33 @@ function canvasFixture(): Canvas {
     edges: [],
     strokes: [],
     texts: [{ id: "text-1", text: "Caption", x: 60, y: 70 }],
-    links: [{ id: "link-1", title: "Example", url: "https://example.com/", x: 80, y: 90 }],
-    sections: [{ id: "section-1", title: "Research", x: 5, y: 6, width: 500, height: 300 }],
+    links: [
+      {
+        id: "link-1",
+        title: "Example",
+        url: "https://example.com/",
+        x: 80,
+        y: 90,
+      },
+    ],
+    sections: [
+      {
+        id: "section-1",
+        title: "Research",
+        x: 5,
+        y: 6,
+        width: 500,
+        height: 300,
+      },
+    ],
   };
 }
 
 /** Runs a captured updater against a fresh fixture so assertions read like real canvas output. */
-function applyLastUpdate(
-  updateCanvas: ReturnType<typeof vi.fn>,
-): { canvas: Canvas; message: string | undefined } {
+function applyLastUpdate(updateCanvas: ReturnType<typeof vi.fn>): {
+  canvas: Canvas;
+  message: string | undefined;
+} {
   const [canvasId, updater, message] = updateCanvas.mock.calls.at(-1) ?? [];
   expect(canvasId).toBe("canvas-1");
   return { canvas: updater(canvasFixture()), message };
@@ -102,10 +120,14 @@ describe("useCanvasObjectMutations", () => {
     const { updateCanvas, result } = renderMutations();
 
     result.current.updateNoteSize("note-1", "lg");
-    expect(applyLastUpdate(updateCanvas).message).toBe("Note text size updated");
+    expect(applyLastUpdate(updateCanvas).message).toBe(
+      "Note text size updated",
+    );
 
     result.current.updateSection("section-1", { title: "Renamed" });
-    expect(applyLastUpdate(updateCanvas).canvas.sections[0].title).toBe("Renamed");
+    expect(applyLastUpdate(updateCanvas).canvas.sections[0].title).toBe(
+      "Renamed",
+    );
 
     result.current.deleteLink("link-1");
     expect(applyLastUpdate(updateCanvas).canvas.links).toEqual([]);

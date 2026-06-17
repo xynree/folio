@@ -1,5 +1,16 @@
 import type { FolioItem } from "../../types";
 
+/** Picks a file extension for a pasted clipboard image, falling back to its MIME type. */
+export function clipboardImageExtension(file: File): string {
+  const filenameExt = file.name.match(/\.[a-z0-9]+$/i)?.[0];
+  if (filenameExt) return filenameExt.toLowerCase();
+  if (file.type === "image/jpeg") return ".jpg";
+  if (file.type === "image/png") return ".png";
+  if (file.type === "image/webp") return ".webp";
+  if (file.type === "image/gif") return ".gif";
+  return ".png";
+}
+
 function messageForError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }

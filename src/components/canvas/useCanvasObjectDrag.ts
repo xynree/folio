@@ -30,7 +30,9 @@ type UseCanvasObjectDragOptions = {
   saveData: SaveDataHandler;
   selectedObjectPositions?: Map<string, CanvasObjectGeometry>;
   selectedObjects?: CanvasObjectSelection[];
-  setDragPreview: React.Dispatch<React.SetStateAction<CanvasDragPreview | null>>;
+  setDragPreview: React.Dispatch<
+    React.SetStateAction<CanvasDragPreview | null>
+  >;
   startEdgeDrag: StartEdgeDragHandler;
 };
 
@@ -46,9 +48,10 @@ export function useCanvasObjectDrag({
   setDragPreview,
   startEdgeDrag,
 }: UseCanvasObjectDragOptions) {
-  const draggedObjectRef = useRef<{ kind: CanvasObjectKind; id: string } | null>(
-    null,
-  );
+  const draggedObjectRef = useRef<{
+    kind: CanvasObjectKind;
+    id: string;
+  } | null>(null);
 
   const startDrag = useCallback(
     (
@@ -68,7 +71,8 @@ export function useCanvasObjectDrag({
       const objectSelection = { id: objectId, kind };
       const selectedObjectKey = canvasObjectSelectionKey(objectSelection);
       const isSelectionMove =
-        selectedObjects.length > 1 && selectedObjectPositions.has(selectedObjectKey);
+        selectedObjects.length > 1 &&
+        selectedObjectPositions.has(selectedObjectKey);
 
       const dragObjects: Array<
         CanvasObjectSelection & { startPosition: CanvasObjectGeometry }
@@ -86,8 +90,8 @@ export function useCanvasObjectDrag({
                 : null;
             })
             .filter(Boolean) as Array<
-              CanvasObjectSelection & { startPosition: CanvasObjectGeometry }
-            >)
+            CanvasObjectSelection & { startPosition: CanvasObjectGeometry }
+          >)
         : kind === "section"
           ? [
               { ...objectSelection, startPosition },
@@ -140,7 +144,12 @@ export function useCanvasObjectDrag({
                 ? markCanvasSaved(
                     shouldMoveGroup
                       ? moveCanvasObjects(canvas, movePatches)
-                      : moveCanvasObject(canvas, kind, objectId, movePatches[0].position),
+                      : moveCanvasObject(
+                          canvas,
+                          kind,
+                          objectId,
+                          movePatches[0].position,
+                        ),
                     savedAt,
                   )
                 : canvas,
@@ -188,8 +197,8 @@ export function useCanvasObjectDrag({
         commitPosition(upEvent.clientX, upEvent.clientY);
         window.setTimeout(() => {
           if (
-            draggedObjectRef.current?.kind === kind
-            && draggedObjectRef.current.id === objectId
+            draggedObjectRef.current?.kind === kind &&
+            draggedObjectRef.current.id === objectId
           ) {
             draggedObjectRef.current = null;
           }
@@ -214,14 +223,10 @@ export function useCanvasObjectDrag({
   );
 
   const suppressClickAfterDrag = useCallback(
-    (
-      event: React.MouseEvent,
-      kind: CanvasObjectKind,
-      objectId: string,
-    ) => {
+    (event: React.MouseEvent, kind: CanvasObjectKind, objectId: string) => {
       if (
-        draggedObjectRef.current?.kind !== kind
-        || draggedObjectRef.current.id !== objectId
+        draggedObjectRef.current?.kind !== kind ||
+        draggedObjectRef.current.id !== objectId
       ) {
         return;
       }

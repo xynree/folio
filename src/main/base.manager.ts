@@ -23,6 +23,12 @@ import {
 import { ArchiveManager } from "./archive.manager";
 import { fetchLinkMetadata } from "./linkMetadata";
 import { FolioStorage } from "./storage.manager";
+import {
+  extractCommandErrorMessage,
+  getMimeType,
+  isPathInsideDirectory,
+  isPathWithinRoot,
+} from "./path.helpers";
 
 const execFileAsync = promisify(execFile);
 const PHOTOS_PICKER_CANCELLED = "__FOLIO_PHOTOS_PICKER_CANCELLED__";
@@ -200,14 +206,14 @@ export class FolioManager implements FolioManagerInterface {
           absolutePath = path.resolve(this.folioRoot, relativePath);
         }
 
-        if (!absolutePath || !this.isSafeFolioPath(absolutePath)) {
+        if (!absolutePath || !isPathWithinRoot(absolutePath, this.folioRoot)) {
           return new Response("Not found", { status: 404 });
         }
 
         const data = await fs.readFile(absolutePath);
         return new Response(new Uint8Array(data), {
           headers: {
-            "content-type": this.getMimeType(absolutePath),
+            "content-type": getMimeType(absolutePath),
             "cache-control": "no-store",
           },
         });
@@ -452,7 +458,7 @@ export class FolioManager implements FolioManagerInterface {
     const absolutePath = path.resolve(filePath);
     return this.projects.find((project) =>
       PROJECT_MEDIA_DIR_NAMES.some((directoryName) =>
-        this.isPathInsideDirectory(
+        isPathInsideDirectory(
           absolutePath,
           path.join(this.folioRoot, project.folderPath, directoryName),
         ),
@@ -736,7 +742,7 @@ export class FolioManager implements FolioManagerInterface {
       await dialog.showMessageBox({
         type: "error",
         message: "Photos import failed",
-        detail: this.errorMessage(error),
+        detail: extractCommandErrorMessage(error),
       });
       return { filePaths: [] };
     }
@@ -978,19 +984,6 @@ export class FolioManager implements FolioManagerInterface {
       fs.mkdir(path.join(this.folioRoot, "projects"), { recursive: true }),
       fs.mkdir(this.dotFolio, { recursive: true }),
     ]);
-  }
-
-  private isFlatFileInDirectory(filePath: string, directory: string): boolean {
-    return path.resolve(path.dirname(filePath)) === path.resolve(directory);
-  }
-
-  private isPathInsideDirectory(filePath: string, directory: string): boolean {
-    const relative = path.relative(directory, filePath);
-    return (
-      Boolean(relative) &&
-      !relative.startsWith("..") &&
-      !path.isAbsolute(relative)
-    );
   }
 
   private async moveFileToDirectory(
@@ -1493,36 +1486,5 @@ export class FolioManager implements FolioManagerInterface {
         error,
       );
     }
-  }
-
-  private errorMessage(error: unknown): string {
-    const structuredError = error as { stderr?: unknown };
-    const stderr =
-      typeof structuredError?.stderr === "string"
-        ? structuredError.stderr.trim()
-        : "";
-    const message =
-      stderr || (error instanceof Error ? error.message : String(error));
-    const executionError = message.match(
-      /execution error: (.*?)(?: \(-?\d+\))?$/,
-    );
-
-    return executionError?.[1]?.trim() ?? message.trim();
-  }
-
-  private isSafeFolioPath(absolutePath: string): boolean {
-    const resolved = path.resolve(absolutePath);
-    const root = path.resolve(this.folioRoot);
-    return resolved === root || resolved.startsWith(`${root}${path.sep}`);
-  }
-
-  private getMimeType(filePath: string): string {
-    const ext = path.extname(filePath).toLowerCase();
-    if (ext === ".svg") return "image/svg+xml";
-    if (ext === ".png") return "image/png";
-    if (ext === ".webp") return "image/webp";
-    if (ext === ".gif") return "image/gif";
-    if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-    return "application/octet-stream";
   }
 }

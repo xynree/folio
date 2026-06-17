@@ -2,6 +2,7 @@ import { describe, it, vi, expect } from "vitest";
 import type { Canvas, FolioItem } from "../../types";
 import {
   addItemsToCanvas,
+  assignBoardToProject,
   buildDateRange,
   canvasColorsForItem,
   createCanvas,
@@ -11,6 +12,7 @@ import {
   markCanvasSaved,
   mergeImportedItemsIntoProject,
   mergeItems,
+  normalizeFolioData,
   tagTextsForItem,
 } from "./model";
 import { makeData, makeProject } from "../../test/fixtures";
@@ -164,5 +166,43 @@ describe("folio model helpers", () => {
         type: "music",
       }),
     ).toBe(false);
+  });
+});
+
+describe("normalizeFolioData", () => {
+  it("fills in missing top-level collections", () => {
+    const normalized = normalizeFolioData({ version: 1 } as never);
+    expect(normalized.items).toEqual([]);
+    expect(normalized.canvases).toEqual([]);
+    expect(normalized.tags).toEqual([]);
+    expect(normalized.projects).toEqual([]);
+  });
+
+  it("preserves existing collections", () => {
+    const data = makeData();
+    const normalized = normalizeFolioData(data);
+    expect(normalized.items).toBe(data.items);
+    expect(normalized.projects).toBe(data.projects);
+  });
+});
+
+describe("assignBoardToProject", () => {
+  it("returns projects unchanged when there is no project id", () => {
+    const projects = [makeProject("p1")];
+    expect(assignBoardToProject(projects, null, "board-x", "now")).toBe(projects);
+  });
+
+  it("moves the board to the front and de-duplicates it", () => {
+    const projects = [makeProject("p1", { boardIds: ["a", "board-1", "b"] })];
+    const next = assignBoardToProject(projects, "p1", "board-1", "2027-01-01");
+    expect(next[0].boardIds).toEqual(["board-1", "a", "b"]);
+    expect(next[0].updatedAt).toBe("2027-01-01");
+  });
+
+  it("only updates the matching project", () => {
+    const projects = [makeProject("p1"), makeProject("p2", { boardIds: [] })];
+    const next = assignBoardToProject(projects, "p2", "new-board", "2027-01-01");
+    expect(next[0]).toBe(projects[0]);
+    expect(next[1].boardIds).toEqual(["new-board"]);
   });
 });

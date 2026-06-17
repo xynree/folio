@@ -10,9 +10,21 @@ import {
 } from "./canvasArrangement";
 
 const objects: ArrangeableCanvasObject[] = [
-  { id: "a", kind: "item", geometry: { x: 100, y: 80, width: 100, height: 80 } },
-  { id: "b", kind: "note", geometry: { x: 260, y: 120, width: 120, height: 90 } },
-  { id: "c", kind: "link", geometry: { x: 420, y: 160, width: 140, height: 100 } },
+  {
+    id: "a",
+    kind: "item",
+    geometry: { x: 100, y: 80, width: 100, height: 80 },
+  },
+  {
+    id: "b",
+    kind: "note",
+    geometry: { x: 260, y: 120, width: 120, height: 90 },
+  },
+  {
+    id: "c",
+    kind: "link",
+    geometry: { x: 420, y: 160, width: 140, height: 100 },
+  },
 ];
 
 describe("canvas arrangement helpers", () => {
@@ -24,32 +36,54 @@ describe("canvas arrangement helpers", () => {
     });
 
     expect(patches).toEqual([
-      { id: "a", kind: "item", position: { x: 10, y: 15, width: 100, height: 80 } },
-      { id: "b", kind: "note", position: { x: 170, y: 15, width: 120, height: 90 } },
-      { id: "c", kind: "link", position: { x: 10, y: 135, width: 140, height: 100 } },
+      {
+        id: "a",
+        kind: "item",
+        position: { x: 10, y: 15, width: 100, height: 80 },
+      },
+      {
+        id: "b",
+        kind: "note",
+        position: { x: 170, y: 15, width: 120, height: 90 },
+      },
+      {
+        id: "c",
+        kind: "link",
+        position: { x: 10, y: 135, width: 140, height: 100 },
+      },
     ]);
     expect(objects[0].geometry.x).toBe(100);
   });
 
   it("aligns selected objects against shared edges and centers", () => {
-    expect(alignCanvasObjects(objects, "left").map((patch) => patch.position.x))
-      .toEqual([100, 100, 100]);
-    expect(alignCanvasObjects(objects, "top").map((patch) => patch.position.y))
-      .toEqual([80, 80, 80]);
-    expect(alignCanvasObjects(objects, "center-x").map((patch) => patch.position.x))
-      .toEqual([270, 260, 250]);
-    expect(alignCanvasObjects(objects, "center-y").map((patch) => patch.position.y))
-      .toEqual([125, 120, 115]);
+    expect(
+      alignCanvasObjects(objects, "left").map((patch) => patch.position.x),
+    ).toEqual([100, 100, 100]);
+    expect(
+      alignCanvasObjects(objects, "top").map((patch) => patch.position.y),
+    ).toEqual([80, 80, 80]);
+    expect(
+      alignCanvasObjects(objects, "center-x").map((patch) => patch.position.x),
+    ).toEqual([270, 260, 250]);
+    expect(
+      alignCanvasObjects(objects, "center-y").map((patch) => patch.position.y),
+    ).toEqual([125, 120, 115]);
   });
 
   it("distributes objects evenly across their current range", () => {
     expect(
-      distributeCanvasObjects(objects, "horizontal").map((patch) => patch.position.x),
+      distributeCanvasObjects(objects, "horizontal").map(
+        (patch) => patch.position.x,
+      ),
     ).toEqual([100, 260, 420]);
     expect(
-      distributeCanvasObjects(objects, "vertical").map((patch) => patch.position.y),
+      distributeCanvasObjects(objects, "vertical").map(
+        (patch) => patch.position.y,
+      ),
     ).toEqual([80, 120, 160]);
-    expect(distributeCanvasObjects(objects.slice(0, 2), "horizontal")).toEqual([]);
+    expect(distributeCanvasObjects(objects.slice(0, 2), "horizontal")).toEqual(
+      [],
+    );
   });
 
   it("calculates bounds and section frames around selected objects", () => {
@@ -90,11 +124,23 @@ describe("canvas arrangement helpers", () => {
     };
     const candidates: ArrangeableCanvasObject[] = [
       // Center (150, 130) is inside the section.
-      { id: "inside", kind: "item", geometry: { x: 100, y: 90, width: 100, height: 80 } },
+      {
+        id: "inside",
+        kind: "item",
+        geometry: { x: 100, y: 90, width: 100, height: 80 },
+      },
       // Center (510, 210) is outside the section.
-      { id: "outside", kind: "note", geometry: { x: 450, y: 160, width: 120, height: 100 } },
+      {
+        id: "outside",
+        kind: "note",
+        geometry: { x: 450, y: 160, width: 120, height: 100 },
+      },
       // Another section should never be treated as contained.
-      { id: "nested-section", kind: "section", geometry: { x: 60, y: 60, width: 40, height: 40 } },
+      {
+        id: "nested-section",
+        kind: "section",
+        geometry: { x: 60, y: 60, width: 40, height: 40 },
+      },
       // The section itself should be excluded.
       section,
     ];
