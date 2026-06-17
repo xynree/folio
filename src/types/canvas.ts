@@ -26,6 +26,15 @@ export type CanvasEdgeDirection = "none" | "forward" | "bidirectional";
 
 export type CanvasTextSize = "sm" | "md" | "large";
 
+export type BoardKind =
+  | "reference-board"
+  | "moodboard"
+  | "process-board"
+  | "review-board"
+  | "collection";
+
+export type BoardStatus = "active" | "paused" | "done" | "archived";
+
 /** A connecting line between two objects on a canvas */
 export interface CanvasEdge {
   id: string;
@@ -72,6 +81,14 @@ export interface Canvas {
   title: string;
   description?: string;
   color?: string; // Theme color for the canvas
+  projectId?: string;
+  kind?: BoardKind;
+  status?: BoardStatus;
+  brief?: string;
+  outcome?: string;
+  startedAt?: string;
+  targetDate?: string;
+  completedAt?: string;
   createdAt?: string;
   updatedAt?: string;
   itemIds: string[]; // IDs of items from the main archive

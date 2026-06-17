@@ -2,20 +2,47 @@ import { Canvas } from "./canvas";
 
 /**
  * The unified data structure for the application state in memory.
- * Persisted on disk across three separate files:
+ * Persisted on disk across four separate files:
  * - folio.json (version and items)
  * - tags.json (tags array)
  * - canvases.json (canvases array)
+ * - projects.json (projects array)
  */
 export interface FolioData {
   version: number;
   items: FolioItem[];
   canvases: Canvas[];
   tags: Tag[];
+  projects: Project[];
 }
 
 /** Supported media types in the archive */
 export type ItemType = "sketch" | "ref" | "music" | "anim" | "text" | "other";
+
+export type ItemStage =
+  | "reference"
+  | "sketch"
+  | "wip"
+  | "process"
+  | "final"
+  | "output"
+  | "note"
+  | "other";
+
+export type ProjectStatus = "active" | "paused" | "done" | "archived";
+
+export interface Project {
+  id: string;
+  title: string;
+  description?: string;
+  status?: ProjectStatus;
+  createdAt: string;
+  updatedAt: string;
+  folderPath: string;
+  imageIds: string[];
+  workItemIds: string[];
+  boardIds: string[];
+}
 
 /** A single metadata entry for a file in the archive */
 export interface FolioItem {
@@ -29,6 +56,10 @@ export interface FolioItem {
   tagIds: string[]; // References to Tag.id
   mediaWidth?: number; // Natural source image width when known
   mediaHeight?: number; // Natural source image height when known
+  projectId?: string; // Owning project for project-imported or migrated items
+  stage?: ItemStage; // Gentle process stage; Works membership remains project-level
+  sourceCreatedAt?: string;
+  updatedAt?: string;
   missing?: boolean; // True if file is missing from disk
 }
 

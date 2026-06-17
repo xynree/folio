@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { FolioItem, Tag, Canvas } from "../types";
+import { FolioItem, Tag, Canvas, Project } from "../types";
 
 /**
  * Strategy interface for saving different types of data.
@@ -88,6 +88,17 @@ export class FolioStorage {
     version: number,
   ): Promise<void> {
     await this.jsonStrategy.save(filePath, { version, canvases });
+  }
+
+  /**
+   * Saves projects with the version header.
+   */
+  async saveProjects(
+    filePath: string,
+    projects: Project[],
+    version: number,
+  ): Promise<void> {
+    await this.jsonStrategy.save(filePath, { version, projects });
   }
 
   /**

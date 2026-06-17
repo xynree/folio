@@ -319,15 +319,15 @@ This phase turns the current archive and board system into a project-based creat
 
 ### 4.1 Project model and launch flow
 
-- [ ] Add `projects.json` to the split metadata schema.
-- [ ] Define `Project` with `id`, `title`, `description`, `status`, `createdAt`, `updatedAt`, `folderPath`, `imageIds`, `workItemIds`, and `boardIds`.
-- [ ] Open the app to a Projects view that lists all projects instead of opening directly to the archive/board workspace.
-- [ ] Let the user create any number of projects from the Projects view.
-- [ ] Project creation should create a readable folder at `~/Documents/Folio/projects/<project-slug-or-id>/`.
-- [ ] Each project folder should include `images/`, `works/`, and `boards/` subfolders.
-- [ ] Add a migration path that creates a default project for existing archive items and existing canvases.
-- [ ] Assign existing canvases to the default project with `canvas.projectId` and `project.boardIds`.
-- [ ] Define project as a personal studio container, not a collaborative workspace; avoid collaborator, owner, assignee, review-request, comment-thread, or approval concepts.
+- [x] Add `projects.json` to the split metadata schema.
+- [x] Define `Project` with `id`, `title`, `description`, `status`, `createdAt`, `updatedAt`, `folderPath`, `imageIds`, `workItemIds`, and `boardIds`.
+- [x] Open the app to a Projects view that lists all projects instead of opening directly to the archive/board workspace.
+- [x] Let the user create any number of projects from the Projects view.
+- [x] Project creation should create a readable folder at `~/Documents/Folio/projects/<project-slug-or-id>/`.
+- [x] Each project folder should include `images/`, `works/`, and `boards/` subfolders.
+- [x] Add a migration path that creates a default project for existing archive items and existing canvases.
+- [x] Assign existing canvases to the default project with `canvas.projectId` and `project.boardIds`.
+- [x] Define project as a personal studio container, not a collaborative workspace; avoid collaborator, owner, assignee, review-request, comment-thread, or approval concepts.
 
 ### 4.2 Project image intake
 

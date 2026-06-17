@@ -3,6 +3,7 @@ import type {
   CanvasReference,
   FolioData,
   FolioItem,
+  ProjectStatus,
   ReconciliationResult,
   ThumbnailUrls,
 } from "./types";
@@ -13,6 +14,13 @@ const folioApi = {
 
   saveFolioData: (data: FolioData): Promise<void> =>
     ipcRenderer.invoke("folio:save-folio-data", data),
+
+  createProject: (input: {
+    title: string;
+    description?: string;
+    status?: ProjectStatus;
+  }): Promise<FolioData> =>
+    ipcRenderer.invoke("folio:create-project", input),
 
   copyToFolio: (filePaths: string[]): Promise<FolioItem[]> =>
     ipcRenderer.invoke("folio:copy-to-folio", filePaths),

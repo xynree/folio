@@ -115,6 +115,181 @@ button svg {
     #f7f3ec;
 }
 
+.projects-home {
+  grid-row: 2;
+  min-height: 0;
+  padding: 42px clamp(24px, 5vw, 72px) 32px;
+  overflow: auto;
+}
+
+.projects-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 1160px;
+  margin: 0 auto 28px;
+  -webkit-app-region: drag;
+}
+
+.projects-header p {
+  margin: 0 0 6px;
+  color: #7c6f61;
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.projects-header h1 {
+  margin: 0;
+  color: #28231e;
+  font-size: 34px;
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.projects-create-form {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  -webkit-app-region: no-drag;
+}
+
+.projects-create-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.projects-create-form label span {
+  color: #7c6f61;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.projects-create-form input {
+  width: min(280px, 32vw);
+  min-width: 180px;
+  height: 34px;
+  padding: 0 10px;
+  color: #28231e;
+  background: #fffdf8;
+  border: 1px solid #dacdbb;
+  border-radius: 7px;
+  font: inherit;
+}
+
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  max-width: 1160px;
+  margin: 0 auto;
+}
+
+.project-card {
+  display: grid;
+  gap: 14px;
+  min-height: 224px;
+  padding: 16px;
+  background: rgba(255, 253, 248, 0.82);
+  border: 1px solid #ded2c1;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(47, 38, 28, 0.07);
+}
+
+.project-card-main {
+  display: grid;
+  gap: 10px;
+}
+
+.project-status {
+  justify-self: start;
+  padding: 3px 7px;
+  color: #385d56;
+  background: rgba(56, 93, 86, 0.1);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: capitalize;
+}
+
+.project-card h2,
+.projects-empty h2 {
+  margin: 0;
+  color: #28231e;
+  font-size: 18px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.project-card p,
+.projects-empty p {
+  margin: 0;
+  color: #6f6255;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.project-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0 0;
+}
+
+.project-card dl div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px;
+  background: #f6efe4;
+  border-radius: 7px;
+}
+
+.project-card dt {
+  color: #7c6f61;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.project-card dd {
+  margin: 0;
+  color: #28231e;
+  font-size: 18px;
+  font-weight: 780;
+}
+
+.project-card-footer {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: #7c6f61;
+  font-size: 12px;
+}
+
+.project-card-footer span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-open-button {
+  justify-self: start;
+}
+
+.projects-empty {
+  display: grid;
+  gap: 8px;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 32px;
+  background: rgba(255, 253, 248, 0.68);
+  border: 1px dashed #d8cab8;
+  border-radius: 8px;
+}
+
 .archive-panel-header strong,
 .canvas-dock-header strong {
   min-width: 0;
@@ -283,11 +458,33 @@ button svg {
 
 .workspace-panel-mode-bar {
   grid-row: 1;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 28px;
   -webkit-app-region: drag;
+}
+
+.project-back-button {
+  position: absolute;
+  left: 16px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0 9px;
+  font-size: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.active-project-title {
+  position: absolute;
+  left: 112px;
+  max-width: min(42vw, 460px);
+  overflow: hidden;
+  color: #4c3b24;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-panel-mode-control {

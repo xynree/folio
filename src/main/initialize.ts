@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { SCHEMA_VERSION } from "../constants";
-import { FolioItem, Tag, Canvas } from "../types";
+import { FolioItem, Tag, Canvas, Project } from "../types";
 
 /**
  * Initializes the local filesystem structure and standard schema.
@@ -17,6 +17,7 @@ export async function initialize(app: Electron.App) {
     FOLIO_ROOT,
     path.join(FOLIO_ROOT, "references"),
     path.join(FOLIO_ROOT, "items"),
+    path.join(FOLIO_ROOT, "projects"),
     path.join(FOLIO_ROOT, "items", currentYear),
     DOT_FOLIO,
     path.join(DOT_FOLIO, "thumbs"),
@@ -39,6 +40,10 @@ export async function initialize(app: Electron.App) {
     {
       path: path.join(DOT_FOLIO, "canvases.json"),
       default: { version: SCHEMA_VERSION, canvases: [] as Canvas[] },
+    },
+    {
+      path: path.join(DOT_FOLIO, "projects.json"),
+      default: { version: SCHEMA_VERSION, projects: [] as Project[] },
     },
   ];
 

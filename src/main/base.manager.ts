@@ -5,7 +5,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { computeHash } from "../helpers";
+import { nanoid } from "nanoid";
+import { computeHash, sanitizeFileBaseName } from "../helpers";
 import { SCHEMA_VERSION } from "../constants";
 import {
   Canvas,
@@ -13,6 +14,8 @@ import {
   FolioData,
   FolioItem,
   ImportSource,
+  Project,
+  ProjectStatus,
   ReconciliationFile,
   ReconciliationResult,
   Tag,
@@ -31,6 +34,12 @@ interface ImportFileSelection {
   cleanupDir?: string;
 }
 
+interface CreateProjectInput {
+  title: string;
+  description?: string;
+  status?: ProjectStatus;
+}
+
 /**
  * The core engine of the main process.
  * Manages in-memory data, file operations, reconciliation, watcher events, and IPC.
@@ -41,6 +50,7 @@ export interface FolioManagerInterface {
   prepareForLaunch(): Promise<void>;
   loadData(): Promise<FolioData>;
   saveFolioData(data: FolioData): Promise<void>;
+  createProject(input: CreateProjectInput): Promise<FolioData>;
   copyToFolio(filePaths: string[]): Promise<FolioItem[]>;
   importToFolio(): Promise<FolioItem[]>;
   copyReference(
@@ -62,6 +72,7 @@ const emptyReconciliationResult = (): ReconciliationResult => ({
 export class FolioManager implements FolioManagerInterface {
   private canvases: Canvas[] = [];
   private tags: Tag[] = [];
+  private projects: Project[] = [];
   private version: number = SCHEMA_VERSION;
   private reconciliationResult: ReconciliationResult = emptyReconciliationResult();
   private pendingWatcherAdds = new Set<string>();
@@ -72,6 +83,7 @@ export class FolioManager implements FolioManagerInterface {
   private readonly dbPath: string;
   private readonly tagsPath: string;
   private readonly canvasesPath: string;
+  private readonly projectsPath: string;
 
   private archiveManager: ArchiveManager;
   private storageManager = FolioStorage.getInstance();
@@ -82,6 +94,7 @@ export class FolioManager implements FolioManagerInterface {
     this.dbPath = path.join(this.dotFolio, "folio.json");
     this.tagsPath = path.join(this.dotFolio, "tags.json");
     this.canvasesPath = path.join(this.dotFolio, "canvases.json");
+    this.projectsPath = path.join(this.dotFolio, "projects.json");
 
     this.archiveManager = new ArchiveManager(this.folioRoot, this.dbPath);
   }
@@ -90,6 +103,9 @@ export class FolioManager implements FolioManagerInterface {
     ipcMain.handle("folio:get-folio-data", () => this.loadData());
     ipcMain.handle("folio:save-folio-data", (_: unknown, data: FolioData) =>
       this.saveFolioData(data),
+    );
+    ipcMain.handle("folio:create-project", (_: unknown, input: CreateProjectInput) =>
+      this.createProject(input),
     );
     ipcMain.handle("folio:copy-to-folio", (_: unknown, filePaths: string[]) =>
       this.copyToFolio(filePaths),
@@ -222,41 +238,53 @@ export class FolioManager implements FolioManagerInterface {
   }
 
   async loadData(): Promise<FolioData> {
-    const [rawFolio, rawTags, rawCanvases] = await Promise.all([
+    const [rawFolio, rawTags, rawCanvases, rawProjects] = await Promise.all([
       fs.readFile(this.dbPath, "utf-8"),
       fs.readFile(this.tagsPath, "utf-8"),
       fs.readFile(this.canvasesPath, "utf-8"),
+      fs.readFile(this.projectsPath, "utf-8"),
     ]);
 
     const folioBase = JSON.parse(rawFolio);
     const tagsBase = JSON.parse(rawTags);
     const canvasesBase = JSON.parse(rawCanvases);
+    const projectsBase = JSON.parse(rawProjects);
 
     this.validateSchema("folio.json", folioBase, "items");
     this.validateSchema("tags.json", tagsBase, "tags");
     this.validateSchema("canvases.json", canvasesBase, "canvases");
+    this.validateSchema("projects.json", projectsBase, "projects");
 
     this.version = SCHEMA_VERSION;
     this.archiveManager.setItems(folioBase.items);
     this.tags = tagsBase.tags;
     this.canvases = canvasesBase.canvases;
+    this.projects = projectsBase.projects;
 
+    const migratedProjects = await this.migrateProjectData();
     const repairedMissingFlags = await this.repairMissingFlagsForExistingFiles();
     const repairedMediaDimensions =
       await this.archiveManager.repairMissingMediaDimensions();
     const repairedReferenceMediaDimensions =
       this.repairReferenceMediaDimensions();
 
-    if (repairedMissingFlags || repairedMediaDimensions) {
+    if (migratedProjects || repairedMissingFlags || repairedMediaDimensions) {
       await this.archiveManager.save(this.version);
     }
 
-    if (repairedReferenceMediaDimensions) {
-      await this.storageManager.saveCanvases(
-        this.canvasesPath,
-        this.canvases,
-        this.version,
-      );
+    if (migratedProjects || repairedReferenceMediaDimensions) {
+      await Promise.all([
+        this.storageManager.saveCanvases(
+          this.canvasesPath,
+          this.canvases,
+          this.version,
+        ),
+        this.storageManager.saveProjects(
+          this.projectsPath,
+          this.projects,
+          this.version,
+        ),
+      ]);
     }
 
     return {
@@ -264,6 +292,7 @@ export class FolioManager implements FolioManagerInterface {
       items: this.archiveManager.getItems(),
       tags: this.tags,
       canvases: this.canvases,
+      projects: this.projects,
     };
   }
 
@@ -297,6 +326,7 @@ export class FolioManager implements FolioManagerInterface {
     this.archiveManager.setItems(data.items);
     this.tags = data.tags;
     this.canvases = data.canvases;
+    this.projects = data.projects;
 
     await Promise.all([
       this.archiveManager.save(this.version),
@@ -306,7 +336,40 @@ export class FolioManager implements FolioManagerInterface {
         this.canvases,
         this.version,
       ),
+      this.storageManager.saveProjects(
+        this.projectsPath,
+        this.projects,
+        this.version,
+      ),
     ]);
+  }
+
+  async createProject(input: CreateProjectInput): Promise<FolioData> {
+    const now = new Date().toISOString();
+    const projectId = nanoid();
+    const title = input.title.trim() || "Untitled Project";
+    const project: Project = {
+      id: projectId,
+      title,
+      description: input.description?.trim() ?? "",
+      status: input.status ?? "active",
+      createdAt: now,
+      updatedAt: now,
+      folderPath: await this.createProjectFolderPath(title, projectId),
+      imageIds: [],
+      workItemIds: [],
+      boardIds: [],
+    };
+
+    await this.ensureProjectDirectories(project);
+    this.projects = [project, ...this.projects];
+    await this.storageManager.saveProjects(
+      this.projectsPath,
+      this.projects,
+      this.version,
+    );
+
+    return this.currentData();
   }
 
   async saveItems(items: FolioItem[]): Promise<void> {
@@ -412,6 +475,11 @@ export class FolioManager implements FolioManagerInterface {
       items: remainingItems,
       tags: this.tags,
       canvases: updatedCanvases,
+      projects: this.projects.map((project) => ({
+        ...project,
+        imageIds: project.imageIds.filter((id) => !ids.has(id)),
+        workItemIds: project.workItemIds.filter((id) => !ids.has(id)),
+      })),
     };
 
     await this.saveFolioData(nextData);
@@ -689,7 +757,7 @@ export class FolioManager implements FolioManagerInterface {
   private validateSchema(
     filename: string,
     data: unknown,
-    arrayKey: "items" | "tags" | "canvases",
+    arrayKey: "items" | "tags" | "canvases" | "projects",
   ) {
     if (
       !data ||
@@ -710,6 +778,134 @@ export class FolioManager implements FolioManagerInterface {
     } catch {
       return false;
     }
+  }
+
+  private async migrateProjectData(): Promise<boolean> {
+    let changed = false;
+    const items = this.archiveManager.getItems();
+
+    if (!this.projects.length && (items.length || this.canvases.length)) {
+      const now = new Date().toISOString();
+      const defaultProjectId = "project_default";
+      const defaultProject: Project = {
+        id: defaultProjectId,
+        title: "Studio Archive",
+        description: "Migrated archive items and boards.",
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+        folderPath: "projects/studio-archive",
+        imageIds: items.map((item) => item.id),
+        workItemIds: [],
+        boardIds: this.canvases.map((canvas) => canvas.id),
+      };
+      this.projects = [defaultProject];
+      changed = true;
+    }
+
+    if (!this.projects.length) return changed;
+
+    const firstProject = this.projects[0];
+    const boardIdsByProject = new Map(
+      this.projects.map((project) => [project.id, new Set(project.boardIds)]),
+    );
+
+    this.canvases = this.canvases.map((canvas) => {
+      const projectId = canvas.projectId ?? firstProject.id;
+      const boardIds = boardIdsByProject.get(projectId);
+      if (boardIds && !boardIds.has(canvas.id)) {
+        boardIds.add(canvas.id);
+        changed = true;
+      }
+      if (canvas.projectId === projectId) return canvas;
+      changed = true;
+      return { ...canvas, projectId };
+    });
+
+    const itemIdsByProject = new Map(
+      this.projects.map((project) => [project.id, new Set(project.imageIds)]),
+    );
+
+    for (const item of items) {
+      const projectId = item.projectId ?? firstProject.id;
+      const imageIds = itemIdsByProject.get(projectId);
+      if (imageIds && !imageIds.has(item.id)) {
+        imageIds.add(item.id);
+        changed = true;
+      }
+      if (!item.projectId) {
+        item.projectId = projectId;
+        changed = true;
+      }
+    }
+
+    this.projects = await Promise.all(
+      this.projects.map(async (project) => {
+        await this.ensureProjectDirectories(project);
+        const imageIds = Array.from(itemIdsByProject.get(project.id) ?? []);
+        const boardIds = Array.from(boardIdsByProject.get(project.id) ?? []);
+        const normalizedProject = {
+          ...project,
+          status: project.status ?? "active",
+          imageIds,
+          workItemIds: project.workItemIds.filter((id) => imageIds.includes(id)),
+          boardIds,
+        };
+        if (
+          normalizedProject.status !== project.status ||
+          normalizedProject.imageIds.length !== project.imageIds.length ||
+          normalizedProject.workItemIds.length !== project.workItemIds.length ||
+          normalizedProject.boardIds.length !== project.boardIds.length
+        ) {
+          changed = true;
+        }
+        return normalizedProject;
+      }),
+    );
+
+    return changed;
+  }
+
+  private currentData(): FolioData {
+    return {
+      version: SCHEMA_VERSION,
+      items: this.archiveManager.getItems(),
+      tags: this.tags,
+      canvases: this.canvases,
+      projects: this.projects,
+    };
+  }
+
+  private async createProjectFolderPath(
+    title: string,
+    projectId: string,
+  ): Promise<string> {
+    const baseSlug = sanitizeFileBaseName(title);
+    const projectsRoot = path.join(this.folioRoot, "projects");
+    let folderName = baseSlug;
+    let folderPath = path.join(projectsRoot, folderName);
+    let counter = 2;
+
+    while (await this.fileExists(folderPath)) {
+      folderName = `${baseSlug}-${counter}`;
+      folderPath = path.join(projectsRoot, folderName);
+      counter += 1;
+    }
+
+    if (!folderName) {
+      folderName = `project-${projectId.slice(0, 8)}`;
+    }
+
+    return path.join("projects", folderName);
+  }
+
+  private async ensureProjectDirectories(project: Project): Promise<void> {
+    const projectRoot = path.join(this.folioRoot, project.folderPath);
+    await Promise.all([
+      fs.mkdir(path.join(projectRoot, "images"), { recursive: true }),
+      fs.mkdir(path.join(projectRoot, "works"), { recursive: true }),
+      fs.mkdir(path.join(projectRoot, "boards"), { recursive: true }),
+    ]);
   }
 
   private async runPhotosPickerHelper(

@@ -2,6 +2,7 @@ import type {
   CanvasReference,
   FolioData,
   FolioItem,
+  ProjectStatus,
   ReconciliationResult,
   ThumbnailUrls,
 } from "./index";
@@ -9,6 +10,11 @@ import type {
 export interface FolioApi {
   getFolioData: () => Promise<FolioData>;
   saveFolioData: (data: FolioData) => Promise<void>;
+  createProject: (input: {
+    title: string;
+    description?: string;
+    status?: ProjectStatus;
+  }) => Promise<FolioData>;
   copyToFolio: (filePaths: string[]) => Promise<FolioItem[]>;
   importToFolio?: () => Promise<FolioItem[]>;
   copyReference: (

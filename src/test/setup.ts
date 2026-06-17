@@ -67,6 +67,7 @@ window.confirm = vi.fn(() => true);
 const folioMock: FolioApi = {
   getFolioData: vi.fn(),
   saveFolioData: vi.fn(),
+  createProject: vi.fn(),
   copyToFolio: vi.fn(),
   importToFolio: vi.fn(),
   copyReference: vi.fn(),

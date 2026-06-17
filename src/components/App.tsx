@@ -6,6 +6,7 @@ import React, {
   useState,
 } from "react";
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronUp,
   Columns2,
@@ -63,6 +64,7 @@ import {
 import { ReconciliationNotice } from "./layout/ReconciliationNotice";
 import { SelectionBar } from "./layout/SelectionBar";
 import { StatusBar } from "./layout/StatusBar";
+import { ProjectsView } from "./projects/ProjectsView";
 import { ButtonIcon } from "./shared/ButtonIcon";
 
 const ARCHIVE_UI_SCALE_MIN = 50;
@@ -72,6 +74,16 @@ const TAGS_SIDEBAR_DEFAULT_WIDTH = 176;
 const TAGS_SIDEBAR_MIN_WIDTH = 132;
 const TAGS_SIDEBAR_MAX_WIDTH = 360;
 type WorkspacePanelMode = "left" | "split" | "right";
+
+function normalizeFolioData(data: FolioData): FolioData {
+  return {
+    ...data,
+    items: data.items ?? [],
+    canvases: data.canvases ?? [],
+    tags: data.tags ?? [],
+    projects: data.projects ?? [],
+  };
+}
 
 export function AppShell() {
   const [data, setData] = useState<FolioData>(EMPTY_DATA);
@@ -101,6 +113,7 @@ export function AppShell() {
   const [selectionTagDialogOpen, setSelectionTagDialogOpen] = useState(false);
   const [selectionTagDraft, setSelectionTagDraft] = useState("");
   const [lastSelectedItemId, setLastSelectedItemId] = useState<string | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeCanvasId, setActiveCanvasId] = useState<string | null>(null);
   const [canvasDetailRequestId, setCanvasDetailRequestId] = useState(0);
   const [reconciliation, setReconciliation] =
@@ -114,8 +127,9 @@ export function AppShell() {
   }, [data]);
 
   const putData = useCallback((nextData: FolioData) => {
-    dataRef.current = nextData;
-    setData(nextData);
+    const normalizedData = normalizeFolioData(nextData);
+    dataRef.current = normalizedData;
+    setData(normalizedData);
   }, []);
 
   const saveData = useCallback(
@@ -141,6 +155,32 @@ export function AppShell() {
     [saveData],
   );
 
+  const appendItemsToActiveProject = useCallback(
+    (current: FolioData, imported: FolioItem[]) => {
+      if (!activeProjectId || !imported.length) return current;
+      const importedIds = imported.map((item) => item.id);
+      const importedIdSet = new Set(importedIds);
+      return {
+        ...current,
+        items: current.items.map((item) =>
+          importedIdSet.has(item.id) && !item.projectId
+            ? { ...item, projectId: activeProjectId }
+            : item,
+        ),
+        projects: current.projects.map((project) =>
+          project.id === activeProjectId
+            ? {
+                ...project,
+                imageIds: Array.from(new Set([...project.imageIds, ...importedIds])),
+                updatedAt: new Date().toISOString(),
+              }
+            : project,
+        ),
+      };
+    },
+    [activeProjectId],
+  );
+
   const importFilePaths = useCallback(
     async (filePaths: string[]) => {
       const uniquePaths = Array.from(new Set(filePaths.filter(Boolean)));
@@ -150,10 +190,16 @@ export function AppShell() {
       try {
         const imported = await window.folio.copyToFolio(uniquePaths);
         if (imported.length) {
-          putData({
-            ...dataRef.current,
-            items: mergeItems(dataRef.current.items, imported),
-          });
+          const current = dataRef.current;
+          putData(
+            appendItemsToActiveProject(
+              {
+                ...current,
+                items: mergeItems(current.items, imported),
+              },
+              imported,
+            ),
+          );
           setToast(`${formatCount(imported.length, "item")} added to today`);
         } else {
           setToast("No new items added");
@@ -165,7 +211,7 @@ export function AppShell() {
         setBusy(false);
       }
     },
-    [putData],
+    [appendItemsToActiveProject, putData],
   );
 
   useEffect(() => {
@@ -186,7 +232,6 @@ export function AppShell() {
 
         if (cancelled) return;
         putData(folioData);
-        setActiveCanvasId(folioData.canvases[0]?.id ?? null);
         setReconciliation(reconciliationResult);
       } catch (error) {
         console.error(error);
@@ -339,12 +384,42 @@ export function AppShell() {
     setCanvasMinimized(false);
   }, []);
 
+  const activeProject = useMemo(
+    () => data.projects.find((project) => project.id === activeProjectId) ?? null,
+    [activeProjectId, data.projects],
+  );
+
+  const projectImageIdSet = useMemo(
+    () => new Set(activeProject?.imageIds ?? []),
+    [activeProject],
+  );
+
+  const projectItems = useMemo(
+    () =>
+      activeProject
+        ? data.items.filter((item) => projectImageIdSet.has(item.id))
+        : data.items,
+    [activeProject, data.items, projectImageIdSet],
+  );
+
+  const projectCanvases = useMemo(
+    () =>
+      activeProject
+        ? data.canvases.filter(
+            (canvas) =>
+              canvas.projectId === activeProject.id ||
+              activeProject.boardIds.includes(canvas.id),
+          )
+        : data.canvases,
+    [activeProject, data.canvases],
+  );
+
   const sortedItems = useMemo(
     () =>
-      [...data.items].sort(
+      [...projectItems].sort(
         (a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title),
       ),
-    [data.items],
+    [projectItems],
   );
 
   const visibleArchiveItems = useMemo(
@@ -392,6 +467,46 @@ export function AppShell() {
     setSelectionTagDialogOpen(false);
     setSelectionTagDraft("");
   }, []);
+
+  const openProject = useCallback(
+    (projectId: string) => {
+      const project = dataRef.current.projects.find(
+        (candidate) => candidate.id === projectId,
+      );
+      if (!project) return;
+
+      setActiveProjectId(project.id);
+      setActiveCanvasId(project.boardIds[0] ?? null);
+      setArchiveMinimized(false);
+      setCanvasMinimized(false);
+      clearSelection();
+    },
+    [clearSelection],
+  );
+
+  const closeProject = useCallback(() => {
+    setActiveProjectId(null);
+    setActiveCanvasId(null);
+    setDetailItemId(null);
+    clearSelection();
+  }, [clearSelection]);
+
+  const createProjectFromHome = useCallback(
+    async (title: string) => {
+      setBusy(true);
+      try {
+        const nextData = await window.folio.createProject({ title });
+        putData(nextData);
+        setToast("Project created");
+      } catch (error) {
+        console.error(error);
+        setToast("Project could not be created");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [putData],
+  );
 
   useEffect(() => {
     if (gridTagFilter === "all") return;
@@ -472,10 +587,16 @@ export function AppShell() {
       const imported = await chooseAndImportItems();
       if (!imported.length) return;
 
-      putData({
-        ...dataRef.current,
-        items: mergeItems(dataRef.current.items, imported),
-      });
+      const current = dataRef.current;
+      putData(
+        appendItemsToActiveProject(
+          {
+            ...current,
+            items: mergeItems(current.items, imported),
+          },
+          imported,
+        ),
+      );
       setToast(`${formatCount(imported.length, "item")} added to today`);
     } catch (error) {
       console.error(error);
@@ -483,7 +604,7 @@ export function AppShell() {
     } finally {
       setBusy(false);
     }
-  }, [putData]);
+  }, [appendItemsToActiveProject, putData]);
 
   const handleDrop = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
@@ -838,8 +959,18 @@ export function AppShell() {
         onDismiss={() => setReconciliationDismissed(true)}
       />
 
+      {activeProject ? (
       <main className="app-main">
         <div className="workspace-panel-mode-bar">
+          <button
+            className="secondary-action project-back-button"
+            type="button"
+            onClick={closeProject}
+          >
+            <ButtonIcon icon={ArrowLeft} />
+            Projects
+          </button>
+          <strong className="active-project-title">{activeProject.title}</strong>
           <div
             className="view-tabs workspace-panel-mode-control"
             aria-label="Workspace panel view"
@@ -907,7 +1038,7 @@ export function AppShell() {
                     <TagsSidebar
                       items={sortedItems}
                       tags={data.tags}
-                      canvases={data.canvases}
+                      canvases={projectCanvases}
                       thumbUrls={thumbUrls}
                       setThumbUrls={setThumbUrls}
                       onOpenItem={openItemDetails}
@@ -1005,7 +1136,7 @@ export function AppShell() {
                     <DailyStripView
                       items={visibleArchiveItems}
                       tags={data.tags}
-                      canvases={data.canvases}
+                      canvases={projectCanvases}
                       thumbUrls={thumbUrls}
                       setThumbUrls={setThumbUrls}
                       selectedItemIds={selectedItemIds}
@@ -1022,7 +1153,7 @@ export function AppShell() {
                     <GridView
                       items={sortedItems}
                       tags={data.tags}
-                      canvases={data.canvases}
+                      canvases={projectCanvases}
                       thumbUrls={thumbUrls}
                       setThumbUrls={setThumbUrls}
                       tagFilter={gridTagFilter}
@@ -1117,18 +1248,26 @@ export function AppShell() {
           </aside>
         </section>
       </main>
+      ) : (
+        <ProjectsView
+          data={data}
+          busy={busy}
+          onCreateProject={createProjectFromHome}
+          onOpenProject={openProject}
+        />
+      )}
 
       <StatusBar
-        itemCount={data.items.length}
-        canvasCount={data.canvases.length}
+        itemCount={activeProject ? activeProject.imageIds.length : data.items.length}
+        canvasCount={activeProject ? projectCanvases.length : data.canvases.length}
         tagCount={data.tags.length}
-        gapCount={getGaps(data.items)}
+        gapCount={getGaps(projectItems)}
       />
 
       <DetailDrawer
         item={selectedItem}
         tags={data.tags}
-        canvases={data.canvases}
+        canvases={projectCanvases}
         thumbUrls={thumbUrls}
         setThumbUrls={setThumbUrls}
         initialFocus={detailMode}

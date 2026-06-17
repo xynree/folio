@@ -14,6 +14,7 @@ import {
   emptyReconciliation,
   makeData,
   makeItem,
+  makeProject,
 } from "../test/fixtures";
 
 function setupFolio({
@@ -36,6 +37,27 @@ function setupFolio({
   vi.mocked(window.folio.saveFolioData).mockImplementation(async (nextData) => {
     currentData = cloneData(nextData);
   });
+  vi.mocked(window.folio.createProject).mockImplementation(async (input) => {
+    const createdAt = "2026-06-15T12:00:00.000Z";
+    currentData = {
+      ...currentData,
+      projects: [
+        makeProject(`project-${currentData.projects.length + 1}`, {
+          title: input.title,
+          description: input.description ?? "",
+          status: input.status ?? "active",
+          createdAt,
+          updatedAt: createdAt,
+          folderPath: `projects/${input.title.toLowerCase().replace(/\s+/g, "-")}`,
+          imageIds: [],
+          workItemIds: [],
+          boardIds: [],
+        }),
+        ...currentData.projects,
+      ],
+    };
+    return cloneData(currentData);
+  });
   vi.mocked(window.folio.openFileDialog).mockResolvedValue(dialogPaths);
   vi.mocked(window.folio.copyToFolio).mockResolvedValue(importedItems);
   vi.mocked(window.folio.importToFolio).mockResolvedValue(importedItems);
@@ -44,6 +66,13 @@ function setupFolio({
     currentData = {
       ...currentData,
       items: currentData.items.filter((item) => !itemIds.includes(item.id)),
+      projects: currentData.projects.map((project) => ({
+        ...project,
+        imageIds: project.imageIds.filter((itemId) => !itemIds.includes(itemId)),
+        workItemIds: project.workItemIds.filter(
+          (itemId) => !itemIds.includes(itemId),
+        ),
+      })),
       canvases: currentData.canvases.map((canvas) => {
         const positions = { ...canvas.positions };
         itemIds.forEach((itemId) => {
@@ -86,8 +115,11 @@ function setupFolio({
 }
 
 async function waitForArchive() {
+  const openProjectButton = await screen.findByRole("button", {
+    name: /open project/i,
+  });
+  fireEvent.click(openProjectButton);
   await screen.findByRole("button", { name: /strip/i });
-  await screen.findAllByText("Alpha");
 }
 
 function archiveRoute() {
@@ -183,6 +215,46 @@ function dispatchWheel(
 describe("AppShell Phase 1 and Phase 2 workflows", () => {
   beforeEach(() => {
     vi.mocked(window.confirm).mockReturnValue(true);
+  });
+
+  it("opens to the Projects view before entering a workspace", async () => {
+    setupFolio();
+
+    expect(await screen.findByRole("heading", { name: /studio workspace/i }))
+      .not.toBeNull();
+    expect(screen.getByText("Studio Archive")).not.toBeNull();
+    expect(screen.getByText("3")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /strip/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /open project/i }));
+
+    expect(await screen.findByRole("button", { name: /strip/i })).not.toBeNull();
+    expect(screen.getByRole("button", { name: /^projects$/i })).not.toBeNull();
+  });
+
+  it("creates a project from the Projects view", async () => {
+    const app = setupFolio({
+      data: makeData({
+        items: [],
+        canvases: [],
+        projects: [],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await screen.findByRole("heading", { name: /studio workspace/i });
+    await user.type(screen.getByLabelText("Project name"), "Color Studies");
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => {
+      expect(window.folio.createProject).toHaveBeenCalledWith({
+        title: "Color Studies",
+      });
+      expect(app.data.projects[0].title).toBe("Color Studies");
+    });
+    expect(screen.getByText("Project created")).not.toBeNull();
+    expect(screen.getByText("Color Studies")).not.toBeNull();
+    expect(screen.getByText("projects/color-studies")).not.toBeNull();
   });
 
   it("loads archive data, thumbnails, status counts, and the docked board panel", async () => {
@@ -444,7 +516,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
     const user = userEvent.setup();
 
-    await screen.findByRole("button", { name: /strip/i });
+    await waitForArchive();
     await screen.findByText("Mango");
     await user.click(screen.getByRole("button", { name: /grid/i }));
 
@@ -510,7 +582,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
     const user = userEvent.setup();
 
-    await screen.findByRole("button", { name: /strip/i });
+    await waitForArchive();
     await screen.findByText("Newer Untagged");
     expect(within(archiveRoute()).getByText("Tue, Jun 16, 2026")).not.toBeNull();
     expect(within(archiveRoute()).getByText("Mon, Jun 15, 2026")).not.toBeNull();
@@ -751,7 +823,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       }),
     });
 
-    await screen.findByRole("button", { name: /strip/i });
+    await waitForArchive();
     await screen.findByText("Newer B");
     await userEvent.click(itemButton(/newer b/i));
     fireEvent.click(itemButton(/older b/i), {
