@@ -2,16 +2,18 @@ import React, { useCallback, useEffect, useState } from "react";
 import type {
   Canvas,
   CanvasPosition,
+  CanvasSection,
   CanvasStroke,
   CanvasTextElement,
 } from "../../types";
-import { CANVAS_WORLD_ORIGIN } from "../folio/constants";
+import { CANVAS_COLORS, CANVAS_WORLD_ORIGIN } from "../folio/constants";
 import { createId } from "../folio/model";
 import {
   buildPolylinePath,
   eraseStrokePathAtPoint,
 } from "./canvasGeometry";
 import {
+  addCanvasSection,
   addCanvasStroke,
   addCanvasTextElement,
   eraseCanvasStrokesAtPoint,
@@ -131,6 +133,31 @@ export function useCanvasDrawingTools({
     [activeCanvas, updateCanvas],
   );
 
+  const addSectionAtPoint = useCallback(
+    (point: CanvasPosition) => {
+      if (!activeCanvas) return;
+      const createdAt = new Date().toISOString();
+      const section: CanvasSection = {
+        id: createId("section"),
+        title: "Section",
+        color: activeCanvas.color ?? CANVAS_COLORS[0],
+        x: point.x - CANVAS_WORLD_ORIGIN,
+        y: point.y - CANVAS_WORLD_ORIGIN,
+        width: 520,
+        height: 340,
+        createdAt,
+        updatedAt: createdAt,
+      };
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => addCanvasSection(canvas, section),
+        "Section added",
+      );
+      setActiveTool("select");
+    },
+    [activeCanvas, updateCanvas],
+  );
+
   const handleSurfacePointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (activeTool === "select" || activeTool === "connect" || !activeCanvas) return;
@@ -149,6 +176,11 @@ export function useCanvasDrawingTools({
 
       if (activeTool === "text") {
         addTextAtPoint(surfacePointFromClient(event.clientX, event.clientY));
+        return;
+      }
+
+      if (activeTool === "section") {
+        addSectionAtPoint(surfacePointFromClient(event.clientX, event.clientY));
         return;
       }
 
@@ -174,6 +206,7 @@ export function useCanvasDrawingTools({
     [
       activeCanvas,
       activeTool,
+      addSectionAtPoint,
       addTextAtPoint,
       eraseStrokesAtPoint,
       surfacePointFromClient,

@@ -3930,8 +3930,6 @@ button svg {
 .canvas-link-card:focus-within,
 .canvas-note:hover,
 .canvas-note:focus-within,
-.canvas-section-frame:hover,
-.canvas-section-frame:focus-within,
 .canvas-text-card:hover,
 .canvas-text-card:focus-within {
   z-index: 8;
@@ -3943,6 +3941,15 @@ button svg {
   box-shadow:
     0 0 0 3px rgba(56, 93, 86, 0.2),
     0 12px 30px rgba(56, 40, 24, 0.16);
+}
+
+/* Sections act as containers and always stay behind their contents,
+   so they never cover the objects dropped inside them. */
+.canvas-section-frame,
+.canvas-section-frame:hover,
+.canvas-section-frame:focus-within,
+.canvas-section-frame.canvas-object-selected {
+  z-index: 1;
 }
 
 .canvas-object-search-match {

@@ -220,7 +220,10 @@ describe("canvas components", () => {
     expect(onFitContent).toHaveBeenCalledTimes(1);
     expect(onAddLink).toHaveBeenCalledTimes(1);
     expect(onToggleBoardTools).toHaveBeenCalledTimes(1);
-    expect(screen.queryByLabelText("Section tool")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Section tool"));
+    expect(
+      screen.getByLabelText("Section tool").getAttribute("aria-pressed"),
+    ).toBe("true");
     expect(screen.getByRole("dialog", { name: "Edit board" })).not.toBeNull();
   });
 

@@ -1,6 +1,10 @@
 import React, { useCallback, useRef } from "react";
 import type { Canvas, CanvasObjectGeometry, FolioData } from "../../types";
 import { markCanvasSaved } from "../folio/model";
+import {
+  canvasObjectsWithinSection,
+  type ArrangeableCanvasObject,
+} from "./canvasArrangement";
 import type { CanvasDragPreview } from "./canvasLayout";
 import { moveCanvasObject, moveCanvasObjects } from "./canvasModel";
 import { canvasObjectSelectionKey } from "./canvasSelection";
@@ -22,6 +26,7 @@ type UseCanvasObjectDragOptions = {
   activeTool: CanvasTool;
   canvasZoom: number;
   data: FolioData;
+  objectViews?: ArrangeableCanvasObject[];
   saveData: SaveDataHandler;
   selectedObjectPositions?: Map<string, CanvasObjectGeometry>;
   selectedObjects?: CanvasObjectSelection[];
@@ -34,6 +39,7 @@ export function useCanvasObjectDrag({
   activeTool,
   canvasZoom,
   data,
+  objectViews = [],
   saveData,
   selectedObjectPositions = new Map(),
   selectedObjects = [],
@@ -61,10 +67,13 @@ export function useCanvasObjectDrag({
       const startPointer = { x: event.clientX, y: event.clientY };
       const objectSelection = { id: objectId, kind };
       const selectedObjectKey = canvasObjectSelectionKey(objectSelection);
-      const shouldMoveSelection =
+      const isSelectionMove =
         selectedObjects.length > 1 && selectedObjectPositions.has(selectedObjectKey);
-      const selectedDragObjects = shouldMoveSelection
-        ? selectedObjects
+
+      const dragObjects: Array<
+        CanvasObjectSelection & { startPosition: CanvasObjectGeometry }
+      > = isSelectionMove
+        ? (selectedObjects
             .map((selectedObject) => {
               const position = selectedObjectPositions.get(
                 canvasObjectSelectionKey(selectedObject),
@@ -78,8 +87,22 @@ export function useCanvasObjectDrag({
             })
             .filter(Boolean) as Array<
               CanvasObjectSelection & { startPosition: CanvasObjectGeometry }
-            >
-        : [{ ...objectSelection, startPosition }];
+            >)
+        : kind === "section"
+          ? [
+              { ...objectSelection, startPosition },
+              ...canvasObjectsWithinSection(
+                { id: objectId, kind, geometry: startPosition },
+                objectViews,
+              ).map((containedObject) => ({
+                id: containedObject.id,
+                kind: containedObject.kind,
+                startPosition: containedObject.geometry,
+              })),
+            ]
+          : [{ ...objectSelection, startPosition }];
+
+      const shouldMoveGroup = dragObjects.length > 1;
       const previousCursor = document.body.style.cursor;
       const previousUserSelect = document.body.style.userSelect;
       let isDragging = false;
@@ -104,7 +127,7 @@ export function useCanvasObjectDrag({
 
       const commitPosition = (clientX: number, clientY: number) => {
         const savedAt = new Date().toISOString();
-        const movePatches = selectedDragObjects.map((object) => ({
+        const movePatches = dragObjects.map((object) => ({
           id: object.id,
           kind: object.kind,
           position: positionFromPointer(clientX, clientY, object.startPosition),
@@ -115,7 +138,7 @@ export function useCanvasObjectDrag({
             canvases: data.canvases.map((canvas) =>
               canvas.id === activeCanvas.id
                 ? markCanvasSaved(
-                    shouldMoveSelection
+                    shouldMoveGroup
                       ? moveCanvasObjects(canvas, movePatches)
                       : moveCanvasObject(canvas, kind, objectId, movePatches[0].position),
                     savedAt,
@@ -181,6 +204,7 @@ export function useCanvasObjectDrag({
       activeTool,
       canvasZoom,
       data,
+      objectViews,
       saveData,
       selectedObjectPositions,
       selectedObjects,

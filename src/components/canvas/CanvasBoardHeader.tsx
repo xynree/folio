@@ -4,6 +4,7 @@ import {
   Edit3,
   Eraser,
   FolderOpen,
+  Frame,
   ImagePlus,
   Images,
   Link as LinkIcon,
@@ -223,6 +224,18 @@ export function CanvasBoardHeader({
             onClick={() => toggleTool("text")}
           >
             <ButtonIcon icon={Type} />
+          </button>
+          <button
+            className={`canvas-board-action-button ${
+              activeTool === "section" ? "canvas-board-action-active" : ""
+            }`}
+            type="button"
+            aria-label="Section tool"
+            aria-pressed={activeTool === "section"}
+            title="Section tool"
+            onClick={() => toggleTool("section")}
+          >
+            <ButtonIcon icon={Frame} />
           </button>
           <button
             className="canvas-board-action-button"

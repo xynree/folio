@@ -167,6 +167,30 @@ export function canvasObjectBounds(objects: ArrangeableCanvasObject[]) {
   };
 }
 
+export function canvasObjectsWithinSection(
+  section: ArrangeableCanvasObject,
+  objects: ArrangeableCanvasObject[],
+): ArrangeableCanvasObject[] {
+  const left = section.geometry.x;
+  const top = section.geometry.y;
+  const right = left + (section.geometry.width ?? 0);
+  const bottom = top + (section.geometry.height ?? 0);
+
+  return objects.filter((object) => {
+    if (object.kind === "section") return false;
+    if (object.id === section.id) return false;
+
+    const centerX = object.geometry.x + (object.geometry.width ?? 0) / 2;
+    const centerY = object.geometry.y + (object.geometry.height ?? 0) / 2;
+    return (
+      centerX >= left
+      && centerX <= right
+      && centerY >= top
+      && centerY <= bottom
+    );
+  });
+}
+
 export function sectionAroundCanvasObjects(
   objects: ArrangeableCanvasObject[],
   options: {

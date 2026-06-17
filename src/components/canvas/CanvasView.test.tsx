@@ -235,7 +235,7 @@ describe("CanvasView Phase 5 interactions", () => {
     expect(
       container.querySelector(".canvas-link-preview")?.getAttribute("src"),
     ).toBe("data:image/png;base64,PREVIEW");
-    expect(screen.queryByLabelText("Section tool")).toBeNull();
+    expect(screen.queryByLabelText("Section tool")).not.toBeNull();
     expect(screen.queryByLabelText("Link URL")).toBeNull();
     expect(window.folio.fetchLinkMetadata).toHaveBeenCalledWith(
       "https://example.com/source",
@@ -271,6 +271,49 @@ describe("CanvasView Phase 5 interactions", () => {
     expect(container.querySelector(".canvas-selection-marquee")).toBeNull();
     fireEvent.pointerUp(window, { clientX: 20300, clientY: 20300 });
     fireEvent.keyUp(window, { key: " " });
+  });
+
+  it("creates a section with the section tool and moves its contents together", () => {
+    vi.mocked(window.folio.ensureThumbnails).mockResolvedValue({});
+    const data = makeData({
+      canvases: [
+        makeCanvas("board-1", {
+          title: "Board 1",
+          itemIds: ["alpha"],
+          positions: { alpha: { x: 80, y: 90, width: 160, height: 180 } },
+        }),
+      ],
+    });
+    const { container } = renderCanvasView(data);
+    const { surface } = setCanvasMeasurements(container);
+
+    // Draw a section over the empty space up and to the left of the item.
+    fireEvent.click(screen.getByLabelText("Section tool"));
+    fireEvent.pointerDown(surface, { button: 0, clientX: 20000, clientY: 20000 });
+
+    const sectionFrame = container.querySelector(
+      '[data-canvas-object-kind="section"]',
+    ) as HTMLElement;
+    expect(sectionFrame).not.toBeNull();
+
+    const itemBefore = container.querySelector(
+      '[data-canvas-object-id="alpha"]',
+    ) as HTMLElement;
+    expect(itemBefore.style.transform).toContain("translate(20080px, 20090px)");
+
+    // Dragging the section moves the contained item by the same delta.
+    fireEvent.pointerDown(sectionFrame, {
+      button: 0,
+      clientX: 20010,
+      clientY: 20010,
+    });
+    fireEvent.pointerMove(window, { clientX: 20060, clientY: 20070 });
+    fireEvent.pointerUp(window, { clientX: 20060, clientY: 20070 });
+
+    const itemAfter = container.querySelector(
+      '[data-canvas-object-id="alpha"]',
+    ) as HTMLElement;
+    expect(itemAfter.style.transform).toContain("translate(20130px, 20150px)");
   });
 
   it("changes the project image grid size from the picker", async () => {

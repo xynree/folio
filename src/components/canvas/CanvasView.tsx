@@ -909,6 +909,7 @@ export function CanvasView({
     activeTool,
     canvasZoom,
     data,
+    objectViews,
     saveData,
     selectedObjectPositions,
     selectedObjects,
