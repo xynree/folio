@@ -68,10 +68,8 @@ import {
 import { ReconciliationNotice } from "./layout/ReconciliationNotice";
 import { SelectionBar } from "./layout/SelectionBar";
 import { StatusBar } from "./layout/StatusBar";
-import {
-  ProjectReviewEditorPage,
-  ProjectReviewView,
-} from "./projects/ProjectReviewView";
+import { ProjectReviewEditorPage } from "./projects/ProjectReviewEditorPage";
+import { ProjectReviewView } from "./projects/ProjectReviewView";
 import { ProjectsView } from "./projects/ProjectsView";
 import { ButtonIcon } from "./shared/ButtonIcon";
 
@@ -1174,11 +1172,12 @@ export function AppShell() {
           project={activeProject}
           review={activeReview}
           items={data.items}
+          thumbUrls={thumbUrls}
+          setThumbUrls={setThumbUrls}
           onBackToProjectReview={() => {
             setActiveReviewId(null);
             setProjectSurface("review");
           }}
-          onBackToProjects={closeProject}
           onUpdateReview={updateProjectReview}
           onDeleteReview={deleteProjectReview}
         />

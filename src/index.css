@@ -372,41 +372,108 @@ button svg {
   font-weight: 720;
 }
 
-.project-review-work-tags {
-  display: flex;
-  flex-wrap: wrap;
+.project-review-work-selector {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+}
+
+.project-review-work-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  align-content: start;
   gap: 7px;
   min-width: 0;
-}
-
-.project-review-work-tags button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 30px;
-  padding: 5px 9px;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
   border: 1px solid #ded2c1;
-  border-radius: 999px;
-  color: #5f5348;
+  border-radius: 8px;
   background: #fffaf0;
+}
+
+.project-review-work-card {
+  position: relative;
+  min-width: 0;
+  aspect-ratio: 1;
+  overflow: hidden;
+  padding: 2px;
+  border: 1px solid #ded2c2;
+  border-radius: 8px;
+  background: #fffdf8;
+  box-shadow: 0 1px 2px rgba(75, 55, 35, 0.05);
+}
+
+.project-review-work-card-added {
+  border-color: rgba(56, 93, 86, 0.56);
+  background: rgba(56, 93, 86, 0.08);
+  box-shadow:
+    inset 0 0 0 2px rgba(56, 93, 86, 0.22),
+    0 1px 2px rgba(75, 55, 35, 0.05);
+}
+
+.project-review-work-card-added::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #fffdf8;
+  border-radius: 999px;
+  background: #385d56;
+  box-shadow: 0 1px 2px rgba(48, 37, 29, 0.18);
+  pointer-events: none;
+}
+
+.project-review-work-card-missing {
+  opacity: 0.48;
+}
+
+.project-review-work-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: #efe7dc;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 720;
 }
 
-.project-review-work-tags button.active {
-  color: #2f403d;
-  border-color: rgba(56, 93, 86, 0.32);
-  background: rgba(56, 93, 86, 0.11);
+.project-review-work-preview:disabled {
+  cursor: default;
 }
 
-.project-review-work-tags span {
+.project-review-work-preview:focus-visible {
+  outline: 2px solid #385d56;
+  outline-offset: 2px;
+}
+
+.project-review-work-preview .thumb-shell {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0;
+}
+
+.project-review-work-empty {
+  margin: 0;
+  padding: 10px 12px;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #ded2c1;
+  border-radius: 8px;
   color: #7c6f61;
+  background: #fffaf0;
   font-size: 12px;
 }
 
 .project-markdown-editor {
   min-width: 0;
+  min-height: 0;
+  max-width: 800px;
 }
 
 .project-markdown-editor .w-md-editor {
@@ -446,6 +513,13 @@ button svg {
   -webkit-app-region: no-drag;
 }
 
+.review-editor-titlebar .review-editor-back-button {
+  width: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 5px;
+}
+
 .review-editor-titlebar strong {
   min-width: 0;
   overflow: hidden;
@@ -457,11 +531,38 @@ button svg {
 
 .review-editor-surface {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
+  width: 100%;
+  max-width: 1000px;
   min-height: 0;
+  margin: 0 auto;
   padding: 18px;
-  overflow: auto;
+  overflow: hidden;
+}
+
+.review-editor-body {
+  display: grid;
+  grid-template-columns: minmax(118px, 168px) minmax(0, 800px);
+  gap: 12px;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (max-width: 760px) {
+  .review-editor-surface {
+    overflow: auto;
+  }
+
+  .review-editor-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .project-review-work-grid {
+    max-height: 148px;
+  }
 }
 
 .project-timeline {

@@ -1152,7 +1152,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       }),
     );
     expect(screen.getByLabelText("Review editor")).not.toBeNull();
-    await user.click(screen.getByRole("button", { name: /^review$/i }));
+    await user.click(screen.getByRole("button", { name: /back to review/i }));
     expect(screen.getByLabelText("Project review")).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: /new review/i }));
@@ -1161,16 +1161,60 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.projects[0].reviews).toHaveLength(2);
       expect(app.data.projects[0].reviews[0].title).toBe("Review 2");
     });
-    const workTags = screen.getByLabelText("Tagged Works");
-    await user.click(within(workTags).getByRole("button", { name: /bravo/i }));
+    await user.click(screen.getByRole("button", { name: /maximize editor/i }));
+    expect(screen.getByRole("button", { name: /minimize editor/i })).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: /minimize editor/i }));
+    expect(screen.getByRole("button", { name: /maximize editor/i })).not.toBeNull();
+
+    const workSelector = screen.getByLabelText("Review Works");
+    await user.click(
+      within(workSelector).getByRole("button", {
+        name: /attach bravo to review/i,
+      }),
+    );
     await waitFor(() => {
       expect(app.data.projects[0].reviews[0].workItemIds).toEqual(["bravo"]);
       expect(app.data.projects[0].reviews[0].markdown).toContain("## Bravo");
     });
 
+    await user.click(screen.getByRole("button", { name: /back to review/i }));
     await user.click(screen.getByRole("button", { name: /^projects$/i }));
     expect(await screen.findByRole("heading", { name: /studio workspace/i }))
       .not.toBeNull();
+  });
+
+  it("lets reviews attach project images when no Works are marked", async () => {
+    const app = setupFolio({
+      data: makeData({
+        projects: [
+          makeProject("project-1", {
+            imageIds: ["alpha", "bravo"],
+            workItemIds: [],
+            reviews: [],
+          }),
+        ],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(screen.getByRole("button", { name: /^review$/i }));
+    await user.click(screen.getByRole("button", { name: /new review/i }));
+
+    const workSelector = screen.getByLabelText("Review Works");
+    expect(
+      within(workSelector).queryByText("No Works marked yet"),
+    ).toBeNull();
+    await user.click(
+      within(workSelector).getByRole("button", {
+        name: /attach alpha to review/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(app.data.projects[0].reviews[0].workItemIds).toEqual(["alpha"]);
+      expect(app.data.projects[0].reviews[0].markdown).toContain("## Alpha");
+    });
   });
 
   it("bulk deletes selected items from the selection action bar", async () => {

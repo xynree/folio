@@ -594,6 +594,7 @@ export class FolioManager implements FolioManagerInterface {
         ...canvas,
         itemIds,
         positions,
+        edges,
       };
 
       return changed
