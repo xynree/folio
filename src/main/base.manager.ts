@@ -29,6 +29,12 @@ import {
   isPathInsideDirectory,
   isPathWithinRoot,
 } from "./path.helpers";
+import {
+  removeLegacyCanvasReferences,
+  repairLegacyOutputStages,
+  stripLegacyCanvasReferences,
+  validateFolioSchema,
+} from "./schema.helpers";
 
 const execFileAsync = promisify(execFile);
 const PHOTOS_PICKER_CANCELLED = "__FOLIO_PHOTOS_PICKER_CANCELLED__";
@@ -283,10 +289,20 @@ export class FolioManager implements FolioManagerInterface {
     const canvasesBase = JSON.parse(rawCanvases);
     const projectsBase = JSON.parse(rawProjects);
 
-    this.validateSchema("folio.json", folioBase, "items");
-    this.validateSchema("tags.json", tagsBase, "tags");
-    this.validateSchema("canvases.json", canvasesBase, "canvases");
-    this.validateSchema("projects.json", projectsBase, "projects");
+    validateFolioSchema("folio.json", folioBase, "items", SCHEMA_VERSION);
+    validateFolioSchema("tags.json", tagsBase, "tags", SCHEMA_VERSION);
+    validateFolioSchema(
+      "canvases.json",
+      canvasesBase,
+      "canvases",
+      SCHEMA_VERSION,
+    );
+    validateFolioSchema(
+      "projects.json",
+      projectsBase,
+      "projects",
+      SCHEMA_VERSION,
+    );
 
     this.version = SCHEMA_VERSION;
     this.archiveManager.setItems(folioBase.items);
@@ -295,9 +311,13 @@ export class FolioManager implements FolioManagerInterface {
     this.projects = projectsBase.projects;
 
     await this.ensureMediaDirectories();
-    const repairedLegacyOutputStages = this.repairLegacyOutputStages();
+    const repairedLegacyOutputStages = repairLegacyOutputStages(
+      this.archiveManager.getItems(),
+    );
     const migratedProjects = await this.migrateProjectData();
-    const removedLegacyCanvasReferences = this.removeLegacyCanvasReferences();
+    const legacyCanvasReferences = removeLegacyCanvasReferences(this.canvases);
+    this.canvases = legacyCanvasReferences.canvases;
+    const removedLegacyCanvasReferences = legacyCanvasReferences.changed;
     const migratedMediaFiles = await this.migrateMediaFilesToFlatFolders();
     const repairedMissingFlags =
       await this.repairMissingFlagsForExistingFiles();
@@ -352,7 +372,7 @@ export class FolioManager implements FolioManagerInterface {
     );
     this.tags = data.tags;
     this.canvases = data.canvases.map((canvas) =>
-      this.stripLegacyCanvasReferences(canvas),
+      stripLegacyCanvasReferences(canvas),
     );
     this.projects = data.projects.map((project) => ({
       ...project,
@@ -473,7 +493,7 @@ export class FolioManager implements FolioManagerInterface {
 
   async saveCanvases(canvases: Canvas[]): Promise<void> {
     this.canvases = canvases.map((canvas) =>
-      this.stripLegacyCanvasReferences(canvas),
+      stripLegacyCanvasReferences(canvas),
     );
     await this.storageManager.saveCanvases(
       this.canvasesPath,
@@ -1114,23 +1134,6 @@ export class FolioManager implements FolioManagerInterface {
     await this.removeDirectoryIfEmpty(worksDir);
   }
 
-  private validateSchema(
-    filename: string,
-    data: unknown,
-    arrayKey: "items" | "tags" | "canvases" | "projects",
-  ) {
-    if (
-      !data ||
-      typeof data !== "object" ||
-      (data as { version?: unknown }).version !== SCHEMA_VERSION ||
-      !Array.isArray((data as Record<string, unknown>)[arrayKey])
-    ) {
-      throw new Error(
-        `${filename} is not a valid Folio v${SCHEMA_VERSION} data file.`,
-      );
-    }
-  }
-
   private async fileExists(filePath: string): Promise<boolean> {
     try {
       await fs.access(filePath);
@@ -1322,39 +1325,6 @@ export class FolioManager implements FolioManagerInterface {
         }),
       ),
     ]);
-  }
-
-  private repairLegacyOutputStages(): boolean {
-    let changed = false;
-
-    for (const item of this.archiveManager.getItems()) {
-      if ((item.stage as string | undefined) !== "output") continue;
-      item.stage = "final";
-      changed = true;
-    }
-
-    return changed;
-  }
-
-  private removeLegacyCanvasReferences(): boolean {
-    let changed = false;
-
-    this.canvases = this.canvases.map((canvas) => {
-      const legacyCanvas = canvas as Canvas & { references?: unknown };
-      if (!Object.prototype.hasOwnProperty.call(legacyCanvas, "references")) {
-        return canvas;
-      }
-      changed = true;
-      return this.stripLegacyCanvasReferences(canvas);
-    });
-
-    return changed;
-  }
-
-  private stripLegacyCanvasReferences(canvas: Canvas): Canvas {
-    const nextCanvas = { ...canvas } as Canvas & { references?: unknown };
-    delete nextCanvas.references;
-    return nextCanvas;
   }
 
   private async syncProjectReviewFiles(project: Project): Promise<void> {
