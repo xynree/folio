@@ -64,6 +64,24 @@ function setupFolio({
   vi.mocked(window.folio.copyToProject).mockResolvedValue(importedItems);
   vi.mocked(window.folio.importToProject).mockResolvedValue(importedItems);
   vi.mocked(window.folio.importSourcesToProject).mockResolvedValue(importedItems);
+  vi.mocked(window.folio.setProjectWorkItems).mockImplementation(
+    async (projectId, workItemIds) => {
+      const savedAt = "2026-06-15T12:00:00.000Z";
+      currentData = {
+        ...currentData,
+        projects: currentData.projects.map((project) =>
+          project.id === projectId
+            ? {
+                ...project,
+                workItemIds,
+                updatedAt: savedAt,
+              }
+            : project,
+        ),
+      };
+      return cloneData(currentData);
+    },
+  );
   vi.mocked(window.folio.copyReference).mockResolvedValue([]);
   vi.mocked(window.folio.deleteItems).mockImplementation(async (itemIds) => {
     currentData = {
@@ -233,6 +251,21 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     expect(await screen.findByRole("button", { name: /strip/i })).not.toBeNull();
     expect(screen.getByRole("button", { name: /^projects$/i })).not.toBeNull();
+  });
+
+  it("normalizes legacy data without projects before rendering", async () => {
+    setupFolio({
+      data: {
+        version: 1,
+        items: [],
+        canvases: [],
+        tags: [],
+      } as FolioData,
+    });
+
+    expect(await screen.findByRole("heading", { name: /studio workspace/i }))
+      .not.toBeNull();
+    expect(screen.getByText("No projects yet")).not.toBeNull();
   });
 
   it("creates a project from the Projects view", async () => {
@@ -829,6 +862,77 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.getByText("3 items selected")).not.toBeNull();
   });
 
+  it("marks selected project images as Works and scopes the Works view", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(screen.getByRole("button", { name: /grid/i }));
+    await user.click(itemButton(/alpha/i));
+
+    const selectionPopup = screen
+      .getByText("1 item selected")
+      .closest(".selection-bar") as HTMLElement;
+    await user.click(
+      within(selectionPopup).getByRole("button", {
+        name: /mark work/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(window.folio.setProjectWorkItems).toHaveBeenCalledWith(
+        "project-1",
+        ["alpha"],
+      );
+      expect(app.data.projects[0].workItemIds).toEqual(["alpha"]);
+      expect(app.data.items.find((item) => item.id === "alpha")?.stage).toBeUndefined();
+    });
+
+    await user.click(screen.getByRole("button", { name: /^works$/i }));
+
+    await waitFor(() => {
+      expect(gridTitles()).toEqual(["Alpha"]);
+    });
+    expect(screen.getAllByText("1 item").length).toBeGreaterThan(0);
+  });
+
+  it("unmarks selected Works without removing project images", async () => {
+    const app = setupFolio({
+      data: makeData({
+        projects: [makeProject("project-1", { workItemIds: ["alpha"] })],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(screen.getByRole("button", { name: /^works$/i }));
+    await user.click(screen.getByRole("button", { name: /grid/i }));
+
+    await waitFor(() => {
+      expect(gridTitles()).toEqual(["Alpha"]);
+    });
+
+    await user.click(itemButton(/alpha/i));
+    const selectionPopup = screen
+      .getByText("1 item selected")
+      .closest(".selection-bar") as HTMLElement;
+    await user.click(
+      within(selectionPopup).getByRole("button", {
+        name: /unmark work/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(window.folio.setProjectWorkItems).toHaveBeenCalledWith(
+        "project-1",
+        [],
+      );
+      expect(app.data.projects[0].workItemIds).toEqual([]);
+      expect(app.data.projects[0].imageIds).toEqual(["alpha", "bravo", "charlie"]);
+      expect(gridTitles()).toEqual([]);
+    });
+  });
+
   it("bulk deletes selected items from the selection action bar", async () => {
     const app = setupFolio();
     const user = userEvent.setup();
@@ -972,14 +1076,15 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     const dialog = await screen.findByRole("dialog", { name: /item details/i });
     const titleInput = within(dialog).getByLabelText("Title");
+    await user.selectOptions(within(dialog).getByLabelText("Stage"), "final");
     await user.clear(titleInput);
     await user.type(titleInput, "Alpha Revised");
     await user.click(within(dialog).getByRole("button", { name: /^save$/i }));
 
     await waitFor(() => {
-      expect(app.data.items.find((item) => item.id === "alpha")?.title).toBe(
-        "Alpha Revised",
-      );
+      const alpha = app.data.items.find((item) => item.id === "alpha");
+      expect(alpha?.title).toBe("Alpha Revised");
+      expect(alpha?.stage).toBe("final");
     });
   });
 

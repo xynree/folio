@@ -1,4 +1,4 @@
-import { PanelRightOpen, Tag as TagIcon, Trash2, X } from "lucide-react";
+import { PanelRightOpen, Star, Tag as TagIcon, Trash2, X } from "lucide-react";
 import { formatCount } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 
@@ -8,6 +8,7 @@ export function SelectionBar({
   newBoardTitle,
   tagDialogOpen,
   tagDraft,
+  workActionLabel,
   onCancelNewBoard,
   onCancelTag,
   onApplyTag,
@@ -17,6 +18,7 @@ export function SelectionBar({
   onNewBoardTitleChange,
   onOpenNewBoard,
   onOpenTag,
+  onToggleWorks,
   onTagDraftChange,
 }: {
   count: number;
@@ -24,6 +26,7 @@ export function SelectionBar({
   newBoardTitle: string;
   tagDialogOpen: boolean;
   tagDraft: string;
+  workActionLabel?: string;
   onCancelNewBoard: () => void;
   onCancelTag: () => void;
   onApplyTag: () => void;
@@ -33,6 +36,7 @@ export function SelectionBar({
   onNewBoardTitleChange: (title: string) => void;
   onOpenNewBoard: () => void;
   onOpenTag: () => void;
+  onToggleWorks?: () => void;
   onTagDraftChange: (tag: string) => void;
 }) {
   if (!count) return null;
@@ -62,6 +66,16 @@ export function SelectionBar({
           <ButtonIcon icon={PanelRightOpen} />
           New board
         </button>
+        {onToggleWorks && workActionLabel ? (
+          <button
+            className="selection-work-button"
+            type="button"
+            onClick={onToggleWorks}
+          >
+            <ButtonIcon icon={Star} />
+            {workActionLabel}
+          </button>
+        ) : null}
         <button
           className="selection-clear-button"
           type="button"

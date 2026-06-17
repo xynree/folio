@@ -55,6 +55,7 @@ export interface FolioManagerInterface {
   copyToProject(projectId: string, filePaths: string[]): Promise<FolioItem[]>;
   importToFolio(): Promise<FolioItem[]>;
   importToProject(projectId: string): Promise<FolioItem[]>;
+  setProjectWorkItems(projectId: string, workItemIds: string[]): Promise<FolioData>;
   copyReference(
     canvasId: string,
     filePaths: string[],
@@ -120,6 +121,11 @@ export class FolioManager implements FolioManagerInterface {
     );
     ipcMain.handle("folio:import-to-project", (_: unknown, projectId: string) =>
       this.importToProject(projectId),
+    );
+    ipcMain.handle(
+      "folio:set-project-work-items",
+      (_: unknown, projectId: string, workItemIds: string[]) =>
+        this.setProjectWorkItems(projectId, workItemIds),
     );
     ipcMain.handle(
       "folio:import-sources-to-project",
@@ -512,6 +518,38 @@ export class FolioManager implements FolioManagerInterface {
       .catch((error) => console.error("Thumbnail generation failed", error));
 
     return items;
+  }
+
+  async setProjectWorkItems(
+    projectId: string,
+    workItemIds: string[],
+  ): Promise<FolioData> {
+    const project = this.getProjectOrThrow(projectId);
+    const projectImageIds = new Set(project.imageIds);
+    const nextWorkItemIds = Array.from(new Set(workItemIds)).filter((itemId) =>
+      projectImageIds.has(itemId),
+    );
+    const savedAt = new Date().toISOString();
+
+    this.projects = this.projects.map((candidate) =>
+      candidate.id === projectId
+        ? {
+            ...candidate,
+            workItemIds: nextWorkItemIds,
+            updatedAt: savedAt,
+          }
+        : candidate,
+    );
+
+    const updatedProject = this.getProjectOrThrow(projectId);
+    await this.syncProjectWorksFolder(updatedProject);
+    await this.storageManager.saveProjects(
+      this.projectsPath,
+      this.projects,
+      this.version,
+    );
+
+    return this.currentData();
   }
 
   async copyReference(
@@ -1012,6 +1050,51 @@ export class FolioManager implements FolioManagerInterface {
       fs.mkdir(path.join(projectRoot, "works"), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "boards"), { recursive: true }),
     ]);
+  }
+
+  private async syncProjectWorksFolder(project: Project): Promise<void> {
+    const worksDir = path.join(this.folioRoot, project.folderPath, "works");
+    await fs.mkdir(worksDir, { recursive: true });
+
+    const desiredIds = new Set(project.workItemIds);
+    const itemById = new Map(
+      this.archiveManager.getItems().map((item) => [item.id, item]),
+    );
+
+    const entries = await fs.readdir(worksDir, { withFileTypes: true });
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (!entry.isFile() && !entry.isSymbolicLink()) return;
+        const representsProjectImage = project.imageIds.find((itemId) =>
+          entry.name.includes(`-${itemId}`),
+        );
+        if (!representsProjectImage || desiredIds.has(representsProjectImage)) {
+          return;
+        }
+        await fs.rm(path.join(worksDir, entry.name), { force: true });
+      }),
+    );
+
+    for (const itemId of project.workItemIds) {
+      const item = itemById.get(itemId);
+      if (!item || item.missing) continue;
+
+      const sourcePath = this.archiveManager.getAbsolutePath(item.path);
+      if (!(await this.fileExists(sourcePath))) continue;
+
+      const extension = path.extname(item.path);
+      const baseName = sanitizeFileBaseName(
+        item.title || path.basename(item.path, extension) || item.id,
+      );
+      const destPath = path.join(worksDir, `${baseName}-${item.id}${extension}`);
+      if (await this.fileExists(destPath)) continue;
+
+      try {
+        await fs.symlink(sourcePath, destPath);
+      } catch {
+        await fs.copyFile(sourcePath, destPath);
+      }
+    }
   }
 
   private async runPhotosPickerHelper(

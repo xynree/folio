@@ -77,6 +77,7 @@ const TAGS_SIDEBAR_DEFAULT_WIDTH = 176;
 const TAGS_SIDEBAR_MIN_WIDTH = 132;
 const TAGS_SIDEBAR_MAX_WIDTH = 360;
 type WorkspacePanelMode = "left" | "split" | "right";
+type ProjectSurface = "images" | "works";
 
 function clipboardImageExtension(file: File) {
   const filenameExt = file.name.match(/\.[a-z0-9]+$/i)?.[0];
@@ -127,6 +128,7 @@ export function AppShell() {
   const [selectionTagDraft, setSelectionTagDraft] = useState("");
   const [lastSelectedItemId, setLastSelectedItemId] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [projectSurface, setProjectSurface] = useState<ProjectSurface>("images");
   const [activeCanvasId, setActiveCanvasId] = useState<string | null>(null);
   const [canvasDetailRequestId, setCanvasDetailRequestId] = useState(0);
   const [reconciliation, setReconciliation] =
@@ -371,7 +373,9 @@ export function AppShell() {
   }, []);
 
   const activeProject = useMemo(
-    () => data.projects.find((project) => project.id === activeProjectId) ?? null,
+    () =>
+      (data.projects ?? []).find((project) => project.id === activeProjectId) ??
+      null,
     [activeProjectId, data.projects],
   );
 
@@ -380,12 +384,25 @@ export function AppShell() {
     [activeProject],
   );
 
+  const projectWorkItemIdSet = useMemo(
+    () => new Set(activeProject?.workItemIds ?? []),
+    [activeProject],
+  );
+
+  const projectSurfaceItemIdSet = useMemo(
+    () =>
+      projectSurface === "works"
+        ? projectWorkItemIdSet
+        : projectImageIdSet,
+    [projectImageIdSet, projectSurface, projectWorkItemIdSet],
+  );
+
   const projectItems = useMemo(
     () =>
       activeProject
-        ? data.items.filter((item) => projectImageIdSet.has(item.id))
+        ? data.items.filter((item) => projectSurfaceItemIdSet.has(item.id))
         : data.items,
-    [activeProject, data.items, projectImageIdSet],
+    [activeProject, data.items, projectSurfaceItemIdSet],
   );
 
   const projectCanvases = useMemo(
@@ -462,6 +479,7 @@ export function AppShell() {
       if (!project) return;
 
       setActiveProjectId(project.id);
+      setProjectSurface("images");
       setActiveCanvasId(project.boardIds[0] ?? null);
       setArchiveMinimized(false);
       setCanvasMinimized(false);
@@ -472,6 +490,7 @@ export function AppShell() {
 
   const closeProject = useCallback(() => {
     setActiveProjectId(null);
+    setProjectSurface("images");
     setActiveCanvasId(null);
     setDetailItemId(null);
     clearSelection();
@@ -493,6 +512,42 @@ export function AppShell() {
     },
     [putData],
   );
+
+  const setSelectionWorksMembership = useCallback(async () => {
+    if (!activeProject || !selectedItemIds.length) return;
+    const selectedProjectImageIds = selectedItemIds.filter((itemId) =>
+      activeProject.imageIds.includes(itemId),
+    );
+    if (!selectedProjectImageIds.length) return;
+
+    const selectedSet = new Set(selectedProjectImageIds);
+    const nextWorkItemIds =
+      projectSurface === "works"
+        ? activeProject.workItemIds.filter((itemId) => !selectedSet.has(itemId))
+        : Array.from(
+            new Set([...activeProject.workItemIds, ...selectedProjectImageIds]),
+          );
+
+    setBusy(true);
+    try {
+      const nextData = await window.folio.setProjectWorkItems(
+        activeProject.id,
+        nextWorkItemIds,
+      );
+      putData(nextData);
+      clearSelection();
+      setToast(
+        projectSurface === "works"
+          ? `${formatCount(selectedProjectImageIds.length, "item")} unmarked`
+          : `${formatCount(selectedProjectImageIds.length, "item")} marked as Works`,
+      );
+    } catch (error) {
+      console.error(error);
+      setToast("Works could not be updated");
+    } finally {
+      setBusy(false);
+    }
+  }, [activeProject, clearSelection, projectSurface, putData, selectedItemIds]);
 
   useEffect(() => {
     if (gridTagFilter === "all") return;
@@ -1027,7 +1082,30 @@ export function AppShell() {
             Projects
           </button>
           <strong className="active-project-title">{activeProject.title}</strong>
-          <span className="active-project-surface">All Images</span>
+          <div className="project-surface-tabs" aria-label="Project surface">
+            <button
+              className={projectSurface === "images" ? "active" : ""}
+              type="button"
+              aria-pressed={projectSurface === "images"}
+              onClick={() => {
+                setProjectSurface("images");
+                clearSelection();
+              }}
+            >
+              All Images
+            </button>
+            <button
+              className={projectSurface === "works" ? "active" : ""}
+              type="button"
+              aria-pressed={projectSurface === "works"}
+              onClick={() => {
+                setProjectSurface("works");
+                clearSelection();
+              }}
+            >
+              Works
+            </button>
+          </div>
           <div
             className="view-tabs workspace-panel-mode-control"
             aria-label="Workspace panel view"
@@ -1114,6 +1192,13 @@ export function AppShell() {
                     newBoardTitle={selectionBoardTitleDraft}
                     tagDialogOpen={selectionTagDialogOpen}
                     tagDraft={selectionTagDraft}
+                    workActionLabel={
+                      activeProject
+                        ? projectSurface === "works"
+                          ? "Unmark Work"
+                          : "Mark Work"
+                        : undefined
+                    }
                     onCancelNewBoard={() => {
                       setSelectionBoardDialogOpen(false);
                       setSelectionBoardTitleDraft("");
@@ -1141,6 +1226,7 @@ export function AppShell() {
                       setSelectionBoardTitleDraft("");
                       setSelectionTagDialogOpen(true);
                     }}
+                    onToggleWorks={activeProject ? setSelectionWorksMembership : undefined}
                     onTagDraftChange={setSelectionTagDraft}
                   />
                   <div className="archive-floating-actions">
@@ -1316,7 +1402,7 @@ export function AppShell() {
       )}
 
       <StatusBar
-        itemCount={activeProject ? activeProject.imageIds.length : data.items.length}
+        itemCount={activeProject ? projectItems.length : data.items.length}
         canvasCount={activeProject ? projectCanvases.length : data.canvases.length}
         tagCount={data.tags.length}
         gapCount={getGaps(projectItems)}

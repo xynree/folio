@@ -487,12 +487,32 @@ button svg {
   white-space: nowrap;
 }
 
-.active-project-surface {
+.project-surface-tabs {
   position: absolute;
   right: 16px;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: rgba(255, 253, 248, 0.76);
+  border: 1px solid #ded2c1;
+  border-radius: 7px;
+  -webkit-app-region: no-drag;
+}
+
+.project-surface-tabs button {
+  min-height: 22px;
+  padding: 0 8px;
   color: #6f6255;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
   font-size: 12px;
   font-weight: 720;
+}
+
+.project-surface-tabs button.active {
+  color: #2f403d;
+  background: rgba(56, 93, 86, 0.12);
 }
 
 .workspace-panel-mode-control {
@@ -2265,6 +2285,7 @@ button svg {
 
 .field input,
 .field textarea,
+.field select,
 .tag-input,
 .board-edit-popover input {
   width: 100%;
@@ -2277,6 +2298,7 @@ button svg {
 }
 
 .field input,
+.field select,
 .tag-input,
 .board-edit-popover input {
   height: 34px;

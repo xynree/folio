@@ -60,12 +60,15 @@ describe("DetailDrawer", () => {
     fireEvent.change(screen.getByDisplayValue("Original notes"), {
       target: { value: "New notes" },
     });
+    fireEvent.change(screen.getByLabelText("Stage"), {
+      target: { value: "final" },
+    });
     fireEvent.click(screen.getByText("Save"));
     fireEvent.mouseDown(document.querySelector(".detail-modal-overlay") as HTMLElement);
 
     expect(props.onPatch).toHaveBeenCalledWith(
       "alpha",
-      { title: "Updated Alpha", description: "New notes" },
+      { title: "Updated Alpha", description: "New notes", stage: "final" },
       "Details saved",
     );
     expect(props.onClose).toHaveBeenCalledTimes(1);

@@ -24,6 +24,10 @@ export interface FolioApi {
     projectId: string,
     sources: ImportSource[],
   ) => Promise<FolioItem[]>;
+  setProjectWorkItems: (
+    projectId: string,
+    workItemIds: string[],
+  ) => Promise<FolioData>;
   copyReference: (
     canvasId: string,
     filePaths: string[],

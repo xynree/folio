@@ -73,6 +73,7 @@ const folioMock: FolioApi = {
   copyToProject: vi.fn(),
   importToProject: vi.fn(),
   importSourcesToProject: vi.fn(),
+  setProjectWorkItems: vi.fn(),
   copyReference: vi.fn(),
   deleteItems: vi.fn(),
   openFileDialog: vi.fn(),

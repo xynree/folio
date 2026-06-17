@@ -47,7 +47,10 @@ export function ProjectsView({
   onOpenProject: (projectId: string) => void;
 }) {
   const [titleDraft, setTitleDraft] = useState("");
-  const projects = useMemo(() => sortedProjects(data.projects), [data.projects]);
+  const projects = useMemo(
+    () => sortedProjects(data.projects ?? []),
+    [data.projects],
+  );
 
   const createProject = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -130,7 +133,7 @@ export function ProjectsView({
       ) : (
         <section className="projects-empty">
           <h2>No projects yet</h2>
-          <p>{formatCount(data.items.length, "loose archive item")} available outside projects.</p>
+          <p>{formatCount(data.items?.length ?? 0, "loose archive item")} available outside projects.</p>
         </section>
       )}
     </main>

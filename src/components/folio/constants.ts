@@ -1,4 +1,4 @@
-import type { ItemType } from "../../types";
+import type { ItemStage, ItemType } from "../../types";
 
 export const EMPTY_DATA = {
   version: 1,
@@ -15,6 +15,17 @@ export const TYPE_LABELS: Record<ItemType, string> = {
   anim: "Anim",
   text: "Text",
   other: "File",
+};
+
+export const ITEM_STAGE_LABELS: Record<ItemStage, string> = {
+  reference: "Reference",
+  sketch: "Sketch",
+  wip: "WIP",
+  process: "Process",
+  final: "Final",
+  output: "Output",
+  note: "Note",
+  other: "Other",
 };
 
 export const CANVAS_COLORS = [

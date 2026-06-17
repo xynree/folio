@@ -341,13 +341,13 @@ This phase turns the current archive and board system into a project-based creat
 
 ### 4.3 Works view
 
-- [ ] Let users select one or more project images and mark or unmark them as Works.
-- [ ] Store Works membership as `Project.workItemIds`, a subset of `Project.imageIds`.
-- [ ] Show Works with the existing strip, grid, and heatmap views, scoped to the active project.
-- [ ] Works should represent the actual pieces of work being tracked, not every captured reference or process image.
-- [ ] Keep Works lightweight: promoting to Works should not force stage, tag, title, or board assignment decisions.
-- [ ] Add a user-accessible `works/` folder representation for promoted Works, while keeping canonical membership in `projects.json` so it can be reconciled.
-- [ ] Add item `stage`: `reference`, `sketch`, `wip`, `process`, `final`, `output`, `note`, `other` only after Works membership exists, so stage does not carry the burden of identifying Works.
+- [x] Let users select one or more project images and mark or unmark them as Works.
+- [x] Store Works membership as `Project.workItemIds`, a subset of `Project.imageIds`.
+- [x] Show Works with the existing strip, grid, and heatmap views, scoped to the active project.
+- [x] Works should represent the actual pieces of work being tracked, not every captured reference or process image.
+- [x] Keep Works lightweight: promoting to Works should not force stage, tag, title, or board assignment decisions.
+- [x] Add a user-accessible `works/` folder representation for promoted Works, while keeping canonical membership in `projects.json` so it can be reconciled.
+- [x] Add item `stage`: `reference`, `sketch`, `wip`, `process`, `final`, `output`, `note`, `other` only after Works membership exists, so stage does not carry the burden of identifying Works.
 
 ### 4.4 Project boards
 

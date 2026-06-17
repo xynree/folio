@@ -41,6 +41,12 @@ const folioApi = {
   ): Promise<FolioItem[]> =>
     ipcRenderer.invoke("folio:import-sources-to-project", projectId, sources),
 
+  setProjectWorkItems: (
+    projectId: string,
+    workItemIds: string[],
+  ): Promise<FolioData> =>
+    ipcRenderer.invoke("folio:set-project-work-items", projectId, workItemIds),
+
   copyReference: (
     canvasId: string,
     filePaths: string[],

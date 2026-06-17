@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FolderOpen, Plus, Save, Trash2, X } from "lucide-react";
-import type { Canvas, FolioItem, ThumbnailUrls, Tag } from "../../types";
-import { TYPE_LABELS } from "../folio/constants";
+import type { Canvas, FolioItem, ItemStage, ThumbnailUrls, Tag } from "../../types";
+import { ITEM_STAGE_LABELS, TYPE_LABELS } from "../folio/constants";
 import type { ItemDetailsMode } from "../folio/types";
 import { basename, tagTextsForItem } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
@@ -36,6 +36,7 @@ export function DetailDrawer({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [stage, setStage] = useState<"" | ItemStage>("");
   const [tagInput, setTagInput] = useState("");
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const tagInputRef = useRef<HTMLInputElement | null>(null);
@@ -43,6 +44,7 @@ export function DetailDrawer({
   useEffect(() => {
     setTitle(item?.title ?? "");
     setDescription(item?.description ?? "");
+    setStage(item?.stage ?? "");
     setTagInput("");
   }, [item]);
 
@@ -60,7 +62,9 @@ export function DetailDrawer({
 
   const normalizedTitle = item ? title.trim() || basename(item.path) : title.trim();
   const hasUnsavedChanges = !!item
-    && (normalizedTitle !== item.title || description !== item.description);
+    && (normalizedTitle !== item.title ||
+      description !== item.description ||
+      stage !== (item.stage ?? ""));
 
   const saveDetails = useCallback(() => {
     if (!item) return;
@@ -69,11 +73,12 @@ export function DetailDrawer({
     const nextTitle = title.trim() || basename(item.path);
     if (nextTitle !== item.title) patch.title = nextTitle;
     if (description !== item.description) patch.description = description;
+    if (stage !== (item.stage ?? "")) patch.stage = stage || undefined;
 
     if (Object.keys(patch).length) {
       onPatch(item.id, patch, "Details saved");
     }
-  }, [description, item, onPatch, title]);
+  }, [description, item, onPatch, stage, title]);
 
   const submitTag = () => {
     if (!item) return;
@@ -167,6 +172,21 @@ export function DetailDrawer({
               }
             }}
           />
+        </label>
+
+        <label className="field">
+          <span>Stage</span>
+          <select
+            value={stage}
+            onChange={(event) => setStage(event.currentTarget.value as "" | ItemStage)}
+          >
+            <option value="">No stage</option>
+            {Object.entries(ITEM_STAGE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </label>
 
         <div className="drawer-section">
