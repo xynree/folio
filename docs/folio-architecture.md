@@ -30,6 +30,25 @@ Electron app
 
 There is no backend service. The app is designed to keep working in a studio, on a plane, or anywhere else the network is irrelevant.
 
+## Product Direction
+
+Folio is moving toward two connected product goals:
+
+1. **Interactive studio wall**: a workspace where imported work can be watched over time, grouped by project, promoted through stages, and reviewed as evolving output.
+2. **Reference and inspiration graph**: a Pinterest-like collection layer where references, notes, sketches, WIP, and final work can be connected to projects and to each other.
+
+The current architecture already supports the base of this direction: local archive items, board membership, board-local references, notes, and a persisted `CanvasEdge` shape. The next architectural work is to make projects, item stages, references, and relationships explicit enough that the UI can show progress and meaning instead of only files and boards.
+
+Important product constraints remain:
+
+- The app stays local-first and single-user by default.
+- Files remain readable outside the app.
+- Metadata remains inspectable and migratable.
+- Fast capture should not require users to classify everything immediately.
+- Process artifacts are valuable: references, WIP, notes, failures, and outputs all belong in the record.
+- Project review is personal self-review, not collaborative review. The data model should not include teammates, assignees, approvals, shared comment threads, or review requests.
+- Sharing affordances should stay outside the live app surface: export board snapshots, export project artifacts, and open project-related folders in Finder.
+
 ## Process Boundaries
 
 ### Main Process
@@ -141,6 +160,103 @@ interface Canvas {
 
 Board membership is derived from `canvas.itemIds`. Items can appear on multiple boards.
 
+### Planned model evolution
+
+The current model should evolve in small schema versions rather than being replaced wholesale. The near-term path is to enrich `FolioItem` and `Canvas` first, then introduce standalone project/reference indexes only when the UI needs cross-board queries that are awkward to derive.
+
+Proposed item additions:
+
+```ts
+type ItemStage =
+  | "reference"
+  | "sketch"
+  | "wip"
+  | "process"
+  | "final"
+  | "output"
+  | "note"
+  | "other";
+
+interface FolioItem {
+  // existing fields...
+  stage?: ItemStage;
+  sourceCreatedAt?: string;
+  updatedAt?: string;
+}
+```
+
+Proposed board/project additions:
+
+```ts
+type BoardKind =
+  | "project"
+  | "reference-board"
+  | "moodboard"
+  | "collection";
+
+type BoardStatus = "active" | "paused" | "done" | "archived";
+
+interface Canvas {
+  // existing fields...
+  kind?: BoardKind;
+  status?: BoardStatus;
+  brief?: string;
+  outcome?: string;
+  startedAt?: string;
+  targetDate?: string;
+  completedAt?: string;
+  updatedAt?: string;
+  sections?: CanvasSection[];
+  strokes?: CanvasStroke[];
+}
+```
+
+These additions are intentionally personal. They should describe the user's own studio process, not collaboration state. Avoid adding fields such as collaborator IDs, reviewers, task assignees, approval status, or comment-thread ownership unless the product direction changes explicitly.
+
+Proposed relationship additions:
+
+```ts
+type RelationshipType =
+  | "inspired-by"
+  | "uses"
+  | "variant-of"
+  | "version-of"
+  | "response-to"
+  | "part-of"
+  | "output-of"
+  | "related";
+
+interface CanvasEdge {
+  id: string;
+  fromId: string;
+  toId: string;
+  type?: RelationshipType;
+  label?: string;
+}
+```
+
+Proposed reference additions:
+
+```ts
+interface CanvasReference {
+  // existing fields...
+  sourceUrl?: string;
+  sourceTitle?: string;
+  author?: string;
+  capturedAt?: string;
+  notes?: string;
+  tagIds?: string[];
+}
+```
+
+The first migrations should remain additive:
+
+- Default missing item stages from item type and context.
+- Default old canvases to `kind: "project"` when they contain archive items and `kind: "collection"` when they do not.
+- Default old canvases to `status: "active"` unless archived behavior exists.
+- Preserve existing `canvas.itemIds` as the source of board membership.
+- Keep relationship geometry derived from card positions until manual bend points are explicitly designed.
+
 ## Import Flow
 
 The app has three current import paths:
@@ -216,6 +332,116 @@ Canvas boards use `CanvasViewport`, which renders the dotted background with an 
 
 Canvas cards, references, and notes are draggable from any non-control area. Pointer movement beyond the small drag threshold becomes a drag; otherwise the action remains a click.
 
+## Studio Wall Architecture
+
+The Studio Wall should be a renderer-level composition over existing archive, tag, and canvas data before it becomes a new storage domain. Its first version can derive everything from `FolioData`:
+
+- Active projects: canvases where `kind === "project"` and `status !== "archived"`.
+- Recent work: archive items sorted by `date` or `updatedAt`.
+- Recent references: board references sorted by `capturedAt` or inferred insertion order.
+- Outputs: items where `stage === "final"` or `stage === "output"`.
+- Needs sorting: items with no tags, no board membership, and no edited stage.
+- Self-review prompts: stale active projects, new unsorted imports, and recent outputs.
+
+This keeps the main process unchanged for the first Studio Wall iteration. The renderer should compute view models with memoized selectors, then persist only user edits through `saveFolioData`.
+
+If the view grows expensive, introduce a renderer-side selector module before adding new main-process APIs. A database should remain out of scope until JSON read/write cost or query complexity proves it is necessary.
+
+## Project Timeline Architecture
+
+A project timeline is also a derived view at first. For a given project board:
+
+- Archive item events come from the board's `itemIds` and the item `date`.
+- Reference events come from `canvas.references`.
+- Note events come from `canvas.notes`; add timestamps before treating notes as timeline-grade data.
+- Output events come from project items whose `stage` is `final` or `output`.
+- Relationship events can be added later if edges receive `createdAt` or `updatedAt`.
+
+Near-term timeline work should add timestamps to mutable board objects:
+
+```ts
+interface CanvasNote {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface CanvasReference {
+  id: string;
+  path: string;
+  filename: string;
+  x: number;
+  y: number;
+  capturedAt?: string;
+  updatedAt?: string;
+}
+```
+
+The project timeline should not duplicate source data. It should sort and group existing records into a presentation model, then route edits back to the owning item, note, reference, edge, or canvas.
+
+## Reference Graph Architecture
+
+The current `CanvasReference` type is board-local. That is sufficient for drag/drop reference cards, but a Pinterest-like reference library will need a clearer distinction:
+
+- **Board-local reference**: an image or URL captured for one board only.
+- **Archive reference item**: a reusable reference stored in `items/` and available across boards.
+- **Global reference index**: a future optional store if references need independent browsing before they belong to any board.
+
+The recommended path is incremental:
+
+1. Keep `CanvasReference` board-local and add source metadata.
+2. Add a references browser that flattens references across canvases at render time.
+3. Add "promote to archive" when a reference should become reusable across boards.
+4. Introduce a separate `references.json` only if board-local flattening becomes awkward or references need to exist before board assignment.
+
+Edges should remain attached to canvases because their meaning is spatial and contextual. A connection between a reference and an item on one project board may not mean the same thing elsewhere.
+
+## Edge Rendering Architecture
+
+`CanvasEdge` already exists in the schema. Rendering should be implemented as an SVG overlay inside the same zoomed canvas surface as cards:
+
+- Compute endpoints from each connected object's current position and card bounds.
+- Render curves below cards and above the dotted background.
+- Keep edge path data derived, not persisted.
+- Store only semantic edge data: IDs, endpoints, type, label, and timestamps.
+- Recompute paths while dragging so edges stay attached.
+
+Selection should be local renderer state until the user edits or deletes an edge. Edge creation, label edits, type edits, and deletes should persist through `saveFolioData`.
+
+## Search And Retrieval Architecture
+
+Search should start as a renderer-side in-memory index built from loaded `FolioData`. It should cover:
+
+- item title, description, path, stage, and tags
+- board title, brief, outcome, kind, and status
+- note text
+- reference filename, notes, source title, source URL, and tags
+- edge label and relationship type
+
+If search needs ranking, highlighting, or fuzzy matching, add a small local search helper in the renderer. Do not move search into the main process until it needs disk-only data, OCR text extraction, or background indexing.
+
+## Export And Folder Access Architecture
+
+The only planned collaboration-adjacent affordances are export and direct folder access. They should not create shared state inside Folio.
+
+Export should be modeled as one-way artifact generation:
+
+- Board snapshot image or PDF contact sheet.
+- Project timeline Markdown.
+- Portable project folder containing selected files and metadata JSON.
+- Printable Studio Wall or self-review summaries.
+
+Folder access should use existing main-process shell capabilities:
+
+- `openInFinder(filePath)` already opens an individual item.
+- Add project-level actions that reveal the relevant archive files and `references/<board-id>/` folder.
+- If a project spans many month folders, open a generated project export folder or show a file list before opening Finder.
+
+No persistent collaborator, comment, permission, or shared-review schema is needed for these flows.
+
 ## File Reconciliation
 
 Every item stores a short hash derived from the first 64KB of the file. At launch, Folio scans `items/`, compares paths and hashes, then:
@@ -237,9 +463,52 @@ The app never deletes user files during reconciliation.
 - Original files are served only when a feature explicitly needs them.
 - The UI remains local and single-user; cloud sync would require a separate conflict-resolution design.
 
-## Still Planned
+## Schema And Migration Decisions
 
-- Canvas edge drawing between items, notes, and references.
-- Freehand canvas strokes.
-- Stronger IPC argument validation in main process handlers.
-- Packaging polish beyond the current Electron Forge setup.
+Future schema changes should be handled deliberately:
+
+- Keep `SCHEMA_VERSION` meaningful and increment it for persisted shape changes.
+- Add migration functions in the main process before validating loaded JSON.
+- Keep migrations additive where possible so older data remains easy to understand.
+- Avoid duplicating board membership onto items unless query needs prove it is necessary.
+- Prefer derived renderer view models for Studio Wall, timelines, backlinks, and search before adding new persisted indexes.
+- Keep new JSON files optional until the current split (`folio.json`, `tags.json`, `canvases.json`) becomes a real limitation.
+
+Likely future JSON files, only if needed:
+
+```text
+.folio/
+  projects.json      # only if projects become separate from canvases
+  references.json    # only if references need global life outside boards
+  search-index.json  # only if background indexing becomes necessary
+```
+
+## Roadmap
+
+Near-term roadmap:
+
+- Finish board-local reference capture from file dialog, clipboard paste, and URLs.
+- Render and edit `CanvasEdge` relationships between items, references, and notes.
+- Add item stages so sketches, WIP, final pieces, output, and references are distinct.
+- Add project-like board metadata: kind, status, brief, outcome, and dates.
+- Add Studio Wall home view from derived renderer selectors.
+- Add project timeline view from existing item/reference/note data.
+- Add backlinks and connected-item summaries in detail views.
+- Add project folder access actions for archive files and board references.
+
+Middle-term roadmap:
+
+- Add canvas sections, board templates, lasso selection, alignment, and minimap.
+- Add reference browser with Pinterest-like browsing and filters.
+- Add iteration/version grouping and "promote to output" flows.
+- Add global search across items, boards, notes, references, tags, and edges.
+- Add weekly/project self-review summaries.
+- Add export for board snapshots, project timelines, and contact sheets.
+
+Long-term roadmap:
+
+- Add optional local intelligence for tag suggestions, OCR, color palettes, and relationship suggestions.
+- Add explicit backup/export before any sync work.
+- Explore sync only after conflict behavior is designed.
+- Keep collaboration out of the live app surface; support outside sharing through exported files and direct folder access.
+- Keep social features, mobile, and cloud-first workflows outside the core product.
