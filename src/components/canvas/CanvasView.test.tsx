@@ -217,7 +217,6 @@ describe("CanvasView Phase 5 interactions", () => {
       imageUrl: "data:image/png;base64,PREVIEW",
       faviconUrl: "data:image/png;base64,ICON",
     });
-    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("example.com/source");
     const { container } = renderCanvasView();
     const { surface } = setCanvasMeasurements(container);
 
@@ -225,17 +224,22 @@ describe("CanvasView Phase 5 interactions", () => {
     fireEvent.pointerDown(surface, { button: 0, clientX: 300, clientY: 310 });
     fireEvent.click(screen.getByLabelText("Add link"));
 
+    const linkInput = await screen.findByLabelText("Link URL");
+    fireEvent.change(linkInput, { target: { value: "example.com/source" } });
+    fireEvent.click(
+      container.querySelector(".canvas-link-prompt-submit") as HTMLElement,
+    );
+
     expect(await screen.findByDisplayValue("Text")).not.toBeNull();
     expect(await screen.findByDisplayValue("Example Source")).not.toBeNull();
     expect(
       container.querySelector(".canvas-link-preview")?.getAttribute("src"),
     ).toBe("data:image/png;base64,PREVIEW");
     expect(screen.queryByLabelText("Section tool")).toBeNull();
-    expect(promptSpy).toHaveBeenCalledWith("Add a link to this board");
+    expect(screen.queryByLabelText("Link URL")).toBeNull();
     expect(window.folio.fetchLinkMetadata).toHaveBeenCalledWith(
       "https://example.com/source",
     );
-    promptSpy.mockRestore();
   });
 
   it("selects objects with a drag marquee and reserves space-drag for panning", () => {
@@ -339,7 +343,7 @@ describe("CanvasView Phase 5 interactions", () => {
     expect(screen.queryByLabelText("Organize into section")).toBeNull();
   });
 
-  it("arranges selected project items and handles selection keyboard shortcuts", async () => {
+  it("selects project items and handles selection keyboard shortcuts", async () => {
     vi.mocked(window.folio.ensureThumbnails).mockResolvedValue({});
     const data = makeData({
       canvases: [
@@ -367,8 +371,6 @@ describe("CanvasView Phase 5 interactions", () => {
 
     expect(screen.getByText("3 selected")).not.toBeNull();
 
-    fireEvent.click(screen.getByLabelText("Arrange by date"));
-    fireEvent.click(screen.getByLabelText("Arrange by type"));
     fireEvent.keyDown(window, { key: "s" });
     fireEvent.keyDown(window, { key: "f" });
     fireEvent.keyDown(window, { key: "0" });

@@ -4100,6 +4100,100 @@ button svg {
   background: #f3ead9;
 }
 
+.canvas-link-prompt-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 96px;
+  background: rgba(43, 37, 32, 0.28);
+}
+
+.canvas-link-prompt {
+  display: grid;
+  gap: 10px;
+  width: min(420px, calc(100% - 48px));
+  padding: 16px;
+  border: 1px solid #e1d3c2;
+  border-radius: 12px;
+  background: #fffaf2;
+  box-shadow: 0 18px 40px rgba(43, 37, 32, 0.22);
+}
+
+.canvas-link-prompt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #385d56;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.canvas-link-prompt-header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvas-link-prompt input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #d7c9b4;
+  border-radius: 8px;
+  color: #2f2a25;
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+}
+
+.canvas-link-prompt-error {
+  margin: 0;
+  color: #b3261e;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.canvas-link-prompt-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.canvas-link-prompt-actions button {
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 1px solid #d7c9b4;
+  border-radius: 8px;
+  color: #443424;
+  background: #fff8eb;
+  font-size: 12px;
+  font-weight: 780;
+  cursor: pointer;
+}
+
+.canvas-link-prompt-actions button:hover {
+  background: #f3ead9;
+}
+
+.canvas-link-prompt-submit {
+  color: #fffaf2 !important;
+  background: #385d56 !important;
+  border-color: #385d56 !important;
+}
+
+.canvas-link-prompt-submit:hover {
+  background: #2d4b45 !important;
+}
+
+.canvas-link-prompt-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .canvas-link-card input,
 .canvas-link-card textarea {
   width: 100%;

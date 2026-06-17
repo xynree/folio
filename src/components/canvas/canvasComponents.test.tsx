@@ -14,6 +14,7 @@ import {
 } from "./CanvasCards";
 import { CanvasEdgeLabels } from "./CanvasEdgeLabels";
 import { CanvasInkLayer } from "./CanvasInkLayer";
+import { CanvasLinkPrompt } from "./CanvasLinkPrompt";
 import { CanvasMinimap } from "./CanvasMinimap";
 import { CanvasObjectLayer } from "./CanvasObjectLayer";
 import { CanvasSelectionBar } from "./CanvasSelectionBar";
@@ -729,7 +730,7 @@ describe("canvas components", () => {
   });
 
   it("renders selection bar actions and a minimap when content overflows", () => {
-    const onArrangeByType = vi.fn();
+    const onDuplicate = vi.fn();
     const scroll = document.createElement("div");
     Object.defineProperties(scroll, {
       clientHeight: { configurable: true, value: 180 },
@@ -756,10 +757,8 @@ describe("canvas components", () => {
       <>
         <CanvasSelectionBar
           selectedCount={2}
-          onArrangeByDate={vi.fn()}
-          onArrangeByType={onArrangeByType}
           onDelete={vi.fn()}
-          onDuplicate={vi.fn()}
+          onDuplicate={onDuplicate}
         />
         <CanvasMinimap
           objectViews={[
@@ -787,7 +786,7 @@ describe("canvas components", () => {
       </>,
     );
 
-    fireEvent.click(screen.getByLabelText("Arrange by type"));
+    fireEvent.click(screen.getByLabelText("Duplicate"));
 
     expect(screen.getByText("2 selected")).not.toBeNull();
     const minimap = screen.getByLabelText("Minimap");
@@ -811,8 +810,44 @@ describe("canvas components", () => {
     fireEvent.pointerUp(window);
 
     expect(onFocusViewport).toHaveBeenCalled();
-    expect(onArrangeByType).toHaveBeenCalledTimes(1);
+    expect(onDuplicate).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText("Organize into section")).toBeNull();
+  });
+
+  it("submits, validates, and cancels the link prompt", () => {
+    const onSubmit = vi.fn((url: string) => url.startsWith("http"));
+    const onCancel = vi.fn();
+    const { rerender } = render(
+      <CanvasLinkPrompt onSubmit={onSubmit} onCancel={onCancel} />,
+    );
+
+    const input = screen.getByLabelText("Link URL") as HTMLInputElement;
+    const submit = screen.getByText("Add link");
+
+    // Empty input keeps the submit button disabled.
+    expect((submit as HTMLButtonElement).disabled).toBe(true);
+
+    // A rejected URL surfaces an inline error and keeps the prompt open.
+    fireEvent.change(input, { target: { value: "not-a-link" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledWith("not-a-link");
+    expect(screen.getByRole("alert")).not.toBeNull();
+
+    // Editing clears the error, and a valid URL submits.
+    fireEvent.change(input, { target: { value: "https://example.com" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(submit);
+    expect(onSubmit).toHaveBeenCalledWith("https://example.com");
+
+    // Escape and backdrop clicks cancel.
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+
+    rerender(<CanvasLinkPrompt onSubmit={onSubmit} onCancel={onCancel} />);
+    fireEvent.pointerDown(
+      document.querySelector(".canvas-link-prompt-backdrop") as HTMLElement,
+    );
+    expect(onCancel).toHaveBeenCalledTimes(2);
   });
 
   it("zooms and pans the canvas viewport", () => {

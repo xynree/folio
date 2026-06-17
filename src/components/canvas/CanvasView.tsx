@@ -40,11 +40,10 @@ import { CanvasMinimap } from "./CanvasMinimap";
 import { CanvasObjectLayer } from "./CanvasObjectLayer";
 import { CanvasSelectionBar } from "./CanvasSelectionBar";
 import { CanvasToolCursor } from "./CanvasToolCursor";
+import { CanvasLinkPrompt } from "./CanvasLinkPrompt";
 import {
   canvasObjectBounds,
-  tidyCanvasObjectsIntoGrid,
   type ArrangeableCanvasObject,
-  type CanvasObjectMovePatch,
 } from "./canvasArrangement";
 import { edgeRenderModelsFromLayouts } from "./canvasGeometry";
 import {
@@ -69,7 +68,6 @@ import {
   deleteCanvasSection,
   deleteCanvasTextElement,
   duplicateCanvasObjects,
-  moveCanvasObjects,
   removeItemFromCanvas,
   updateCanvasLink,
   updateCanvasNoteSize,
@@ -164,6 +162,7 @@ export function CanvasView({
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
   const [projectImagePickerOpen, setProjectImagePickerOpen] = useState(false);
   const [projectImageColumns, setProjectImageColumns] = useState(2);
+  const [linkPromptOpen, setLinkPromptOpen] = useState(false);
   const [boardBrowserOpen, setBoardBrowserOpen] = useState(
     () => canvasDetailRequestId === 0,
   );
@@ -799,76 +798,6 @@ export function CanvasView({
     [saveViewportState],
   );
 
-  const applyMovePatches = useCallback(
-    (patches: CanvasObjectMovePatch[], message: string) => {
-      if (!activeCanvas || !patches.length) return;
-      updateCanvas(
-        activeCanvas.id,
-        (canvas) => moveCanvasObjects(canvas, patches),
-        message,
-      );
-    },
-    [activeCanvas, updateCanvas],
-  );
-
-  const arrangeSelectedObjects = useCallback(
-    (patches: CanvasObjectMovePatch[], message: string) => {
-      applyMovePatches(patches, message);
-    },
-    [applyMovePatches],
-  );
-
-  const selectedProjectItemsById = useMemo(() => {
-    return new Map(
-      selectedArrangeableObjects.flatMap((object) => {
-        if (object.kind !== "item" && object.kind !== "document") return [];
-        const item = itemsById.get(object.id);
-        return item ? [[object.id, item] as const] : [];
-      }),
-    );
-  }, [itemsById, selectedArrangeableObjects]);
-
-  const arrangeSelectedByDate = useCallback(() => {
-    const sortedObjects = [...selectedArrangeableObjects].sort((first, second) => {
-      const firstItem = selectedProjectItemsById.get(first.id);
-      const secondItem = selectedProjectItemsById.get(second.id);
-      if (!firstItem && !secondItem) return first.kind.localeCompare(second.kind);
-      if (!firstItem) return 1;
-      if (!secondItem) return -1;
-      return firstItem.date.localeCompare(secondItem.date);
-    });
-    arrangeSelectedObjects(
-      tidyCanvasObjectsIntoGrid(sortedObjects),
-      "Selection arranged by date",
-    );
-  }, [
-    arrangeSelectedObjects,
-    selectedArrangeableObjects,
-    selectedProjectItemsById,
-  ]);
-
-  const arrangeSelectedByType = useCallback(() => {
-    const sortedObjects = [...selectedArrangeableObjects].sort((first, second) => {
-      const firstItem = selectedProjectItemsById.get(first.id);
-      const secondItem = selectedProjectItemsById.get(second.id);
-      const firstLabel = firstItem
-        ? `${firstItem.type}:${firstItem.title || basename(firstItem.path)}`
-        : first.kind;
-      const secondLabel = secondItem
-        ? `${secondItem.type}:${secondItem.title || basename(secondItem.path)}`
-        : second.kind;
-      return firstLabel.localeCompare(secondLabel);
-    });
-    arrangeSelectedObjects(
-      tidyCanvasObjectsIntoGrid(sortedObjects),
-      "Selection arranged by type",
-    );
-  }, [
-    arrangeSelectedObjects,
-    selectedArrangeableObjects,
-    selectedProjectItemsById,
-  ]);
-
   const deleteSelectedObjects = useCallback(() => {
     if (!activeCanvas || !selectedObjects.length) return;
     updateCanvas(
@@ -1183,13 +1112,20 @@ export function CanvasView({
   );
 
   const addLinkToBoard = useCallback(() => {
-    const rawUrl = window.prompt("Add a link to this board");
-    if (!rawUrl) return;
+    setLinkPromptOpen(true);
+  }, []);
 
-    if (addLinkAtPosition(rawUrl, centerPositionForCurrentViewport())) {
+  const submitLinkPrompt = useCallback(
+    (rawUrl: string) => {
+      if (!addLinkAtPosition(rawUrl, centerPositionForCurrentViewport())) {
+        return false;
+      }
+      setLinkPromptOpen(false);
       setActiveTool("select");
-    }
-  }, [addLinkAtPosition, centerPositionForCurrentViewport, setActiveTool]);
+      return true;
+    },
+    [addLinkAtPosition, centerPositionForCurrentViewport, setActiveTool],
+  );
 
   const addTextAtPosition = useCallback(
     (text: string, point: CanvasPosition) => {
@@ -1866,11 +1802,16 @@ export function CanvasView({
 
         <CanvasSelectionBar
           selectedCount={selectedObjects.length}
-          onArrangeByDate={arrangeSelectedByDate}
-          onArrangeByType={arrangeSelectedByType}
           onDelete={deleteSelectedObjects}
           onDuplicate={duplicateSelectedObjects}
         />
+
+        {linkPromptOpen ? (
+          <CanvasLinkPrompt
+            onCancel={() => setLinkPromptOpen(false)}
+            onSubmit={submitLinkPrompt}
+          />
+        ) : null}
 
         <CanvasViewport
           zoom={canvasZoom}

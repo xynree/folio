@@ -1,25 +1,16 @@
 import React from "react";
-import {
-  Trash2,
-  Copy,
-  CalendarDays,
-  Shapes,
-} from "lucide-react";
+import { Trash2, Copy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { ButtonIcon } from "../shared/ButtonIcon";
 
 type CanvasSelectionBarProps = {
   selectedCount: number;
-  onArrangeByDate: () => void;
-  onArrangeByType: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
 };
 
 export function CanvasSelectionBar({
   selectedCount,
-  onArrangeByDate,
-  onArrangeByType,
   onDelete,
   onDuplicate,
 }: CanvasSelectionBarProps) {
@@ -30,16 +21,6 @@ export function CanvasSelectionBar({
       <span className="canvas-selection-count">
         {selectedCount} selected
       </span>
-      <SelectionButton
-        icon={CalendarDays}
-        label="Arrange by date"
-        onClick={onArrangeByDate}
-      />
-      <SelectionButton
-        icon={Shapes}
-        label="Arrange by type"
-        onClick={onArrangeByType}
-      />
       <SelectionButton icon={Copy} label="Duplicate" onClick={onDuplicate} />
       <SelectionButton
         danger
