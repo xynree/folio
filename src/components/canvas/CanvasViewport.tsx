@@ -14,9 +14,12 @@ type CanvasViewportProps = {
   onZoomChange: React.Dispatch<React.SetStateAction<number>>;
   scrollRef: React.RefObject<HTMLDivElement | null>;
   surfaceRef: React.RefObject<HTMLDivElement | null>;
+  surfaceClassName?: string;
   onDrop: (event: React.DragEvent<HTMLDivElement>) => void;
   onDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
   onSurfacePointerDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onSurfacePointerMove?: (event: React.PointerEvent<HTMLDivElement>) => void;
+  onSurfacePointerLeave?: (event: React.PointerEvent<HTMLDivElement>) => void;
   children: React.ReactNode;
 };
 
@@ -34,9 +37,12 @@ export function CanvasViewport({
   onZoomChange,
   scrollRef,
   surfaceRef,
+  surfaceClassName = "",
   onDrop,
   onDragOver,
   onSurfacePointerDown,
+  onSurfacePointerMove,
+  onSurfacePointerLeave,
   children,
 }: CanvasViewportProps) {
   const backgroundRef = useRef<HTMLCanvasElement | null>(null);
@@ -282,7 +288,7 @@ export function CanvasViewport({
           }}
         >
           <div
-            className="canvas-surface"
+            className={`canvas-surface ${surfaceClassName}`.trim()}
             ref={surfaceRef}
             style={{
               width: CANVAS_WORLD_WIDTH,
@@ -292,6 +298,8 @@ export function CanvasViewport({
             onDrop={onDrop}
             onDragOver={onDragOver}
             onPointerDown={onSurfacePointerDown}
+            onPointerMove={onSurfacePointerMove}
+            onPointerLeave={onSurfacePointerLeave}
           >
             {children}
           </div>

@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowLeftRight,
   ArrowRight,
+  ArrowRightLeft,
   Edit3,
   Ellipsis,
   Eraser,
@@ -66,6 +67,9 @@ type CanvasTool = "select" | "pen" | "eraser" | "text";
 const CANVAS_OBJECT_DRAG_THRESHOLD = 4;
 const BOARD_BROWSER_PREVIEW_LIMIT = 3;
 const STROKE_POINT_MIN_DISTANCE = 2;
+const ERASER_RADIUS = 18;
+const STROKE_HIT_PADDING = 3;
+const SVG_PATH_NUMBER_PATTERN = /-?\d+(?:\.\d+)?/g;
 const CANVAS_CONNECTION_SIDES: CanvasConnectionSide[] = [
   "top",
   "right",
@@ -221,6 +225,57 @@ function edgeLabelPosition(from: CanvasPosition, to: CanvasPosition) {
   };
 }
 
+function pointsFromStrokePath(path: string) {
+  const values = path.match(SVG_PATH_NUMBER_PATTERN)?.map(Number) ?? [];
+  const points: CanvasPosition[] = [];
+  for (let index = 0; index < values.length - 1; index += 2) {
+    points.push({ x: values[index], y: values[index + 1] });
+  }
+  return points;
+}
+
+function distanceToSegment(
+  point: CanvasPosition,
+  segmentStart: CanvasPosition,
+  segmentEnd: CanvasPosition,
+) {
+  const segmentX = segmentEnd.x - segmentStart.x;
+  const segmentY = segmentEnd.y - segmentStart.y;
+  const segmentLengthSquared = segmentX * segmentX + segmentY * segmentY;
+
+  if (!segmentLengthSquared) {
+    return Math.hypot(point.x - segmentStart.x, point.y - segmentStart.y);
+  }
+
+  const projection = (
+    ((point.x - segmentStart.x) * segmentX)
+    + ((point.y - segmentStart.y) * segmentY)
+  ) / segmentLengthSquared;
+  const clampedProjection = Math.max(0, Math.min(1, projection));
+  const closestPoint = {
+    x: segmentStart.x + clampedProjection * segmentX,
+    y: segmentStart.y + clampedProjection * segmentY,
+  };
+  return Math.hypot(point.x - closestPoint.x, point.y - closestPoint.y);
+}
+
+function strokeIntersectsEraser(stroke: CanvasStroke, center: CanvasPosition) {
+  const points = pointsFromStrokePath(stroke.path);
+  const hitRadius = ERASER_RADIUS + STROKE_HIT_PADDING;
+
+  if (points.length === 1) {
+    return Math.hypot(points[0].x - center.x, points[0].y - center.y) <= hitRadius;
+  }
+
+  for (let index = 1; index < points.length; index += 1) {
+    if (distanceToSegment(center, points[index - 1], points[index]) <= hitRadius) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function objectTargetFromElement(element: Element | null): CanvasObjectTarget | null {
   const objectElement = element?.closest<HTMLElement>("[data-canvas-object-id]");
   if (!objectElement?.dataset.canvasObjectId) return null;
@@ -290,6 +345,8 @@ export function CanvasView({
   const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
   const [edgeLabelDraft, setEdgeLabelDraft] = useState("");
   const [activeTool, setActiveTool] = useState<CanvasTool>("select");
+  const [toolCursorPosition, setToolCursorPosition] =
+    useState<CanvasPosition | null>(null);
   const [strokePreview, setStrokePreview] = useState<CanvasStroke | null>(null);
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
   const [boardBrowserOpen, setBoardBrowserOpen] = useState(true);
@@ -340,6 +397,12 @@ export function CanvasView({
   }, [canvasDetailRequestId]);
 
   useEffect(() => {
+    if (activeTool !== "pen" && activeTool !== "eraser") {
+      setToolCursorPosition(null);
+    }
+  }, [activeTool]);
+
+  useEffect(() => {
     if (!boardMenuCanvasId) return undefined;
 
     const onPointerDown = (event: PointerEvent) => {
@@ -354,7 +417,7 @@ export function CanvasView({
   }, [boardMenuCanvasId]);
 
   useEffect(() => {
-    if (!activeCanvas) return undefined;
+    if (!activeCanvas || boardBrowserOpen) return undefined;
     const frames: number[] = [];
     const timeouts: number[] = [];
 
@@ -373,7 +436,7 @@ export function CanvasView({
       frames.forEach((frame) => window.cancelAnimationFrame(frame));
       timeouts.forEach((timeout) => window.clearTimeout(timeout));
     };
-  }, [activeCanvas?.id, focusCanvasOrigin]);
+  }, [activeCanvas?.id, boardBrowserOpen, focusCanvasOrigin]);
 
   const itemsById = useMemo(
     () => new Map(data.items.map((item) => [item.id, item])),
@@ -743,6 +806,42 @@ export function CanvasView({
     [activeCanvas, updateCanvas],
   );
 
+  const reverseEdgeDirection = useCallback(
+    (edgeId: string) => {
+      if (!activeCanvas) return;
+      updateCanvas(activeCanvas.id, (canvas) => ({
+        ...canvas,
+        edges: (canvas.edges ?? []).map((edge) =>
+          edge.id === edgeId
+            ? {
+                ...edge,
+                fromId: edge.toId,
+                toId: edge.fromId,
+                fromSide: edge.toSide,
+                toSide: edge.fromSide,
+                direction: "forward",
+              }
+            : edge,
+        ),
+      }), "Edge direction reversed");
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const deleteEdge = useCallback(
+    (edgeId: string) => {
+      if (!activeCanvas) return;
+      updateCanvas(activeCanvas.id, (canvas) => ({
+        ...canvas,
+        edges: (canvas.edges ?? []).filter((edge) => edge.id !== edgeId),
+      }), "Edge deleted");
+      setSelectedEdgeId((current) => (current === edgeId ? null : current));
+      setEditingEdgeId((current) => (current === edgeId ? null : current));
+      setEdgeLabelDraft("");
+    },
+    [activeCanvas, updateCanvas],
+  );
+
   const startEdgeDrag = useCallback(
     (
       event: React.PointerEvent,
@@ -864,16 +963,52 @@ export function CanvasView({
     }), "Stroke removed");
   }, [activeCanvas, activeStrokes.length, updateCanvas]);
 
-  const removeStroke = useCallback(
-    (strokeId: string) => {
-      if (!activeCanvas) return;
+  const eraseStrokesAtPoint = useCallback(
+    (point: CanvasPosition, skippedStrokeIds = new Set<string>()) => {
+      if (!activeCanvas) return [];
+      const strokeIdsToErase = (activeCanvas.strokes ?? [])
+        .filter((stroke) => !skippedStrokeIds.has(stroke.id))
+        .filter((stroke) => strokeIntersectsEraser(stroke, point))
+        .map((stroke) => stroke.id);
+
+      if (!strokeIdsToErase.length) return [];
+
+      const erasedStrokeIds = new Set(strokeIdsToErase);
       updateCanvas(activeCanvas.id, (canvas) => ({
         ...canvas,
-        strokes: (canvas.strokes ?? []).filter((stroke) => stroke.id !== strokeId),
+        strokes: (canvas.strokes ?? []).filter(
+          (stroke) => !erasedStrokeIds.has(stroke.id),
+        ),
       }), "Stroke erased");
+      return strokeIdsToErase;
     },
     [activeCanvas, updateCanvas],
   );
+
+  const updateToolCursor = useCallback(
+    (clientX: number, clientY: number) => {
+      if (activeTool !== "pen" && activeTool !== "eraser") {
+        setToolCursorPosition(null);
+        return null;
+      }
+
+      const point = surfacePointFromClient(clientX, clientY);
+      setToolCursorPosition(point);
+      return point;
+    },
+    [activeTool, surfacePointFromClient],
+  );
+
+  const handleSurfacePointerMove = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      updateToolCursor(event.clientX, event.clientY);
+    },
+    [updateToolCursor],
+  );
+
+  const hideToolCursor = useCallback(() => {
+    setToolCursorPosition(null);
+  }, []);
 
   const addTextAtPoint = useCallback(
     (point: CanvasPosition) => {
@@ -909,26 +1044,61 @@ export function CanvasView({
 
       event.preventDefault();
       event.stopPropagation();
+      const startPoint = updateToolCursor(event.clientX, event.clientY);
 
       if (activeTool === "text") {
         addTextAtPoint(surfacePointFromClient(event.clientX, event.clientY));
         return;
       }
 
-      if (activeTool === "eraser") return;
+      if (activeTool === "eraser") {
+        const erasedStrokeIds = new Set<string>();
+        if (startPoint) {
+          eraseStrokesAtPoint(startPoint).forEach((strokeId) =>
+            erasedStrokeIds.add(strokeId),
+          );
+        }
+
+        const previousCursor = document.body.style.cursor;
+        const previousUserSelect = document.body.style.userSelect;
+        document.body.style.cursor = "none";
+        document.body.style.userSelect = "none";
+
+        const onPointerMove = (moveEvent: PointerEvent) => {
+          moveEvent.preventDefault();
+          const point = updateToolCursor(moveEvent.clientX, moveEvent.clientY);
+          if (!point) return;
+          eraseStrokesAtPoint(point, erasedStrokeIds).forEach((strokeId) =>
+            erasedStrokeIds.add(strokeId),
+          );
+        };
+
+        const onPointerUp = () => {
+          window.removeEventListener("pointermove", onPointerMove);
+          window.removeEventListener("pointerup", onPointerUp);
+          document.body.style.cursor = previousCursor;
+          document.body.style.userSelect = previousUserSelect;
+        };
+
+        window.addEventListener("pointermove", onPointerMove);
+        window.addEventListener("pointerup", onPointerUp);
+        return;
+      }
 
       const strokeId = createId("stroke");
       const color = activeCanvas.color ?? CANVAS_COLORS[0];
-      const points = [surfacePointFromClient(event.clientX, event.clientY)];
+      const points = [startPoint ?? surfacePointFromClient(event.clientX, event.clientY)];
       const previousCursor = document.body.style.cursor;
       const previousUserSelect = document.body.style.userSelect;
-      document.body.style.cursor = "crosshair";
+      document.body.style.cursor = "none";
       document.body.style.userSelect = "none";
       setStrokePreview({ id: strokeId, path: buildPolylinePath(points), color });
 
       const onPointerMove = (moveEvent: PointerEvent) => {
         moveEvent.preventDefault();
-        const point = surfacePointFromClient(moveEvent.clientX, moveEvent.clientY);
+        const point =
+          updateToolCursor(moveEvent.clientX, moveEvent.clientY)
+          ?? surfacePointFromClient(moveEvent.clientX, moveEvent.clientY);
         const lastPoint = points[points.length - 1];
         if (
           Math.hypot(point.x - lastPoint.x, point.y - lastPoint.y)
@@ -966,7 +1136,15 @@ export function CanvasView({
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
     },
-    [activeCanvas, activeTool, addTextAtPoint, surfacePointFromClient, updateCanvas],
+    [
+      activeCanvas,
+      activeTool,
+      addTextAtPoint,
+      eraseStrokesAtPoint,
+      surfacePointFromClient,
+      updateCanvas,
+      updateToolCursor,
+    ],
   );
 
   useEffect(() => {
@@ -995,11 +1173,7 @@ export function CanvasView({
       }
 
       event.preventDefault();
-      updateCanvas(activeCanvas.id, (canvas) => ({
-        ...canvas,
-        edges: (canvas.edges ?? []).filter((edge) => edge.id !== selectedEdgeId),
-      }), "Edge deleted");
-      setSelectedEdgeId(null);
+      deleteEdge(selectedEdgeId);
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -1007,10 +1181,10 @@ export function CanvasView({
   }, [
     activeCanvas,
     activeStrokes.length,
+    deleteEdge,
     editingEdgeId,
     selectedEdgeId,
     undoLastStroke,
-    updateCanvas,
   ]);
 
   const startDrag = useCallback(
@@ -1844,9 +2018,16 @@ export function CanvasView({
           onZoomChange={setCanvasZoom}
           scrollRef={scrollRef}
           surfaceRef={surfaceRef}
+          surfaceClassName={
+            activeTool === "pen" || activeTool === "eraser"
+              ? "canvas-surface-tool-active"
+              : ""
+          }
           onDrop={handleReferenceDrop}
           onDragOver={handleReferenceDragOver}
           onSurfacePointerDown={handleSurfacePointerDown}
+          onSurfacePointerMove={handleSurfacePointerMove}
+          onSurfacePointerLeave={hideToolCursor}
         >
           <svg
             className="canvas-ink-layer"
@@ -1876,12 +2057,6 @@ export function CanvasView({
                 d={stroke.path}
                 key={stroke.id}
                 stroke={stroke.color}
-                onPointerDown={(event) => {
-                  if (activeTool !== "eraser") return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  removeStroke(stroke.id);
-                }}
               />
             ))}
             {strokePreview ? (
@@ -2000,7 +2175,7 @@ export function CanvasView({
                     <span
                       className="canvas-edge-direction-bar"
                       role="toolbar"
-                      aria-label="Edge direction"
+                      aria-label="Link actions"
                     >
                       <button
                         className={
@@ -2053,12 +2228,66 @@ export function CanvasView({
                       >
                         <ButtonIcon icon={ArrowLeftRight} size={12} />
                       </button>
+                      <span className="canvas-edge-action-divider" />
+                      <button
+                        type="button"
+                        aria-label="Reverse direction"
+                        title="Reverse direction"
+                        disabled={model.direction !== "forward"}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          reverseEdgeDirection(model.edge.id);
+                        }}
+                      >
+                        <ButtonIcon icon={ArrowRightLeft} size={12} />
+                      </button>
+                      <button
+                        className="canvas-edge-remove-button"
+                        type="button"
+                        aria-label="Remove link"
+                        title="Remove link"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          deleteEdge(model.edge.id);
+                        }}
+                      >
+                        <ButtonIcon icon={Trash2} size={12} />
+                      </button>
                     </span>
                   ) : null}
                 </span>
               );
             })}
           </div>
+
+          {toolCursorPosition && (activeTool === "pen" || activeTool === "eraser") ? (
+            <div
+              className={`canvas-tool-cursor canvas-tool-cursor-${activeTool}`}
+              data-testid="canvas-tool-cursor"
+              style={{
+                transform: `translate(${toolCursorPosition.x}px, ${toolCursorPosition.y}px)`,
+              }}
+            >
+              {activeTool === "eraser" ? (
+                <>
+                  <span
+                    className="canvas-eraser-radius"
+                    style={{
+                      height: ERASER_RADIUS * 2,
+                      width: ERASER_RADIUS * 2,
+                    }}
+                  />
+                  <span className="canvas-tool-cursor-icon">
+                    <ButtonIcon icon={Eraser} size={16} />
+                  </span>
+                </>
+              ) : (
+                <span className="canvas-tool-cursor-icon">
+                  <ButtonIcon icon={PenLine} size={18} />
+                </span>
+              )}
+            </div>
+          ) : null}
 
           {activeItems.map((item, index) => {
             const position = positionForItem(item, index);

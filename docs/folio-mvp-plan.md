@@ -290,21 +290,22 @@ Reference images belong to a canvas, not to items. They are first-class position
 - [x] Drag from one connector node to another to draw a connection edge
 - [x] Hold Shift and drag from one item, note, reference, or text card to another as a shortcut to draw a connection edge
 - [x] Edge renders as a derived SVG curve between the selected sides, with an optional label
-- [x] Edge direction can be changed between no direction, single direction, and bidirectional; arrows render only for directed modes
+- [x] Edge direction can be changed between no direction, single direction, and bidirectional; single-arrow links can be reversed from the selected-link toolbar
 - [x] Click an edge to select it; double-click to edit the label inline
-- [x] Delete selected edge with Backspace/Delete
+- [x] Delete selected edge with Backspace/Delete or the remove action in the selected-link toolbar
 - [x] Edges stored as `{ id, fromId, toId, fromSide?, toSide?, direction?, label? }` in `canvas.edges[]`
 - [x] Edges update position dynamically as cards are dragged
 
 ### 3.6 Freehand strokes and board text
 
 - [x] Pen tool in canvas toolbar toggles freehand drawing mode
+- [x] Pen mode renders a pen cursor over the canvas surface
 - [x] Draw directly on the canvas surface — to circle items, annotate, sketch quick marks
 - [x] Strokes render as SVG paths overlaid on the canvas
 - [x] Stroke color inherits canvas color by default
 - [x] Strokes stored as `{ id, path, color }` in `canvas.strokes[]`
 - [x] Undo (⌘Z) removes last stroke
-- [x] Eraser tool deletes individual freehand strokes from the board
+- [x] Eraser mode renders an eraser cursor with a visible hit circle and deletes intersecting strokes on click or drag
 - [x] Text tool places editable text elements directly on the canvas surface
 - [x] Text elements can be edited, dragged, connected, and deleted; text is stored in `canvas.texts[]`
 

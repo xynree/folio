@@ -1087,6 +1087,28 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     );
   });
 
+  it("focuses the current board when reopening it from the board browser", async () => {
+    setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openBoardBrowser(user);
+    await user.click(screen.getByRole("button", { name: /^open board 1,/i }));
+
+    const canvasScroll = await waitFor(() => {
+      const scroll = document.querySelector(".canvas-scroll") as HTMLElement | null;
+      expect(scroll).not.toBeNull();
+      return scroll as HTMLElement;
+    });
+    await waitFor(() => {
+      expect(canvasScroll.scrollLeft).toBe(CANVAS_WORLD_ORIGIN - 80);
+      expect(canvasScroll.scrollTop).toBe(CANVAS_WORLD_ORIGIN - 80);
+    });
+    expect(document.querySelector(".canvas-board-copy strong")?.textContent).toBe(
+      "Board 1",
+    );
+  });
+
   it("opens board edit and delete actions from the board grid menu", async () => {
     const app = setupFolio({
       data: makeData({
@@ -1433,6 +1455,17 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.canvases[0].edges[0].direction).toBe("forward");
     });
 
+    await user.click(screen.getByRole("button", { name: /reverse direction/i }));
+    await waitFor(() => {
+      expect(app.data.canvases[0].edges[0]).toMatchObject({
+        fromId: "bravo",
+        toId: "alpha",
+        fromSide: "left",
+        toSide: "right",
+        direction: "forward",
+      });
+    });
+
     const edgeLabelButton = await screen.findByRole("button", {
       name: /edge label: link/i,
     });
@@ -1447,7 +1480,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       name: /edge label: inspired by/i,
     });
     await user.click(updatedLabel);
-    fireEvent.keyDown(window, { key: "Delete" });
+    await user.click(screen.getByRole("button", { name: /remove link/i }));
 
     await waitFor(() => {
       expect(app.data.canvases[0].edges).toHaveLength(0);
@@ -1605,7 +1638,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("draws freehand canvas strokes and supports eraser and stroke undo", async () => {
+  it("draws freehand strokes with tool cursors and supports circle erasing", async () => {
     const app = setupFolio();
     const user = userEvent.setup();
 
@@ -1627,6 +1660,10 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       }) as DOMRect;
 
     await user.click(screen.getByRole("button", { name: /pen tool/i }));
+    fireEvent.pointerMove(surface, { clientX: 20100, clientY: 20110 });
+    await waitFor(() => {
+      expect(document.querySelector(".canvas-tool-cursor-pen")).not.toBeNull();
+    });
     fireEvent.pointerDown(surface, { button: 0, clientX: 20110, clientY: 20120 });
     fireEvent.pointerMove(window, { clientX: 20130, clientY: 20144 });
     fireEvent.pointerMove(window, { clientX: 20160, clientY: 20170 });
@@ -1640,7 +1677,14 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(firstStrokePath).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: /eraser tool/i }));
-    fireEvent.pointerDown(firstStrokePath as Element, { button: 0 });
+    fireEvent.pointerMove(surface, { clientX: 20110, clientY: 20104 });
+    await waitFor(() => {
+      expect(document.querySelector(".canvas-tool-cursor-eraser")).not.toBeNull();
+      expect(document.querySelector(".canvas-eraser-radius")).not.toBeNull();
+    });
+    fireEvent.pointerDown(surface, { button: 0, clientX: 20060, clientY: 20120 });
+    fireEvent.pointerMove(window, { clientX: 20110, clientY: 20104 });
+    fireEvent.pointerUp(window, { clientX: 20110, clientY: 20104 });
 
     await waitFor(() => {
       expect(app.data.canvases[0].strokes).toHaveLength(0);

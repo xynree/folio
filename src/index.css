@@ -2626,6 +2626,10 @@ button svg {
   will-change: transform;
 }
 
+.canvas-surface-tool-active {
+  cursor: none;
+}
+
 .canvas-ink-layer,
 .canvas-edge-label-layer {
   position: absolute;
@@ -2699,6 +2703,48 @@ button svg {
 
 .canvas-edge-label-layer {
   z-index: 3;
+}
+
+.canvas-tool-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 7;
+  color: #2f514b;
+  pointer-events: none;
+}
+
+.canvas-tool-cursor-icon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  filter: drop-shadow(0 1px 2px rgba(56, 40, 24, 0.18));
+}
+
+.canvas-tool-cursor-pen .canvas-tool-cursor-icon {
+  transform: translate(2px, -18px) rotate(-18deg);
+}
+
+.canvas-tool-cursor-eraser .canvas-tool-cursor-icon {
+  color: #7b2f25;
+  transform: translate(10px, -26px) rotate(-12deg);
+}
+
+.canvas-eraser-radius {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 1.5px solid rgba(123, 47, 37, 0.76);
+  border-radius: 999px;
+  background: rgba(255, 246, 242, 0.26);
+  box-shadow:
+    0 0 0 1px rgba(255, 253, 248, 0.88),
+    0 3px 10px rgba(56, 40, 24, 0.08);
+  transform: translate(-50%, -50%);
 }
 
 .canvas-edge-label {
@@ -2784,6 +2830,34 @@ button svg {
   color: #fffaf0;
   outline: 0;
   background: #385d56;
+}
+
+.canvas-edge-direction-bar button:disabled {
+  color: #a79a8b;
+  cursor: default;
+  opacity: 0.52;
+}
+
+.canvas-edge-direction-bar button:disabled:hover,
+.canvas-edge-direction-bar button:disabled:focus-visible {
+  color: #a79a8b;
+  background: transparent;
+}
+
+.canvas-edge-action-divider {
+  width: 1px;
+  margin: 3px 2px;
+  background: rgba(202, 185, 161, 0.92);
+}
+
+.canvas-edge-direction-bar .canvas-edge-remove-button {
+  color: #7b2f25;
+}
+
+.canvas-edge-direction-bar .canvas-edge-remove-button:hover,
+.canvas-edge-direction-bar .canvas-edge-remove-button:focus-visible {
+  color: #fffaf0;
+  background: #7b2f25;
 }
 
 .canvas-card,
