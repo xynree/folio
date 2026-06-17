@@ -1334,7 +1334,14 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await waitForArchive();
     await openActiveBoardCanvas(user);
+    await new Promise((resolve) => {
+      window.setTimeout(resolve, 320);
+    });
     const scroll = document.querySelector(".canvas-scroll") as HTMLElement;
+    Object.defineProperties(scroll, {
+      clientHeight: { configurable: true, value: 300 },
+      clientWidth: { configurable: true, value: 400 },
+    });
     scroll.getBoundingClientRect = () =>
       ({
         left: 0,

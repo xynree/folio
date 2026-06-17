@@ -71,6 +71,9 @@ Folio currently uses split JSON metadata and readable user folders.
 
 Update tests with behavior changes.
 
+- Every React component should have corresponding tests that exercise its visible behavior, important states, and user-facing callbacks. Do not rely only on broad integration tests when a component has meaningful local behavior.
+- Extract plain TypeScript helpers for logic that can be isolated from React rendering or hooks, then cover those helpers with focused unit tests.
+- Maintain more than 85% project coverage for statements, functions, and lines. Use `npm run test:coverage` to verify the enforced thresholds.
 - Use focused tests for user-facing workflows, especially import, board, canvas, relationship, and persistence behavior.
 - Add model/helper tests when changing pure data logic.
 - Run `npm test` and `npm run lint` before considering feature work complete.

@@ -1,0 +1,524 @@
+import React, { useRef, useState } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { makeCanvas, makeItem } from "../../test/fixtures";
+import type { ThumbnailUrls } from "../../types";
+import { BoardBrowser } from "./BoardBrowser";
+import { BoardEditDialog } from "./BoardEditDialog";
+import { CanvasBoardHeader } from "./CanvasBoardHeader";
+import {
+  CanvasItemCard,
+  CanvasNoteCard,
+  CanvasTextCard,
+  ReferenceCard,
+} from "./CanvasCards";
+import { CanvasEdgeLabels } from "./CanvasEdgeLabels";
+import { CanvasInkLayer } from "./CanvasInkLayer";
+import { CanvasObjectLayer } from "./CanvasObjectLayer";
+import { CanvasToolCursor } from "./CanvasToolCursor";
+import { CanvasViewport } from "./CanvasViewport";
+import { edgeRenderModelsFromLayouts, objectLayoutFromPosition } from "./canvasGeometry";
+
+const item = makeItem("alpha", { title: "Alpha" });
+const thumbUrls: ThumbnailUrls = { alpha: "folio://thumb/alpha.jpg" };
+const board = makeCanvas("board-1", {
+  title: "Board",
+  color: "#385d56",
+  itemIds: ["alpha"],
+  notes: [{ id: "note-1", text: "Note", x: 30, y: 40 }],
+  references: [
+    {
+      id: "reference-1",
+      filename: "reference.png",
+      path: "references/reference.png",
+      x: 50,
+      y: 60,
+    },
+  ],
+  texts: [{ id: "text-1", text: "Text", x: 70, y: 80 }],
+});
+
+describe("canvas components", () => {
+  it("edits board settings from the board dialog", () => {
+    const onSave = vi.fn();
+    const onDelete = vi.fn();
+    const onClose = vi.fn();
+    const onTitle = vi.fn();
+    const onColor = vi.fn();
+
+    render(
+      <BoardEditDialog
+        boardColorDraft="#385d56"
+        boardTitleDraft="Board"
+        canvas={board}
+        onBoardColorDraftChange={onColor}
+        onBoardTitleDraftChange={onTitle}
+        onClose={onClose}
+        onDelete={onDelete}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByDisplayValue("Board"), {
+      target: { value: "Process" },
+    });
+    fireEvent.keyDown(screen.getByDisplayValue("Board"), { key: "Enter" });
+    fireEvent.change(screen.getByLabelText("Board color"), {
+      target: { value: "#111111" },
+    });
+    fireEvent.click(screen.getByLabelText("Delete board"));
+    fireEvent.click(screen.getByLabelText("Close board tools"));
+
+    expect(onTitle).toHaveBeenCalledWith("Process");
+    expect(onColor).toHaveBeenCalledWith("#111111");
+    expect(onSave).toHaveBeenCalledWith(board);
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders board browser grid actions and board edit state", () => {
+    const onOpenCanvas = vi.fn();
+    const onEditCanvas = vi.fn();
+    const onDeleteBoardById = vi.fn();
+    const onCreateBoard = vi.fn();
+
+    render(
+      <BoardBrowser
+        activeCanvasId="board-1"
+        boardColorDraft="#385d56"
+        boardDropCanvasId={null}
+        boardMenuCanvasId="board-1"
+        boardTitleDraft="Board"
+        browserEditCanvas={board}
+        canvases={[board]}
+        itemsById={new Map([["alpha", item]])}
+        thumbUrls={thumbUrls}
+        setThumbUrls={vi.fn()}
+        onAddDraggedItemsToBoard={vi.fn()}
+        onBoardColorDraftChange={vi.fn()}
+        onBoardTileDragLeave={vi.fn()}
+        onBoardTileDragOver={vi.fn()}
+        onBoardTitleDraftChange={vi.fn()}
+        onCloseBrowserEditCanvas={vi.fn()}
+        onCreateBoard={onCreateBoard}
+        onDeleteBoardById={onDeleteBoardById}
+        onEditCanvas={onEditCanvas}
+        onMinimize={vi.fn()}
+        onOpenCanvas={onOpenCanvas}
+        onSaveBoardSettings={vi.fn()}
+        onToggleBoardMenu={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("New board"));
+    fireEvent.click(screen.getByLabelText(/Open Board/));
+    fireEvent.click(screen.getByText("Edit"));
+    fireEvent.click(screen.getByText("Delete"));
+
+    expect(onCreateBoard).toHaveBeenCalledTimes(1);
+    expect(onOpenCanvas).toHaveBeenCalledWith("board-1");
+    expect(onEditCanvas).toHaveBeenCalledWith("board-1");
+    expect(onDeleteBoardById).toHaveBeenCalledWith("board-1");
+    expect(screen.getByRole("dialog", { name: "Edit board" })).not.toBeNull();
+  });
+
+  it("renders board browser empty state", () => {
+    render(
+      <BoardBrowser
+        activeCanvasId={null}
+        boardColorDraft="#385d56"
+        boardDropCanvasId={null}
+        boardMenuCanvasId={null}
+        boardTitleDraft=""
+        browserEditCanvas={null}
+        canvases={[]}
+        itemsById={new Map()}
+        thumbUrls={{}}
+        setThumbUrls={vi.fn()}
+        onAddDraggedItemsToBoard={vi.fn()}
+        onBoardColorDraftChange={vi.fn()}
+        onBoardTileDragLeave={vi.fn()}
+        onBoardTileDragOver={vi.fn()}
+        onBoardTitleDraftChange={vi.fn()}
+        onCloseBrowserEditCanvas={vi.fn()}
+        onCreateBoard={vi.fn()}
+        onDeleteBoardById={vi.fn()}
+        onEditCanvas={vi.fn()}
+        onMinimize={vi.fn()}
+        onOpenCanvas={vi.fn()}
+        onSaveBoardSettings={vi.fn()}
+        onToggleBoardMenu={vi.fn()}
+      />,
+    );
+
+    expect(document.querySelector(".canvas-board-preview")).not.toBeNull();
+  });
+
+  it("dispatches board header tool and action callbacks", () => {
+    function Harness() {
+      const [activeTool, setActiveTool] = useState<"select" | "pen" | "eraser" | "text">(
+        "select",
+      );
+      return (
+        <CanvasBoardHeader
+          activeCanvas={board}
+          activeStrokeCount={1}
+          activeTool={activeTool}
+          boardColorDraft="#385d56"
+          boardTitleDraft="Board"
+          boardToolsOpen
+          onActiveToolChange={setActiveTool}
+          onAddNote={vi.fn()}
+          onBackToBoards={vi.fn()}
+          onBoardColorDraftChange={vi.fn()}
+          onBoardTitleDraftChange={vi.fn()}
+          onDeleteBoard={vi.fn()}
+          onImportImages={vi.fn()}
+          onImportReferences={vi.fn()}
+          onMinimize={vi.fn()}
+          onSaveBoardSettings={vi.fn()}
+          onToggleBoardTools={vi.fn()}
+          onUndoStroke={vi.fn()}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    fireEvent.click(screen.getByLabelText("Pen tool"));
+    expect(screen.getByLabelText("Pen tool").getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("dialog", { name: "Edit board" })).not.toBeNull();
+  });
+
+  it("renders and edits edge labels and actions", () => {
+    const edge = {
+      id: "edge-1",
+      fromId: "alpha",
+      toId: "note-1",
+      direction: "forward" as const,
+      label: "Link",
+    };
+    const model = {
+      edge,
+      path: "M 0 0 L 100 100",
+      labelPosition: { x: 50, y: 50 },
+      direction: "forward" as const,
+    };
+    const onSelectEdge = vi.fn();
+    const onStartEdgeLabelEdit = vi.fn();
+    const onUpdateEdgeDirection = vi.fn();
+    const onReverseEdgeDirection = vi.fn();
+    const onDeleteEdge = vi.fn();
+
+    const { rerender } = render(
+      <CanvasEdgeLabels
+        edgeLabelDraft=""
+        edgeRenderModels={[model]}
+        editingEdgeId={null}
+        selectedEdgeId="edge-1"
+        onDeleteEdge={onDeleteEdge}
+        onEdgeLabelDraftChange={vi.fn()}
+        onReverseEdgeDirection={onReverseEdgeDirection}
+        onSaveEdgeLabel={vi.fn()}
+        onSelectEdge={onSelectEdge}
+        onStartEdgeLabelEdit={onStartEdgeLabelEdit}
+        onStopEdgeLabelEdit={vi.fn()}
+        onUpdateEdgeDirection={onUpdateEdgeDirection}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "No direction" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reverse direction" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove link" }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: "Edge label: Link" }));
+
+    expect(onUpdateEdgeDirection).toHaveBeenCalledWith("edge-1", "none");
+    expect(onReverseEdgeDirection).toHaveBeenCalledWith("edge-1");
+    expect(onDeleteEdge).toHaveBeenCalledWith("edge-1");
+    expect(onStartEdgeLabelEdit).toHaveBeenCalledWith(edge);
+
+    const onDraft = vi.fn();
+    const onSave = vi.fn();
+    const onStop = vi.fn();
+    rerender(
+      <CanvasEdgeLabels
+        edgeLabelDraft="Updated"
+        edgeRenderModels={[model]}
+        editingEdgeId="edge-1"
+        selectedEdgeId="edge-1"
+        onDeleteEdge={onDeleteEdge}
+        onEdgeLabelDraftChange={onDraft}
+        onReverseEdgeDirection={onReverseEdgeDirection}
+        onSaveEdgeLabel={onSave}
+        onSelectEdge={onSelectEdge}
+        onStartEdgeLabelEdit={onStartEdgeLabelEdit}
+        onStopEdgeLabelEdit={onStop}
+        onUpdateEdgeDirection={onUpdateEdgeDirection}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Edge label"), {
+      target: { value: "Next" },
+    });
+    fireEvent.keyDown(screen.getByLabelText("Edge label"), { key: "Enter" });
+    fireEvent.keyDown(screen.getByLabelText("Edge label"), { key: "Escape" });
+
+    expect(onDraft).toHaveBeenCalledWith("Next");
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders ink strokes, edges, draft links, and selection callbacks", () => {
+    const layouts = new Map([
+      ["alpha", objectLayoutFromPosition("alpha", "item", { x: 0, y: 0 })],
+      ["note-1", objectLayoutFromPosition("note-1", "note", { x: 300, y: 0 })],
+    ]);
+    const edge = {
+      id: "edge-1",
+      fromId: "alpha",
+      toId: "note-1",
+      fromSide: "right" as const,
+      toSide: "left" as const,
+      direction: "bidirectional" as const,
+    };
+    const onSelectEdge = vi.fn();
+    const onStartEdgeLabelEdit = vi.fn();
+
+    render(
+      <CanvasInkLayer
+        activeStrokes={[{ id: "stroke-1", color: "#111111", path: "M 0 0 L 4 4" }]}
+        activeTool="eraser"
+        canvasObjectLayouts={layouts}
+        edgeDraft={{
+          fromId: "alpha",
+          fromSide: "right",
+          toPoint: { x: 250, y: 100 },
+        }}
+        edgeRenderModels={edgeRenderModelsFromLayouts([edge], layouts)}
+        selectedEdgeId="edge-1"
+        strokePreview={{ id: "preview", color: "#222222", path: "M 5 5 L 8 8" }}
+        onSelectEdge={onSelectEdge}
+        onStartEdgeLabelEdit={onStartEdgeLabelEdit}
+      />,
+    );
+
+    const hitArea = document.querySelector(".canvas-edge-hit-area") as SVGPathElement;
+    fireEvent.click(hitArea);
+    fireEvent.doubleClick(hitArea);
+
+    expect(document.querySelector(".canvas-stroke-erasable")).not.toBeNull();
+    expect(document.querySelector(".canvas-edge-draft")).not.toBeNull();
+    expect(onSelectEdge).toHaveBeenCalledWith("edge-1");
+    expect(onStartEdgeLabelEdit).toHaveBeenCalledWith(edge);
+  });
+
+  it("renders tool cursors for pen and eraser", () => {
+    const { rerender } = render(
+      <CanvasToolCursor activeTool="pen" position={{ x: 10, y: 20 }} />,
+    );
+
+    expect(screen.getByTestId("canvas-tool-cursor").className).toContain(
+      "canvas-tool-cursor-pen",
+    );
+
+    rerender(<CanvasToolCursor activeTool="eraser" position={{ x: 10, y: 20 }} />);
+    expect(document.querySelector(".canvas-eraser-radius")).not.toBeNull();
+
+    rerender(<CanvasToolCursor activeTool="select" position={{ x: 10, y: 20 }} />);
+    expect(screen.queryByTestId("canvas-tool-cursor")).toBeNull();
+  });
+
+  it("handles canvas item, reference, note, and text cards", async () => {
+    const onOpen = vi.fn();
+    const onRemove = vi.fn();
+    const onConnector = vi.fn();
+    const onPointerDown = vi.fn();
+    const onClickCapture = vi.fn();
+    vi.mocked(window.folio.ensureReferenceThumbnail).mockResolvedValue(
+      "folio://thumb/reference.jpg",
+    );
+
+    const { rerender } = render(
+      <CanvasItemCard
+        item={item}
+        position={{ x: 1, y: 2 }}
+        thumbUrls={thumbUrls}
+        setThumbUrls={vi.fn()}
+        onOpen={onOpen}
+        onRemove={onRemove}
+        onConnectorPointerDown={onConnector}
+        onPointerDown={onPointerDown}
+        onClickCapture={onClickCapture}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Alpha"));
+    fireEvent.pointerDown(screen.getByLabelText("Connect Alpha from right"));
+    fireEvent.click(screen.getByLabelText("Remove Alpha from board"));
+
+    expect(onOpen).toHaveBeenCalledWith("alpha");
+    expect(onConnector).toHaveBeenCalledWith(expect.any(Object), "right");
+    expect(onRemove).toHaveBeenCalledWith("alpha");
+
+    rerender(
+      <ReferenceCard
+        reference={board.references[0]}
+        position={{ x: 1, y: 2 }}
+        onRemove={onRemove}
+        onConnectorPointerDown={onConnector}
+        onPointerDown={onPointerDown}
+        onClickCapture={onClickCapture}
+      />,
+    );
+    await waitFor(() =>
+      expect(document.querySelector("img")?.getAttribute("src")).toBe(
+        "folio://thumb/reference.jpg",
+      ),
+    );
+    fireEvent.click(screen.getByLabelText("Remove reference.png"));
+    expect(onRemove).toHaveBeenCalledWith("reference-1");
+  });
+
+  it("saves or deletes note and text card drafts on blur", () => {
+    const onChange = vi.fn();
+    const onDelete = vi.fn();
+    const onConnector = vi.fn();
+
+    const { rerender } = render(
+      <CanvasNoteCard
+        note={board.notes[0]}
+        onChange={onChange}
+        onDelete={onDelete}
+        onConnectorPointerDown={onConnector}
+        onPointerDown={vi.fn()}
+        onClickCapture={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Note"), {
+      target: { value: "Updated note" },
+    });
+    fireEvent.blur(screen.getByPlaceholderText("Note"));
+    fireEvent.change(screen.getByPlaceholderText("Note"), { target: { value: "" } });
+    fireEvent.blur(screen.getByPlaceholderText("Note"));
+
+    rerender(
+      <CanvasTextCard
+        textElement={board.texts?.[0] ?? { id: "text-1", text: "Text", x: 0, y: 0 }}
+        onChange={onChange}
+        onDelete={onDelete}
+        onConnectorPointerDown={onConnector}
+        onPointerDown={vi.fn()}
+        onClickCapture={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Board text"), {
+      target: { value: "Updated text" },
+    });
+    fireEvent.blur(screen.getByLabelText("Board text"));
+    fireEvent.click(screen.getByLabelText("Delete text"));
+
+    expect(onChange).toHaveBeenCalledWith("note-1", "Updated note");
+    expect(onChange).toHaveBeenCalledWith("text-1", "Updated text");
+    expect(onDelete).toHaveBeenCalledWith("note-1");
+    expect(onDelete).toHaveBeenCalledWith("text-1");
+  });
+
+  it("renders object layer and forwards object interactions", () => {
+    const onOpenItem = vi.fn();
+    const onStartDrag = vi.fn();
+    const onSuppressClickAfterDrag = vi.fn();
+
+    render(
+      <CanvasObjectLayer
+        activeItems={[item]}
+        activeNotes={board.notes}
+        activeReferences={board.references}
+        activeTexts={board.texts ?? []}
+        thumbUrls={thumbUrls}
+        setThumbUrls={vi.fn()}
+        positionForItem={() => ({ x: 1, y: 2 })}
+        positionForNote={(note) => ({ x: note.x, y: note.y })}
+        positionForReference={(reference) => ({ x: reference.x, y: reference.y })}
+        positionForText={(textElement) => ({ x: textElement.x, y: textElement.y })}
+        onDeleteNote={vi.fn()}
+        onDeleteTextElement={vi.fn()}
+        onOpenItem={onOpenItem}
+        onRemoveItem={vi.fn()}
+        onRemoveReference={vi.fn()}
+        onStartConnectorDrag={vi.fn()}
+        onStartDrag={onStartDrag}
+        onSuppressClickAfterDrag={onSuppressClickAfterDrag}
+        onUpdateNote={vi.fn()}
+        onUpdateTextElement={vi.fn()}
+      />,
+    );
+
+    fireEvent.pointerDown(screen.getByText("Alpha"));
+    fireEvent.click(screen.getByText("Alpha"));
+
+    expect(onStartDrag).toHaveBeenCalledWith(
+      expect.any(Object),
+      "item",
+      "alpha",
+      { x: 1, y: 2 },
+    );
+    expect(onOpenItem).toHaveBeenCalledWith("alpha");
+    expect(screen.getByText("reference.png")).not.toBeNull();
+  });
+
+  it("zooms and pans the canvas viewport", () => {
+    const zoomRef = { current: 1 };
+    const onZoomChange = vi.fn();
+
+    function ViewportHarness() {
+      const scrollRef = useRef<HTMLDivElement | null>(null);
+      const surfaceRef = useRef<HTMLDivElement | null>(null);
+      return (
+        <CanvasViewport
+          zoom={1}
+          zoomRef={zoomRef}
+          onZoomChange={onZoomChange}
+          scrollRef={scrollRef}
+          surfaceRef={surfaceRef}
+          onDrop={vi.fn()}
+          onDragOver={vi.fn()}
+        >
+          <span>Canvas child</span>
+        </CanvasViewport>
+      );
+    }
+
+    const { container } = render(<ViewportHarness />);
+    const scroll = container.querySelector(".canvas-scroll") as HTMLDivElement;
+    Object.defineProperties(scroll, {
+      clientHeight: { configurable: true, value: 300 },
+      clientWidth: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1000 },
+      scrollWidth: { configurable: true, value: 1000 },
+      scrollLeft: { configurable: true, value: 100, writable: true },
+      scrollTop: { configurable: true, value: 100, writable: true },
+    });
+    scroll.getBoundingClientRect = () =>
+      ({
+        bottom: 300,
+        height: 300,
+        left: 0,
+        right: 400,
+        top: 0,
+        width: 400,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireEvent.wheel(scroll, { clientX: 200, clientY: 150, deltaY: -80 });
+    fireEvent.pointerDown(scroll, { button: 0, clientX: 200, clientY: 150 });
+    fireEvent.pointerMove(window, { clientX: 220, clientY: 170 });
+    fireEvent.pointerUp(window);
+
+    expect(onZoomChange).toHaveBeenCalled();
+    expect(screen.getByText("Canvas child")).not.toBeNull();
+  });
+});

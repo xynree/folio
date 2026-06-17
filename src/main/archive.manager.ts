@@ -17,6 +17,10 @@ import type {
   ItemType,
   ThumbnailUrls,
 } from "../types";
+import {
+  normalizeArchiveItemType,
+  resolveImportSourceMeta,
+} from "./archive.helpers";
 import { FolioStorage } from "./storage.manager";
 
 interface ImportResult {
@@ -56,7 +60,7 @@ export class ArchiveManager {
   public setItems(items: FolioItem[]) {
     this.items = items.map((item) => ({
       ...item,
-      type: this.normalizeItemType(item.type),
+      type: normalizeArchiveItemType(item.type),
       tagIds: item.tagIds ?? [],
       description: item.description ?? "",
     }));
@@ -106,15 +110,7 @@ export class ArchiveManager {
     filename: string;
     ext: string;
   } {
-    if (source.kind === "path") {
-      const ext = path.extname(source.filePath).toLowerCase();
-      const filename = path.basename(source.filePath, ext);
-      return { filename, ext };
-    }
-    return {
-      filename: source.filename ?? "pasted-image",
-      ext: source.ext.toLowerCase(),
-    };
+    return resolveImportSourceMeta(source);
   }
 
   /**
@@ -481,13 +477,4 @@ export class ArchiveManager {
     return `folio://thumb/${encodeURIComponent(filename)}`;
   }
 
-  private normalizeItemType(type: string): ItemType {
-    if (type === "image") return "sketch";
-    if (type === "audio") return "music";
-    if (type === "video") return "anim";
-    if (["sketch", "ref", "music", "anim", "text", "other"].includes(type)) {
-      return type as ItemType;
-    }
-    return "other";
-  }
 }

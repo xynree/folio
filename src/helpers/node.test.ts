@@ -4,11 +4,21 @@ import path from "node:path";
 import {
   computeHash,
   createDirectoryByDate,
+  exists,
   inferItemType,
   sanitizeFileBaseName,
 } from "./node";
 
 describe("node filesystem helpers", () => {
+  it("checks whether paths exist", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-exists-"));
+    const filePath = path.join(tempDir, "source.txt");
+    await fs.writeFile(filePath, "present");
+
+    await expect(exists(filePath)).resolves.toBe(true);
+    await expect(exists(path.join(tempDir, "missing.txt"))).resolves.toBe(false);
+  });
+
   it("sanitizes imported filenames for archive storage", () => {
     expect(sanitizeFileBaseName("  Gesture Study #1!!.PNG ")).toBe(
       "gesture-study-1png",

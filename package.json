@@ -14,7 +14,8 @@
     "make": "node ./node_modules/@electron-forge/cli/dist/electron-forge.js make",
     "publish": "node ./node_modules/@electron-forge/cli/dist/electron-forge.js publish",
     "lint": "eslint --ext .ts,.tsx .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [],
   "author": "xinruichen",
@@ -39,6 +40,7 @@
     "@typescript-eslint/eslint-plugin": "^5.62.0",
     "@typescript-eslint/parser": "^5.62.0",
     "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/coverage-v8": "^4.1.9",
     "electron": "40.7.0",
     "eslint": "^8.57.1",
     "eslint-import-resolver-typescript": "^4.4.4",
