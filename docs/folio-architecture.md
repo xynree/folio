@@ -25,7 +25,7 @@ Electron app
     - strip, grid, and heatmap views for tracked work
     - tags sidebar
     - selection bar and import controls
-    - project board browser and canvas boards
+    - project sidebar board browser and canvas boards
     - item details modal
 ```
 
@@ -364,13 +364,13 @@ Opening a project shows a project workspace with three primary surfaces:
 - **All Images**: every image in `Project.imageIds`, including images dragged, pasted, imported, or dropped onto a project board.
 - **Works**: the subset in `Project.workItemIds`, shown with strip, grid, and heatmap views so the user can track actual pieces of work over time.
 - **Review**: a progress overview with Markdown review documents for private self-review against Works. Opening a review navigates to a dedicated editor page with Work tags and direct navigation back to Projects.
-- **Boards**: all canvases owned by the project, with creation, switching, and board canvas editing.
+- **Boards**: all canvases owned by the project, with creation, switching, project-image tray placement, and board canvas editing.
 
 The existing archive strip/grid can remain available as a legacy or global view, but the default product path should be project selection, then project-scoped capture and review. Tags, filters, size controls, and thumbnail behavior should be reused inside project image and Works views before creating parallel UI systems.
 
 Project image views should preserve the current visual behavior where useful:
 
-- A resizable tags sidebar starts open and can collapse to an icon rail when tags are visible.
+- A compact tags rail starts auto-collapsed and can expand into a resizable tag list with counts and thumbnail previews.
 - Strip view groups items by day and hides empty date groups when a tag filter is active.
 - Grid view shows filtered items in a dense card grid.
 - Works heatmap shows project work activity, not unrelated global archive activity.
@@ -386,7 +386,7 @@ Project image and Works cards support:
 - click to select
 - Cmd/Ctrl-click to toggle
 - Shift-click for range selection across day boundaries
-- drag selected items onto an open board
+- add existing project images to an open board from the board image tray
 - promote selected project images into Works
 - create a new project board from the current selection
 
@@ -394,10 +394,10 @@ When items are selected, the top selection bar remains draggable as part of the 
 
 ## Board And Canvas UI
 
-Boards are scoped to the active project. The board panel is minimized by default. When open, it can show either:
+Boards are scoped to the active project. Boards are a project sidebar view, not a split side dock beside All Images or Works. The view can show either:
 
 - the project board browser, a grid of that project's boards with member previews and a New board action
-- a focused board with its name, counts, Add note, Import images, Edit, and minimize controls
+- a focused board with created/saved timestamps, board actions, the canvas viewport, and a scrollable tray of project images that can be added to the current board
 
 Board settings support title and color editing. The selected board color appears as dots on project image cards that belong to that board.
 

@@ -150,20 +150,32 @@ function archiveRoute() {
   return route as HTMLElement;
 }
 
+function projectSidebarButton(name: RegExp) {
+  const button = screen
+    .getAllByRole("button", { name })
+    .find((element) => element.closest(".project-action-sidebar"));
+  if (!button) throw new Error(`Project sidebar button ${name.toString()} was not rendered`);
+  return button as HTMLElement;
+}
+
 async function openBoardPanel(user: ReturnType<typeof userEvent.setup>) {
-  const splitButton = screen.queryByRole("button", {
-    name: /split panel view/i,
-  });
-  if (splitButton?.getAttribute("aria-pressed") !== "true") {
-    await user.click(splitButton);
+  const boardsButton = projectSidebarButton(/^boards$/i);
+  if (boardsButton.getAttribute("aria-pressed") !== "true") {
+    await user.click(boardsButton);
   }
-  await screen.findByText(/^Boards$/i);
+  await waitFor(() => {
+    expect(
+      document.querySelector(".canvas-board-browser, .canvas-surface"),
+    ).not.toBeNull();
+  });
 }
 
 async function openBoardBrowser(user: ReturnType<typeof userEvent.setup>) {
   await openBoardPanel(user);
   if (!document.querySelector(".canvas-board-browser")) {
-    const boardsButton = screen.queryByRole("button", { name: /^boards$/i });
+    const boardsButton = screen
+      .getAllByRole("button", { name: /^boards$/i })
+      .find((element) => element.classList.contains("canvas-board-back-button"));
     if (boardsButton) {
       await user.click(boardsButton);
     }
@@ -187,7 +199,7 @@ async function openActiveBoardCanvas(user: ReturnType<typeof userEvent.setup>) {
     });
     await user.click(boardButton);
   }
-  await screen.findByRole("button", { name: /^boards$/i });
+  await screen.findAllByRole("button", { name: /^boards$/i });
   await waitFor(() => {
     expect(document.querySelector(".canvas-surface")).not.toBeNull();
   });
@@ -324,7 +336,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.queryByLabelText("Open references folder")).toBeNull();
   });
 
-  it("loads archive data, thumbnails, status counts, and the docked board panel", async () => {
+  it("loads archive data, thumbnails, status counts, and opens boards from the sidebar", async () => {
     setupFolio();
     const user = userEvent.setup();
 
@@ -339,17 +351,17 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.queryByText("Heatmap")).toBeNull();
     expect(screen.queryByLabelText("Project Works heatmap")).toBeNull();
     expect(screen.queryByLabelText(/minimize heatmap/i)).toBeNull();
-    expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
-    expect(screen.getByRole("separator", { name: /resize tags panel/i })).not.toBeNull();
-    const panelModeControl = screen
-      .getByRole("button", { name: /split panel view/i })
-      .closest(".workspace-panel-mode-control");
-    expect(panelModeControl).not.toBeNull();
+    expect(screen.getByLabelText(/show tags/i)).not.toBeNull();
+    expect(screen.queryByLabelText(/hide tags/i)).toBeNull();
+    expect(screen.queryByRole("separator", { name: /resize tags panel/i })).toBeNull();
     const projectActionSidebar = document.querySelector(".project-action-sidebar");
     expect(projectActionSidebar).not.toBeNull();
-    expect(panelModeControl?.closest(".project-action-sidebar")).toBe(
-      projectActionSidebar,
-    );
+    expect(
+      projectActionSidebar?.querySelectorAll(".project-sidebar-section-heading svg"),
+    ).toHaveLength(2);
+    expect(
+      projectActionSidebar?.querySelectorAll(".project-surface-tabs button svg"),
+    ).toHaveLength(4);
     expect(
       screen.getByRole("button", { name: /^projects$/i }).closest(
         ".project-action-sidebar",
@@ -369,43 +381,28 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       ),
     ).toBe(projectActionSidebar);
     expect(
+      projectSidebarButton(/^works$/i).closest(".project-action-sidebar"),
+    ).toBe(projectActionSidebar);
+    expect(
+      projectSidebarButton(/^boards$/i).closest(".project-action-sidebar"),
+    ).toBe(projectActionSidebar);
+    expect(
+      projectSidebarButton(/^review$/i).closest(".project-action-sidebar"),
+    ).toBe(projectActionSidebar);
+    expect(
       screen.getByRole("button", { name: /open project folder/i }).closest(
         ".project-action-sidebar",
       ),
     ).toBe(projectActionSidebar);
-    expect(panelModeControl?.closest(".workspace-panel-mode-bar")).toBeNull();
-    expect(panelModeControl?.closest(".archive-floating-actions")).toBeNull();
-    expect(
-      Array.from(panelModeControl?.querySelectorAll("svg") ?? []).map((icon) => ({
-        height: icon.getAttribute("height"),
-        width: icon.getAttribute("width"),
-      })),
-    ).toEqual([
-      { height: "16", width: "16" },
-      { height: "16", width: "16" },
-      { height: "16", width: "16" },
-    ]);
-    expect(screen.getByRole("button", { name: /left only panel view/i }))
-      .not.toBeNull();
-    expect(screen.getByRole("button", { name: /split panel view/i }))
-      .not.toBeNull();
-    expect(screen.getByRole("button", { name: /right only panel view/i }))
-      .not.toBeNull();
-    expect(
-      screen
-        .getByRole("button", { name: /split panel view/i })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect(screen.queryByRole("button", { name: /left only panel view/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /split panel view/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /right only panel view/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /open archive panel/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
-    expect(document.querySelector(".canvas-dock-minimized")).toBeNull();
-    expect(document.querySelector(".archive-panel-minimized")).toBeNull();
-    expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
-    expect(document.querySelector(".canvas-board-grid")).not.toBeNull();
-    expect(
-      (document.querySelector(".studio-workspace") as HTMLElement).style
-        .gridTemplateColumns,
-    ).toContain("420px");
+    expect(screen.queryByRole("separator", { name: /resize open board panel/i }))
+      .toBeNull();
+    expect(document.querySelector(".canvas-dock")).toBeNull();
+    expect(document.querySelector(".canvas-board-browser")).toBeNull();
     expect(screen.queryByText(/^Board$/)).toBeNull();
     expect(screen.queryByText(/^Open board$/)).toBeNull();
 
@@ -453,6 +450,10 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.getAllByText("1 canvas").length).toBeGreaterThan(0);
     expect(screen.getAllByText("2 tags").length).toBeGreaterThan(0);
 
+    await user.click(screen.getByLabelText(/show tags/i));
+    expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
+    expect(screen.getByRole("separator", { name: /resize tags panel/i })).not.toBeNull();
+
     const workspace = document.querySelector(".studio-workspace") as HTMLElement;
     workspace.getBoundingClientRect = () =>
       ({
@@ -478,34 +479,16 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       ).toBe("260px");
     });
 
-    await user.click(screen.getByRole("button", { name: /right only panel view/i }));
-    expect(document.querySelector(".archive-panel-minimized")).not.toBeNull();
-    expect(
-      screen
-        .getByRole("button", { name: /right only panel view/i })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-    expect(screen.queryByRole("button", { name: /open archive panel/i })).toBeNull();
-    expect(screen.queryByRole("separator", { name: /resize open board panel/i }))
-      .toBeNull();
-    expect(workspace.style.gridTemplateColumns).toContain("0px 0px");
-    expect(workspace.style.gridTemplateColumns).toContain("minmax(420px, 1fr)");
-
-    await user.click(screen.getByRole("button", { name: /left only panel view/i }));
-    expect(document.querySelector(".archive-panel-minimized")).toBeNull();
-    expect(document.querySelector(".canvas-dock-minimized")).not.toBeNull();
-    expect(
-      screen
-        .getByRole("button", { name: /left only panel view/i })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
-    expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
-    expect(workspace.style.gridTemplateColumns).toContain("0px 0px");
-
-    await user.click(screen.getByRole("button", { name: /split panel view/i }));
-    expect(document.querySelector(".canvas-dock-minimized")).toBeNull();
-    expect(screen.getByRole("separator", { name: /resize open board panel/i }))
-      .not.toBeNull();
+    await openBoardBrowser(user);
+    expect(projectSidebarButton(/^boards$/i).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(document.querySelector(".archive-panel")).toBeNull();
+    expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
+    expect(document.querySelector(".canvas-board-grid")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /left only panel view/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /split panel view/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /right only panel view/i })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: /^works$/i }));
     expect(
@@ -748,6 +731,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(within(archiveRoute()).getByText("Tue, Jun 16, 2026")).not.toBeNull();
     expect(within(archiveRoute()).getByText("Mon, Jun 15, 2026")).not.toBeNull();
 
+    await user.click(screen.getByLabelText(/show tags/i));
     await user.click(
       within(screen.getByLabelText("Tags")).getByRole("button", {
         name: /^sketchbook1$/i,
@@ -898,6 +882,34 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(canvasScroll.scrollLeft).toBe(CANVAS_WORLD_ORIGIN - 80);
       expect(canvasScroll.scrollTop).toBe(CANVAS_WORLD_ORIGIN - 80);
     });
+  });
+
+  it("adds existing project images to an open board from the board tray", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openActiveBoardCanvas(user);
+
+    const tray = screen.getByRole("complementary", { name: /project images/i });
+    const alphaButton = within(tray).getByRole("button", {
+      name: /alpha is already on this board/i,
+    }) as HTMLButtonElement;
+    expect(alphaButton.disabled).toBe(true);
+
+    await user.click(
+      within(tray).getByRole("button", { name: /add bravo to board/i }),
+    );
+
+    await waitFor(() => {
+      expect(app.data.canvases.find((canvas) => canvas.id === "board-1")?.itemIds)
+        .toEqual(["alpha", "bravo"]);
+    });
+    expect(window.folio.importToProject).not.toHaveBeenCalled();
+    const bravoButton = within(tray).getByRole("button", {
+      name: /bravo is already on this board/i,
+    }) as HTMLButtonElement;
+    expect(bravoButton.disabled).toBe(true);
   });
 
   it("tags selected items from the selection action bar", async () => {
@@ -2449,21 +2461,25 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(scroll.scrollTop).toBeCloseTo(minZoomTop, 3);
   });
 
-  it("collapses the tags area and minimizes the board panel", async () => {
+  it("auto-collapses the tags area and switches boards through the sidebar", async () => {
     setupFolio();
     const user = userEvent.setup();
 
     await waitForArchive();
-    expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
+    expect(screen.getByLabelText(/show tags/i)).not.toBeNull();
+    expect(screen.queryByLabelText(/hide tags/i)).toBeNull();
     expect(
       screen
         .getByLabelText("Tags")
         .firstElementChild?.classList.contains("tags-sidebar-window-controls"),
     ).toBe(true);
     expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
-    expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
+    expect(document.querySelector(".canvas-board-browser")).toBeNull();
     expect(screen.queryByLabelText(/minimize heatmap/i)).toBeNull();
     expect(screen.queryByText("Heatmap")).toBeNull();
+
+    await user.click(screen.getByLabelText(/show tags/i));
+    expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: /^works$/i }));
     expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
@@ -2478,16 +2494,13 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     ).toBe(true);
 
     await openBoardPanel(user);
-    expect(screen.getByText(/^Boards$/i)).not.toBeNull();
-    await user.click(screen.getByLabelText(/minimize board panel/i));
-    expect(
-      screen
-        .getByRole("button", { name: /left only panel view/i })
-        .getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect(projectSidebarButton(/^boards$/i).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
+    expect(screen.queryByLabelText(/minimize board panel/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
     expect(screen.queryByText(/^Board$/)).toBeNull();
-    await user.click(screen.getByRole("button", { name: /split panel view/i }));
-    expect(screen.getByText(/^Boards$/i)).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /split panel view/i })).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, Plus } from "lucide-react";
 import type {
   Canvas,
   CanvasNote,
@@ -21,6 +22,7 @@ import type { DataUpdater, ItemDetailsOpenHandler } from "../folio/types";
 import {
   addItemToCanvas,
   addItemsToCanvas,
+  basename,
   createId,
   formatCount,
   markCanvasSaved,
@@ -56,6 +58,8 @@ import {
   updateCanvasTextElementText,
 } from "./canvasModel";
 import { CanvasViewport } from "./CanvasViewport";
+import { ButtonIcon } from "../shared/ButtonIcon";
+import { LazyThumbnail } from "../shared/LazyThumbnail";
 import { useCanvasDrawingTools } from "./useCanvasDrawingTools";
 import { useCanvasEdges } from "./useCanvasEdges";
 import { useCanvasObjectDrag } from "./useCanvasObjectDrag";
@@ -71,7 +75,6 @@ export function CanvasView({
   setActiveCanvasId,
   onOpenItem,
   onCreateBoard,
-  onMinimize,
   thumbUrls,
   setThumbUrls,
   commitData,
@@ -85,7 +88,6 @@ export function CanvasView({
   setActiveCanvasId: React.Dispatch<React.SetStateAction<string | null>>;
   onOpenItem: ItemDetailsOpenHandler;
   onCreateBoard: () => void;
-  onMinimize: () => void;
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   commitData: (updater: DataUpdater, message?: string) => void;
@@ -125,7 +127,9 @@ export function CanvasView({
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const [dragPreview, setDragPreview] = useState<CanvasDragPreview | null>(null);
   const [boardToolsOpen, setBoardToolsOpen] = useState(false);
-  const [boardBrowserOpen, setBoardBrowserOpen] = useState(true);
+  const [boardBrowserOpen, setBoardBrowserOpen] = useState(
+    () => canvasDetailRequestId === 0,
+  );
   const [boardMenuCanvasId, setBoardMenuCanvasId] = useState<string | null>(null);
   const [browserEditCanvasId, setBrowserEditCanvasId] = useState<string | null>(
     null,
@@ -206,6 +210,23 @@ export function CanvasView({
   const activeItems = useMemo(
     () => itemsForCanvas(activeCanvas, itemsById),
     [activeCanvas, itemsById],
+  );
+  const projectImages = useMemo(() => {
+    const items = activeProject
+      ? data.items.filter((item) => projectImageIdSet.has(item.id))
+      : data.items;
+
+    return [...items].sort((first, second) => {
+      const byDate = second.date.localeCompare(first.date);
+      if (byDate !== 0) return byDate;
+      return (first.title || basename(first.path)).localeCompare(
+        second.title || basename(second.path),
+      );
+    });
+  }, [activeProject, data.items, projectImageIdSet]);
+  const activeCanvasItemIds = useMemo(
+    () => new Set(activeCanvas?.itemIds ?? []),
+    [activeCanvas?.itemIds],
   );
   const activeReferences = activeCanvas?.references ?? [];
   const activeNotes = activeCanvas?.notes ?? [];
@@ -554,6 +575,20 @@ export function CanvasView({
       y: (scroll.scrollTop + height / 2) / canvasZoom - CANVAS_WORLD_ORIGIN,
     };
   }, [canvasZoom]);
+
+  const addProjectImageToBoard = useCallback(
+    (itemId: string) => {
+      if (!activeCanvas || activeCanvas.itemIds.includes(itemId)) return;
+
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) =>
+          addItemsToCanvas(canvas, [itemId], centerPositionForCurrentViewport()),
+        "Item added to board",
+      );
+    },
+    [activeCanvas, centerPositionForCurrentViewport, updateCanvas],
+  );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -969,7 +1004,6 @@ export function CanvasView({
         onCreateBoard={createBoardFromBrowser}
         onDeleteBoardById={deleteBoardById}
         onEditCanvas={editCanvasFromBrowser}
-        onMinimize={onMinimize}
         onOpenCanvas={openCanvas}
         onSaveBoardSettings={saveBoardSettingsForCanvas}
         onToggleBoardMenu={(canvasId) =>
@@ -982,7 +1016,7 @@ export function CanvasView({
   }
 
   return (
-    <section className="canvas-workspace">
+    <section className="canvas-workspace canvas-board-detail-workspace">
       <div className="canvas-panel" key={activeCanvas.id}>
         <CanvasBoardHeader
           activeCanvas={activeCanvas}
@@ -999,7 +1033,6 @@ export function CanvasView({
           onDeleteBoard={deleteBoard}
           onImportImages={importToBoard}
           onImportReferences={importReferencesToBoard}
-          onMinimize={onMinimize}
           onOpenBoardFolder={openBoardFolder}
           onSaveBoardSettings={saveBoardSettingsForCanvas}
           onToggleBoardTools={() => setBoardToolsOpen((current) => !current)}
@@ -1082,6 +1115,64 @@ export function CanvasView({
           />
         </CanvasViewport>
       </div>
+      <aside className="canvas-project-image-tray" aria-label="Project images">
+        <header className="canvas-project-image-tray-header">
+          <strong>Project images</strong>
+          <span>{formatCount(projectImages.length, "image")}</span>
+        </header>
+        {projectImages.length ? (
+          <div className="canvas-project-image-list">
+            {projectImages.map((item) => {
+              const itemTitle = item.title || basename(item.path);
+              const alreadyAdded = activeCanvasItemIds.has(item.id);
+              const actionLabel = alreadyAdded
+                ? `${itemTitle} is already on this board`
+                : item.missing
+                  ? `${itemTitle} is missing`
+                  : `Add ${itemTitle} to board`;
+
+              return (
+                <article
+                  className={`canvas-project-image-card ${
+                    alreadyAdded ? "canvas-project-image-card-added" : ""
+                  }`}
+                  key={item.id}
+                >
+                  <button
+                    className="canvas-project-image-preview"
+                    type="button"
+                    aria-label={`Open ${itemTitle}`}
+                    onDoubleClick={() => onOpenItem(item.id)}
+                  >
+                    <LazyThumbnail
+                      item={item}
+                      thumbUrls={thumbUrls}
+                      setThumbUrls={setThumbUrls}
+                    />
+                  </button>
+                  <div className="canvas-project-image-meta">
+                    <strong title={itemTitle}>{itemTitle}</strong>
+                    <button
+                      className="secondary-action canvas-project-image-add-button"
+                      type="button"
+                      aria-label={actionLabel}
+                      disabled={alreadyAdded || item.missing}
+                      onClick={() => addProjectImageToBoard(item.id)}
+                    >
+                      <ButtonIcon icon={alreadyAdded ? Check : Plus} />
+                      {alreadyAdded ? "Added" : item.missing ? "Missing" : "Add"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="canvas-project-image-empty">
+            Import images to this project to add them to boards.
+          </p>
+        )}
+      </aside>
     </section>
   );
 }

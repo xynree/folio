@@ -43,7 +43,7 @@ The next gap is not raw file handling. The next gap is making **Projects** the f
 - [x] Run `npm init electron-app@latest folio -- --template=vite-typescript`
 - [x] Add React: install `react`, `react-dom`, `@vitejs/plugin-react`, update `vite.renderer.config.ts`
 - [x] Configure `BrowserWindow`: minimum 900×600, `titleBarStyle: 'hiddenInset'`
-- [x] Add renderer state for Strip/Grid switching with Canvas docked as a right-side board panel
+- [x] Add renderer state for project sidebar switching across All Images, Works, Boards, and Review
 
 ### 1.2 Define folder structure and JSON schema
 
@@ -207,7 +207,7 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [x] Show tag chips on grid/strip cards and in detail modal
 - [x] Sidebar TAGS section: list all tags with item count, expand to see thumbnail strip
 - [x] Clicking a tag in sidebar filters the active view to items with that tag
-- [x] Tags sidebar is compact and can be minimized/restored
+- [x] Tags sidebar is compact, starts auto-collapsed, and can be expanded/restored
 
 ### 2.3 Multi-select
 
@@ -220,8 +220,8 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 2.4 Open items on a board
 
-- [x] Canvas is now a persistent right-side board panel next to the Strip/Grid archive area rather than a separate archive view tab
-- [x] With items selected in strip/grid, user can drag them directly onto the open board, or use "create new board with selection" to create a board pre-populated with the selection
+- [x] Boards are a project sidebar view rather than a persistent side dock next to the Strip/Grid archive area
+- [x] With items selected in strip/grid, user can create a board pre-populated with the selection
 - [x] Detail modal can add the current item to the active board, creating a new board if needed
 - [x] Focused board header can import new archive items directly onto the active board
 - [x] New board: auto-assign color from warm palette, save to `canvases.json`
@@ -229,11 +229,10 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 2.5 Board list and edit menu
 
-- [x] Board panel opens to either a board browser grid or a focused active board
+- [x] Boards view opens to either a board browser grid or a focused active board
 - [x] Board browser cards show colored dot, board name, item count, and member thumbnail preview grid (max 8)
 - [x] Board browser contains the New board action; focused boards have a back button that returns to the browser
-- [x] Board panel can be minimized/restored and resized by dragging its divider
-- [x] Focused board header shows Add note, Import images, Edit, and minimize actions in one row
+- [x] Focused board header shows Add note, Add reference, Import images, drawing/text tools, folder, undo, and Edit actions in one row
 - [x] Board edit popover supports rename, color picker, save, and delete board
 - [x] Canvas dots shown under strip/grid thumbnails (one smaller colored dot per board membership)
 - [x] Board chips shown in detail modal
@@ -244,11 +243,10 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 ### 3.1 Canvas view entry
 
-- [x] Canvas boards live in a persistent right-side dock next to the archive, not a separate archive mode
-- [x] The dock is minimized by default and can be opened/restored from an icon rail
+- [x] Canvas boards live in the project sidebar's Boards view, not in a persistent side dock beside the archive
 - [x] Board browser shows all boards and creates new boards
 - [x] Opening a board loads its items, positions, notes, and references exactly as left
-- [x] Header shows board name, colored dot, item/note/reference counts, and board actions
+- [x] Header shows board name, colored dot, created/saved timestamps, and board actions
 - [x] Switching boards loads persisted state from `canvases.json`
 
 ### 3.2 Draggable item cards and drag-in from strip/grid
@@ -256,8 +254,8 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [x] Items positioned absolutely on a large scrollable canvas surface (2400×1800px to give room to spread)
 - [x] Drag: pointer down → track pointer move delta → pointer up saves position to `canvases.json`
 - [x] Positions stored per canvas in `canvases.json` under `canvas.positions`
-- [x] Items can be dragged directly from the strip or grid view onto an open canvas — they appear at the drop position
-- [x] Canvas archive rail was removed; archive-to-board placement now happens by direct drag/drop, selection actions, details modal, or board import
+- [x] Existing project images can be added to an open board from a scrollable project-image tray
+- [x] Canvas archive rail was removed; archive-to-board placement now happens by the board image tray, selection actions, details modal, board import, or dropping new external images onto the canvas
 - [x] First-time layout: auto-arrange in a loose grid if no saved positions
 - [x] Dotted grid background rendered by an HTML `<canvas>` backing layer, with zoom-aware drawing
 - [x] Wheel zoom clamps to the configured min/max range and prevents the surrounding app from page-scrolling when the range limit is reached
@@ -354,14 +352,15 @@ This phase turns the current archive and board system into a project-based creat
 - [x] Creating a board from inside a project should create a `Canvas` owned by that project.
 - [x] Existing canvas behavior remains the project board surface: draggable image cards, notes, board text, references, strokes, and edges.
 - [x] Any image in `Project.imageIds` should be available to place on any board in that project.
+- [x] Existing project images are available in a scrollable tray beside the focused board, with Added/Missing states.
 - [x] Board references should save under `projects/<project>/references/` while board membership remains in `canvases.json`.
-- [ ] Keep board headers focused on created/saved timestamps and board actions, not object counts.
+- [x] Keep board headers focused on created/saved timestamps and board actions, not object counts.
 - [ ] Board edit UI can expose board kind, status, brief, and outcome later without cluttering quick rename/color editing.
 
 ### 4.5 Local folder access and tracking
 
 - [x] Add "Open project folder" from the Projects view and project workspace.
-- [x] Add scoped folder actions for project Images, Works, and a specific board folder.
+- [x] Add a single project folder action that opens the readable `projects/<project>/` folder.
 - [x] Ensure all project images, Works membership, and canvases are recoverable from local files plus `.folio/*.json`.
 - [x] Keep source images readable in project folders and metadata inspectable in `.folio/projects.json`, `.folio/folio.json`, and `.folio/canvases.json`.
 - [x] Keep file operations non-destructive; reconciliation should mark missing files and repair moved paths by hash where possible.

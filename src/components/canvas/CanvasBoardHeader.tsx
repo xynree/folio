@@ -5,7 +5,6 @@ import {
   Eraser,
   FolderOpen,
   ImagePlus,
-  Minimize2,
   Paperclip,
   PenLine,
   StickyNote,
@@ -47,7 +46,6 @@ type CanvasBoardHeaderProps = {
   onDeleteBoard: () => void;
   onImportImages: () => void;
   onImportReferences: () => void;
-  onMinimize: () => void;
   onOpenBoardFolder: () => void;
   onSaveBoardSettings: (canvas: Canvas) => void;
   onToggleBoardTools: () => void;
@@ -69,7 +67,6 @@ export function CanvasBoardHeader({
   onDeleteBoard,
   onImportImages,
   onImportReferences,
-  onMinimize,
   onOpenBoardFolder,
   onSaveBoardSettings,
   onToggleBoardTools,
@@ -196,15 +193,6 @@ export function CanvasBoardHeader({
         >
           <ButtonIcon icon={Edit3} />
           Edit
-        </button>
-        <button
-          className="icon-button canvas-board-minimize-button"
-          type="button"
-          aria-label="Minimize board panel"
-          title="Minimize board panel"
-          onClick={onMinimize}
-        >
-          <ButtonIcon icon={Minimize2} />
         </button>
       </div>
 

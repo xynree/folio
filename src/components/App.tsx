@@ -7,13 +7,15 @@ import React, {
 } from "react";
 import {
   ArrowLeft,
+  Archive,
+  Brush,
   ChevronDown,
   ChevronUp,
-  Columns2,
   FolderOpen,
   Grid3X3,
-  PanelLeft,
-  PanelRight,
+  Images,
+  NotebookPen,
+  PanelsTopLeft,
   Rows3,
   Upload,
 } from "lucide-react";
@@ -35,10 +37,6 @@ import { TagsSidebar } from "./archive/TagsSidebar";
 import { CanvasView } from "./canvas/CanvasView";
 import { DetailDrawer } from "./details/DetailDrawer";
 import {
-  ARCHIVE_PANEL_MIN_WIDTH,
-  CANVAS_DOCK_DEFAULT_WIDTH,
-  CANVAS_DOCK_MIN_WIDTH,
-  CANVAS_SPLITTER_WIDTH,
   EMPTY_DATA,
   IMAGE_FILE_PATTERN,
   ITEM_DRAG_MIME,
@@ -80,11 +78,10 @@ import { ButtonIcon } from "./shared/ButtonIcon";
 const ARCHIVE_UI_SCALE_MIN = 50;
 const ARCHIVE_UI_SCALE_MAX = 200;
 const ARCHIVE_UI_SCALE_STEP = 5;
-const TAGS_SIDEBAR_DEFAULT_WIDTH = 176;
-const TAGS_SIDEBAR_MIN_WIDTH = 132;
-const TAGS_SIDEBAR_MAX_WIDTH = 360;
-type WorkspacePanelMode = "left" | "split" | "right";
-type ProjectSurface = "images" | "works" | "review";
+const TAGS_SIDEBAR_DEFAULT_WIDTH = 148;
+const TAGS_SIDEBAR_MIN_WIDTH = 112;
+const TAGS_SIDEBAR_MAX_WIDTH = 260;
+type ProjectSurface = "images" | "works" | "boards" | "review";
 
 function clipboardImageExtension(file: File) {
   const filenameExt = file.name.match(/\.[a-z0-9]+$/i)?.[0];
@@ -134,15 +131,11 @@ export function AppShell() {
   const [archiveView, setArchiveView] = useState<ArchiveViewMode>("strip");
   const [archiveUiScale, setArchiveUiScale] = useState(100);
   const [heatmapMinimized, setHeatmapMinimized] = useState(false);
-  const [tagsCollapsed, setTagsCollapsed] = useState(false);
+  const [tagsCollapsed, setTagsCollapsed] = useState(true);
   const [tagsSidebarWidth, setTagsSidebarWidth] = useState(
     TAGS_SIDEBAR_DEFAULT_WIDTH,
   );
   const [tagsSidebarResizing, setTagsSidebarResizing] = useState(false);
-  const [archiveMinimized, setArchiveMinimized] = useState(false);
-  const [canvasMinimized, setCanvasMinimized] = useState(false);
-  const [canvasDockWidth, setCanvasDockWidth] = useState(CANVAS_DOCK_DEFAULT_WIDTH);
-  const [canvasDockResizing, setCanvasDockResizing] = useState(false);
   const [gridTagFilter, setGridTagFilter] = useState<GridTagFilter>("all");
   const [thumbUrls, setThumbUrls] = useState<ThumbnailUrls>({});
   const [detailItemId, setDetailItemId] = useState<string | null>(null);
@@ -318,87 +311,6 @@ export function AppShell() {
     [clampTagsSidebarWidth, tagsCollapsed],
   );
 
-  const clampCanvasDockWidth = useCallback((width: number) => {
-    const workspaceWidth =
-      studioWorkspaceRef.current?.getBoundingClientRect().width ?? window.innerWidth;
-    const maxWidth = Math.max(
-      CANVAS_DOCK_MIN_WIDTH,
-      workspaceWidth - ARCHIVE_PANEL_MIN_WIDTH - CANVAS_SPLITTER_WIDTH,
-    );
-    return Math.round(
-      Math.min(Math.max(width, CANVAS_DOCK_MIN_WIDTH), maxWidth),
-    );
-  }, []);
-
-  useEffect(() => {
-    const onResize = () => {
-      setCanvasDockWidth((current) => clampCanvasDockWidth(current));
-    };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [clampCanvasDockWidth]);
-
-  const startCanvasDockResize = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (canvasMinimized) return;
-      const workspace = studioWorkspaceRef.current;
-      if (!workspace) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-
-      const previousCursor = document.body.style.cursor;
-      const previousUserSelect = document.body.style.userSelect;
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      setCanvasDockResizing(true);
-
-      const resizeToPointer = (clientX: number) => {
-        const rect = workspace.getBoundingClientRect();
-        setCanvasDockWidth(clampCanvasDockWidth(rect.right - clientX));
-      };
-
-      const onPointerMove = (moveEvent: PointerEvent) => {
-        resizeToPointer(moveEvent.clientX);
-      };
-
-      const onPointerUp = () => {
-        document.body.style.cursor = previousCursor;
-        document.body.style.userSelect = previousUserSelect;
-        setCanvasDockResizing(false);
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-      };
-
-      resizeToPointer(event.clientX);
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
-    },
-    [canvasMinimized, clampCanvasDockWidth],
-  );
-
-  const nudgeCanvasDockWidth = useCallback(
-    (delta: number) => {
-      setCanvasDockWidth((current) => clampCanvasDockWidth(current + delta));
-    },
-    [clampCanvasDockWidth],
-  );
-
-  const showLeftOnlyPanel = useCallback(() => {
-    setArchiveMinimized(false);
-    setCanvasMinimized(true);
-  }, []);
-
-  const showRightOnlyPanel = useCallback(() => {
-    setCanvasMinimized(false);
-    setArchiveMinimized(true);
-  }, []);
-
-  const showSplitPanel = useCallback(() => {
-    setArchiveMinimized(false);
-    setCanvasMinimized(false);
-  }, []);
-
   const activeProject = useMemo(
     () =>
       (data.projects ?? []).find((project) => project.id === activeProjectId) ??
@@ -534,8 +446,6 @@ export function AppShell() {
       setProjectSurface("images");
       setActiveReviewId(null);
       setActiveCanvasId(project.boardIds[0] ?? null);
-      setArchiveMinimized(false);
-      setCanvasMinimized(false);
       clearSelection();
     },
     [clearSelection],
@@ -1096,7 +1006,7 @@ export function AppShell() {
 
       if (targetCanvasId) {
         setActiveCanvasId(targetCanvasId);
-        setCanvasMinimized(false);
+        setProjectSurface("boards");
         setCanvasDetailRequestId((current) => current + 1);
       }
     },
@@ -1133,7 +1043,7 @@ export function AppShell() {
 
     if (boardId) {
       setActiveCanvasId(boardId);
-      setCanvasMinimized(false);
+      setProjectSurface("boards");
       setCanvasDetailRequestId((current) => current + 1);
     }
   }, [activeProjectId, commitData]);
@@ -1178,7 +1088,7 @@ export function AppShell() {
 
     if (boardId) {
       setActiveCanvasId(boardId);
-      setCanvasMinimized(false);
+      setProjectSurface("boards");
       setCanvasDetailRequestId((current) => current + 1);
       clearSelection();
     } else {
@@ -1251,18 +1161,6 @@ export function AppShell() {
     [putData],
   );
 
-  const panelMode: WorkspacePanelMode = archiveMinimized
-    ? "right"
-    : canvasMinimized
-    ? "left"
-    : "split";
-  const dividerHidden = archiveMinimized || canvasMinimized;
-  const studioGridTemplateColumns = archiveMinimized
-    ? `0px 0px minmax(${CANVAS_DOCK_MIN_WIDTH}px, 1fr)`
-    : canvasMinimized
-    ? `minmax(${ARCHIVE_PANEL_MIN_WIDTH}px, 1fr) 0px 0px`
-    : `minmax(${ARCHIVE_PANEL_MIN_WIDTH}px, 1fr) ${CANVAS_SPLITTER_WIDTH}px ${canvasDockWidth}px`;
-
   return (
     <div
       className="app-shell"
@@ -1308,8 +1206,15 @@ export function AppShell() {
               <strong className="project-sidebar-title">{activeProject.title}</strong>
             </div>
 
-            <div className="project-action-group">
-              <div className="project-surface-tabs" aria-label="Project surface">
+            <section
+              className="project-action-group"
+              aria-labelledby="project-views-heading"
+            >
+              <div className="project-sidebar-section-heading" id="project-views-heading">
+                <ButtonIcon icon={Archive} size={14} />
+                <span>Views</span>
+              </div>
+              <nav className="project-surface-tabs" aria-label="Project views">
                 <button
                   className={projectSurface === "images" ? "active" : ""}
                   type="button"
@@ -1319,7 +1224,8 @@ export function AppShell() {
                     clearSelection();
                   }}
                 >
-                  All Images
+                  <ButtonIcon icon={Images} size={15} />
+                  <span>All Images</span>
                 </button>
                 <button
                   className={projectSurface === "works" ? "active" : ""}
@@ -1330,7 +1236,21 @@ export function AppShell() {
                     clearSelection();
                   }}
                 >
-                  Works
+                  <ButtonIcon icon={Brush} size={15} />
+                  <span>Works</span>
+                </button>
+                <button
+                  className={projectSurface === "boards" ? "active" : ""}
+                  type="button"
+                  aria-pressed={projectSurface === "boards"}
+                  onClick={() => {
+                    setProjectSurface("boards");
+                    setActiveReviewId(null);
+                    clearSelection();
+                  }}
+                >
+                  <ButtonIcon icon={PanelsTopLeft} size={15} />
+                  <span>Boards</span>
                 </button>
                 <button
                   className={projectSurface === "review" ? "active" : ""}
@@ -1341,50 +1261,23 @@ export function AppShell() {
                     clearSelection();
                   }}
                 >
-                  Review
+                  <ButtonIcon icon={NotebookPen} size={15} />
+                  <span>Review</span>
                 </button>
-              </div>
-            </div>
+              </nav>
+            </section>
 
-            <div className="project-action-group">
+            <section
+              className="project-action-group project-folder-group"
+              aria-labelledby="project-folder-heading"
+            >
               <div
-                className="view-tabs workspace-panel-mode-control"
-                aria-label="Workspace panel view"
+                className="project-sidebar-section-heading"
+                id="project-folder-heading"
               >
-                <button
-                  className={panelMode === "left" ? "active" : ""}
-                  type="button"
-                  aria-label="Left only panel view"
-                  aria-pressed={panelMode === "left"}
-                  title="Left only"
-                  onClick={showLeftOnlyPanel}
-                >
-                  <ButtonIcon icon={PanelLeft} size={16} />
-                </button>
-                <button
-                  className={panelMode === "split" ? "active" : ""}
-                  type="button"
-                  aria-label="Split panel view"
-                  aria-pressed={panelMode === "split"}
-                  title="Split"
-                  onClick={showSplitPanel}
-                >
-                  <ButtonIcon icon={Columns2} size={16} />
-                </button>
-                <button
-                  className={panelMode === "right" ? "active" : ""}
-                  type="button"
-                  aria-label="Right only panel view"
-                  aria-pressed={panelMode === "right"}
-                  title="Right only"
-                  onClick={showRightOnlyPanel}
-                >
-                  <ButtonIcon icon={PanelRight} size={16} />
-                </button>
+                <ButtonIcon icon={FolderOpen} size={14} />
+                <span>Project</span>
               </div>
-            </div>
-
-            <div className="project-action-group">
               <div className="project-folder-actions" aria-label="Project folders">
                 <button
                   className="icon-button"
@@ -1396,31 +1289,35 @@ export function AppShell() {
                   <ButtonIcon icon={FolderOpen} />
                 </button>
               </div>
-            </div>
+            </section>
           </aside>
 
           <section
             ref={studioWorkspaceRef}
             className={`studio-workspace ${
-              canvasMinimized ? "studio-workspace-canvas-minimized" : ""
-            } ${
-              archiveMinimized ? "studio-workspace-archive-minimized" : ""
-            } ${
-              canvasDockResizing || tagsSidebarResizing
-                ? "studio-workspace-resizing"
-                : ""
-            }`}
-            style={{ gridTemplateColumns: studioGridTemplateColumns }}
-          >
-          <section
-            className={`archive-panel ${
-              archiveMinimized ? "archive-panel-minimized" : ""
+              tagsSidebarResizing ? "studio-workspace-resizing" : ""
             }`}
           >
-            {archiveMinimized ? (
-              <div className="archive-rail" aria-hidden="true" />
+            {projectSurface === "boards" ? (
+              <CanvasView
+                data={data}
+                activeCanvasId={activeCanvasId}
+                activeProjectId={activeProjectId}
+                canvasDetailRequestId={canvasDetailRequestId}
+                setActiveCanvasId={setActiveCanvasId}
+                onOpenItem={openItemDetails}
+                onCreateBoard={createBoard}
+                thumbUrls={thumbUrls}
+                setThumbUrls={setThumbUrls}
+                commitData={commitData}
+                saveData={saveData}
+                clearDragState={() => {
+                  dragDepth.current = 0;
+                  setDragging(false);
+                }}
+              />
             ) : (
-              <>
+              <section className="archive-panel">
                 {projectSurface === "review" && activeProject ? (
                   <ProjectReviewView
                     project={activeProject}
@@ -1455,95 +1352,100 @@ export function AppShell() {
                       />
                     }
                   >
-                  <SelectionBar
-                    count={selectedItemIds.length}
-                    newBoardDialogOpen={selectionBoardDialogOpen}
-                    newBoardTitle={selectionBoardTitleDraft}
-                    tagDialogOpen={selectionTagDialogOpen}
-                    tagDraft={selectionTagDraft}
-                    workActionLabel={
-                      activeProject
-                        ? projectSurface === "works"
-                          ? "Unmark Work"
-                          : "Mark Work"
-                        : undefined
-                    }
-                    onCancelNewBoard={() => {
-                      setSelectionBoardDialogOpen(false);
-                      setSelectionBoardTitleDraft("");
-                    }}
-                    onCancelTag={() => {
-                      setSelectionTagDialogOpen(false);
-                      setSelectionTagDraft("");
-                    }}
-                    onApplyTag={() => addTagToSelection(selectionTagDraft)}
-                    onClear={clearSelection}
-                    onCreateNewBoard={() =>
-                      openSelectedOnNewCanvas(selectionBoardTitleDraft)
-                    }
-                    onDeleteSelection={deleteSelectedItems}
-                    onNewBoardTitleChange={setSelectionBoardTitleDraft}
-                    onOpenNewBoard={() => {
-                      setSelectionBoardTitleDraft("");
-                      setSelectionTagDialogOpen(false);
-                      setSelectionTagDraft("");
-                      setSelectionBoardDialogOpen(true);
-                    }}
-                    onOpenTag={() => {
-                      setSelectionTagDraft("");
-                      setSelectionBoardDialogOpen(false);
-                      setSelectionBoardTitleDraft("");
-                      setSelectionTagDialogOpen(true);
-                    }}
-                    onToggleWorks={activeProject ? setSelectionWorksMembership : undefined}
-                    onTagDraftChange={setSelectionTagDraft}
-                  />
-                  <div className="archive-floating-actions">
-                    <label className="archive-scale-control">
-                      <span>Size</span>
-                      <input
-                        type="range"
-                        min={ARCHIVE_UI_SCALE_MIN}
-                        max={ARCHIVE_UI_SCALE_MAX}
-                        step={ARCHIVE_UI_SCALE_STEP}
-                        value={archiveUiScale}
-                        aria-label="Archive item size"
-                        aria-valuetext={`${archiveUiScale}%`}
-                        onChange={(event) =>
-                          setArchiveUiScale(Number(event.currentTarget.value))
-                        }
-                      />
-                      <output>{archiveUiScale}%</output>
-                    </label>
-                    <div className="view-tabs archive-view-toggle" aria-label="Archive view">
-                      <button
-                        className={archiveView === "strip" ? "active" : ""}
-                        type="button"
-                        aria-label="Strip view"
-                        title="Strip view"
-                        onClick={() => setArchiveView("strip")}
+                    <SelectionBar
+                      count={selectedItemIds.length}
+                      newBoardDialogOpen={selectionBoardDialogOpen}
+                      newBoardTitle={selectionBoardTitleDraft}
+                      tagDialogOpen={selectionTagDialogOpen}
+                      tagDraft={selectionTagDraft}
+                      workActionLabel={
+                        activeProject
+                          ? projectSurface === "works"
+                            ? "Unmark Work"
+                            : "Mark Work"
+                          : undefined
+                      }
+                      onCancelNewBoard={() => {
+                        setSelectionBoardDialogOpen(false);
+                        setSelectionBoardTitleDraft("");
+                      }}
+                      onCancelTag={() => {
+                        setSelectionTagDialogOpen(false);
+                        setSelectionTagDraft("");
+                      }}
+                      onApplyTag={() => addTagToSelection(selectionTagDraft)}
+                      onClear={clearSelection}
+                      onCreateNewBoard={() =>
+                        openSelectedOnNewCanvas(selectionBoardTitleDraft)
+                      }
+                      onDeleteSelection={deleteSelectedItems}
+                      onNewBoardTitleChange={setSelectionBoardTitleDraft}
+                      onOpenNewBoard={() => {
+                        setSelectionBoardTitleDraft("");
+                        setSelectionTagDialogOpen(false);
+                        setSelectionTagDraft("");
+                        setSelectionBoardDialogOpen(true);
+                      }}
+                      onOpenTag={() => {
+                        setSelectionTagDraft("");
+                        setSelectionBoardDialogOpen(false);
+                        setSelectionBoardTitleDraft("");
+                        setSelectionTagDialogOpen(true);
+                      }}
+                      onToggleWorks={
+                        activeProject ? setSelectionWorksMembership : undefined
+                      }
+                      onTagDraftChange={setSelectionTagDraft}
+                    />
+                    <div className="archive-floating-actions">
+                      <label className="archive-scale-control">
+                        <span>Size</span>
+                        <input
+                          type="range"
+                          min={ARCHIVE_UI_SCALE_MIN}
+                          max={ARCHIVE_UI_SCALE_MAX}
+                          step={ARCHIVE_UI_SCALE_STEP}
+                          value={archiveUiScale}
+                          aria-label="Archive item size"
+                          aria-valuetext={`${archiveUiScale}%`}
+                          onChange={(event) =>
+                            setArchiveUiScale(Number(event.currentTarget.value))
+                          }
+                        />
+                        <output>{archiveUiScale}%</output>
+                      </label>
+                      <div
+                        className="view-tabs archive-view-toggle"
+                        aria-label="Archive view"
                       >
-                        <ButtonIcon icon={Rows3} />
-                      </button>
+                        <button
+                          className={archiveView === "strip" ? "active" : ""}
+                          type="button"
+                          aria-label="Strip view"
+                          title="Strip view"
+                          onClick={() => setArchiveView("strip")}
+                        >
+                          <ButtonIcon icon={Rows3} />
+                        </button>
+                        <button
+                          className={archiveView === "grid" ? "active" : ""}
+                          type="button"
+                          aria-label="Grid view"
+                          title="Grid view"
+                          onClick={() => setArchiveView("grid")}
+                        >
+                          <ButtonIcon icon={Grid3X3} />
+                        </button>
+                      </div>
                       <button
-                        className={archiveView === "grid" ? "active" : ""}
+                        className="primary-action"
                         type="button"
-                        aria-label="Grid view"
-                        title="Grid view"
-                        onClick={() => setArchiveView("grid")}
+                        onClick={handleOpenDialog}
                       >
-                        <ButtonIcon icon={Grid3X3} />
+                        <ButtonIcon icon={Upload} />
+                        {busy ? "Importing" : "Import"}
                       </button>
                     </div>
-                    <button
-                      className="primary-action"
-                      type="button"
-                      onClick={handleOpenDialog}
-                    >
-                      <ButtonIcon icon={Upload} />
-                      {busy ? "Importing" : "Import"}
-                    </button>
-                  </div>
                     {archiveView === "strip" ? (
                       <DailyStripView
                         items={visibleArchiveItems}
@@ -1608,62 +1510,8 @@ export function AppShell() {
                     </button>
                   </footer>
                 ) : null}
-              </>
+              </section>
             )}
-          </section>
-
-          <div
-            className={`canvas-resize-handle ${
-              dividerHidden ? "canvas-resize-handle-hidden" : ""
-            }`}
-            role="separator"
-            aria-label="Resize open board panel"
-            aria-orientation="vertical"
-            aria-hidden={dividerHidden}
-            tabIndex={dividerHidden ? -1 : 0}
-            onKeyDown={(event) => {
-              if (dividerHidden) return;
-              if (event.key === "ArrowLeft") {
-                event.preventDefault();
-                nudgeCanvasDockWidth(32);
-              }
-              if (event.key === "ArrowRight") {
-                event.preventDefault();
-                nudgeCanvasDockWidth(-32);
-              }
-            }}
-            onPointerDown={(event) => {
-              if (dividerHidden) return;
-              startCanvasDockResize(event);
-            }}
-          />
-
-          <aside
-            className={`canvas-dock ${canvasMinimized ? "canvas-dock-minimized" : ""}`}
-          >
-            {canvasMinimized ? (
-              <div className="canvas-dock-collapsed" aria-hidden="true" />
-            ) : (
-              <CanvasView
-                data={data}
-                activeCanvasId={activeCanvasId}
-                activeProjectId={activeProjectId}
-                canvasDetailRequestId={canvasDetailRequestId}
-                setActiveCanvasId={setActiveCanvasId}
-                onOpenItem={openItemDetails}
-                onCreateBoard={createBoard}
-                onMinimize={showLeftOnlyPanel}
-                thumbUrls={thumbUrls}
-                setThumbUrls={setThumbUrls}
-                commitData={commitData}
-                saveData={saveData}
-                clearDragState={() => {
-                  dragDepth.current = 0;
-                  setDragging(false);
-                }}
-              />
-            )}
-          </aside>
           </section>
         </div>
       </main>

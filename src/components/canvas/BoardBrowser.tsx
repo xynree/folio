@@ -1,5 +1,5 @@
 import React from "react";
-import { Edit3, Ellipsis, Minimize2, Plus, Trash2 } from "lucide-react";
+import { Edit3, Ellipsis, Plus, Trash2 } from "lucide-react";
 import type { Canvas, FolioItem, ThumbnailUrls } from "../../types";
 import { formatCount } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
@@ -28,7 +28,6 @@ export function BoardBrowser({
   onCreateBoard,
   onDeleteBoardById,
   onEditCanvas,
-  onMinimize,
   onOpenCanvas,
   onSaveBoardSettings,
   onToggleBoardMenu,
@@ -61,7 +60,6 @@ export function BoardBrowser({
   onCreateBoard: () => void;
   onDeleteBoardById: (canvasId: string) => void;
   onEditCanvas: (canvasId: string) => void;
-  onMinimize: () => void;
   onOpenCanvas: (canvasId: string) => void;
   onSaveBoardSettings: (canvas: Canvas) => void;
   onToggleBoardMenu: (canvasId: string) => void;
@@ -81,15 +79,6 @@ export function BoardBrowser({
           >
             <ButtonIcon icon={Plus} />
             New board
-          </button>
-          <button
-            className="icon-button canvas-board-minimize-button"
-            type="button"
-            aria-label="Minimize board panel"
-            title="Minimize board panel"
-            onClick={onMinimize}
-          >
-            <ButtonIcon icon={Minimize2} />
           </button>
         </div>
       </header>
