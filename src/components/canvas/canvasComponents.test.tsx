@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { makeCanvas, makeItem } from "../../test/fixtures";
 import type { ThumbnailUrls } from "../../types";
 import { BoardBrowser } from "./BoardBrowser";
@@ -9,7 +9,6 @@ import {
   CanvasItemCard,
   CanvasNoteCard,
   CanvasTextCard,
-  ReferenceCard,
 } from "./CanvasCards";
 import { CanvasEdgeLabels } from "./CanvasEdgeLabels";
 import { CanvasInkLayer } from "./CanvasInkLayer";
@@ -27,15 +26,6 @@ const board = makeCanvas("board-1", {
   updatedAt: "2026-06-15T12:30:00.000Z",
   itemIds: ["alpha"],
   notes: [{ id: "note-1", text: "Note", x: 30, y: 40 }],
-  references: [
-    {
-      id: "reference-1",
-      filename: "reference.png",
-      path: "projects/studio-archive/references/reference.png",
-      x: 50,
-      y: 60,
-    },
-  ],
   texts: [{ id: "text-1", text: "Text", x: 70, y: 80 }],
 });
 
@@ -166,6 +156,8 @@ describe("canvas components", () => {
           boardColorDraft="#385d56"
           boardTitleDraft="Board"
           boardToolsOpen
+          projectImageCount={3}
+          projectImagePickerOpen
           onActiveToolChange={setActiveTool}
           onAddNote={vi.fn()}
           onBackToBoards={vi.fn()}
@@ -173,10 +165,10 @@ describe("canvas components", () => {
           onBoardTitleDraftChange={vi.fn()}
           onDeleteBoard={vi.fn()}
           onImportImages={vi.fn()}
-          onImportReferences={vi.fn()}
           onOpenBoardFolder={vi.fn()}
           onSaveBoardSettings={vi.fn()}
           onToggleBoardTools={vi.fn()}
+          onToggleProjectImages={vi.fn()}
           onUndoStroke={vi.fn()}
         />
       );
@@ -185,7 +177,6 @@ describe("canvas components", () => {
     render(<Harness />);
 
     expect(screen.getByText(/Created/).textContent).toContain("Last saved");
-    expect(screen.queryByText(/1 item · 1 note · 1 reference/)).toBeNull();
     fireEvent.click(screen.getByLabelText("Pen tool"));
     expect(screen.getByLabelText("Pen tool").getAttribute("aria-pressed")).toBe(
       "true",
@@ -341,18 +332,15 @@ describe("canvas components", () => {
     expect(screen.queryByTestId("canvas-tool-cursor")).toBeNull();
   });
 
-  it("handles canvas item, reference, note, and text cards", async () => {
+  it("handles canvas item cards", () => {
     const onOpen = vi.fn();
     const onRemove = vi.fn();
     const onConnector = vi.fn();
     const onPointerDown = vi.fn();
     const onResizePointerDown = vi.fn();
     const onClickCapture = vi.fn();
-    vi.mocked(window.folio.ensureReferenceThumbnail).mockResolvedValue(
-      "folio://thumb/reference.jpg",
-    );
 
-    const { rerender } = render(
+    render(
       <CanvasItemCard
         item={item}
         position={{ x: 1, y: 2, width: 240, height: 280 }}
@@ -385,32 +373,6 @@ describe("canvas components", () => {
     expect(onRemove).toHaveBeenCalledWith("alpha");
     expect(itemCard.style.height).toBe("280px");
     expect(itemCard.style.width).toBe("240px");
-
-    rerender(
-      <ReferenceCard
-        reference={board.references[0]}
-        position={{ x: 1, y: 2, width: 220, height: 290 }}
-        onRemove={onRemove}
-        onConnectorPointerDown={onConnector}
-        onPointerDown={onPointerDown}
-        onResizePointerDown={onResizePointerDown}
-        onClickCapture={onClickCapture}
-      />,
-    );
-    await waitFor(() =>
-      expect(document.querySelector("img")?.getAttribute("src")).toBe(
-        "folio://thumb/reference.jpg",
-      ),
-    );
-    expect(screen.queryByText("reference.png")).toBeNull();
-    const referenceCard = document.querySelector(".reference-card") as HTMLElement;
-    const referenceResizeCorner = referenceCard.querySelector(
-      ".canvas-card-resize-corner",
-    ) as HTMLElement;
-    fireEvent.pointerDown(referenceResizeCorner);
-    fireEvent.click(screen.getByLabelText("Remove reference.png"));
-    expect(onResizePointerDown).toHaveBeenCalledWith(expect.any(Object));
-    expect(onRemove).toHaveBeenCalledWith("reference-1");
   });
 
   it("saves note drafts on blur and text drafts after debounce", () => {
@@ -491,19 +453,16 @@ describe("canvas components", () => {
       <CanvasObjectLayer
         activeItems={[item]}
         activeNotes={board.notes}
-        activeReferences={board.references}
         activeTexts={board.texts ?? []}
         thumbUrls={thumbUrls}
         setThumbUrls={vi.fn()}
         positionForItem={() => ({ x: 1, y: 2, width: 210, height: 246 })}
         positionForNote={(note) => ({ x: note.x, y: note.y })}
-        positionForReference={(reference) => ({ x: reference.x, y: reference.y })}
         positionForText={(textElement) => ({ x: textElement.x, y: textElement.y })}
         onDeleteNote={vi.fn()}
         onDeleteTextElement={vi.fn()}
         onOpenItem={onOpenItem}
         onRemoveItem={vi.fn()}
-        onRemoveReference={vi.fn()}
         onStartConnectorDrag={vi.fn()}
         onStartDrag={onStartDrag}
         onStartResize={onStartResize}
@@ -538,7 +497,6 @@ describe("canvas components", () => {
       { x: 1, y: 2, width: 210, height: 246 },
     );
     expect(onOpenItem).toHaveBeenCalledWith("alpha");
-    expect(screen.queryByText("reference.png")).toBeNull();
   });
 
   it("zooms and pans the canvas viewport", () => {

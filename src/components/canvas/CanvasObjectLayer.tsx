@@ -3,7 +3,6 @@ import type {
   CanvasConnectionSide,
   CanvasNote,
   CanvasObjectGeometry,
-  CanvasReference,
   CanvasTextElement,
   CanvasTextSize,
   FolioItem,
@@ -14,7 +13,6 @@ import {
   CanvasItemCard,
   CanvasNoteCard,
   CanvasTextCard,
-  ReferenceCard,
 } from "./CanvasCards";
 import type { CanvasObjectKind } from "./canvasTypes";
 
@@ -47,19 +45,16 @@ type SuppressClickAfterDragHandler = (
 type CanvasObjectLayerProps = {
   activeItems: FolioItem[];
   activeNotes: CanvasNote[];
-  activeReferences: CanvasReference[];
   activeTexts: CanvasTextElement[];
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   positionForItem: (item: FolioItem, index: number) => CanvasObjectGeometry;
   positionForNote: (note: CanvasNote) => CanvasObjectGeometry;
-  positionForReference: (reference: CanvasReference) => CanvasObjectGeometry;
   positionForText: (textElement: CanvasTextElement) => CanvasObjectGeometry;
   onDeleteNote: (noteId: string) => void;
   onDeleteTextElement: (textElementId: string) => void;
   onOpenItem: ItemDetailsOpenHandler;
   onRemoveItem: (itemId: string) => void;
-  onRemoveReference: (referenceId: string) => void;
   onStartConnectorDrag: StartConnectorDragHandler;
   onStartDrag: StartObjectDragHandler;
   onStartResize: StartObjectResizeHandler;
@@ -75,19 +70,16 @@ type CanvasObjectLayerProps = {
 export function CanvasObjectLayer({
   activeItems,
   activeNotes,
-  activeReferences,
   activeTexts,
   thumbUrls,
   setThumbUrls,
   positionForItem,
   positionForNote,
-  positionForReference,
   positionForText,
   onDeleteNote,
   onDeleteTextElement,
   onOpenItem,
   onRemoveItem,
-  onRemoveReference,
   onStartConnectorDrag,
   onStartDrag,
   onStartResize,
@@ -120,30 +112,6 @@ export function CanvasObjectLayer({
             }
             onClickCapture={(event) =>
               onSuppressClickAfterDrag(event, "item", item.id)
-            }
-          />
-        );
-      })}
-
-      {activeReferences.map((reference) => {
-        const position = positionForReference(reference);
-        return (
-          <ReferenceCard
-            key={reference.id}
-            reference={reference}
-            position={position}
-            onRemove={onRemoveReference}
-            onConnectorPointerDown={(event, side) =>
-              onStartConnectorDrag(event, reference.id, side)
-            }
-            onPointerDown={(event) =>
-              onStartDrag(event, "reference", reference.id, position)
-            }
-            onResizePointerDown={(event) =>
-              onStartResize(event, "reference", reference.id, position)
-            }
-            onClickCapture={(event) =>
-              onSuppressClickAfterDrag(event, "reference", reference.id)
             }
           />
         );

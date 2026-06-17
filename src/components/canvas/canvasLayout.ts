@@ -2,7 +2,6 @@ import type {
   Canvas,
   CanvasNote,
   CanvasObjectGeometry,
-  CanvasReference,
   CanvasTextElement,
   FolioItem,
 } from "../../types";
@@ -69,32 +68,6 @@ export function positionForCanvasItem(
   };
 }
 
-export function positionForCanvasReference(
-  reference: CanvasReference,
-  dragPreview: CanvasDragPreview | null,
-): CanvasObjectGeometry {
-  if (dragPreview?.kind === "reference" && dragPreview.id === reference.id) {
-    return dragPreview.position;
-  }
-
-  const savedPosition = {
-    x: reference.x,
-    y: reference.y,
-    width: reference.width,
-    height: reference.height,
-  };
-  const size = sizeForCanvasImageObject("reference", savedPosition, {
-    width: reference.mediaWidth,
-    height: reference.mediaHeight,
-  });
-
-  return {
-    ...savedPosition,
-    width: size.width,
-    height: size.height,
-  };
-}
-
 export function positionForCanvasNote(
   note: CanvasNote,
   dragPreview: CanvasDragPreview | null,
@@ -126,14 +99,12 @@ export function buildCanvasObjectLayouts({
   activeCanvas,
   activeItems,
   activeNotes,
-  activeReferences,
   activeTexts,
   dragPreview,
 }: {
   activeCanvas: Canvas | null;
   activeItems: FolioItem[];
   activeNotes: CanvasNote[];
-  activeReferences: CanvasReference[];
   activeTexts: CanvasTextElement[];
   dragPreview: CanvasDragPreview | null;
 }): Map<string, CanvasObjectLayout> {
@@ -146,17 +117,6 @@ export function buildCanvasObjectLayouts({
         item.id,
         "item",
         positionForCanvasItem(item, index, activeCanvas, dragPreview),
-      ),
-    );
-  });
-
-  activeReferences.forEach((reference) => {
-    layouts.set(
-      reference.id,
-      objectLayoutFromPosition(
-        reference.id,
-        "reference",
-        positionForCanvasReference(reference, dragPreview),
       ),
     );
   });

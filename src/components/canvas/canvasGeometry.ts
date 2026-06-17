@@ -16,14 +16,12 @@ import type {
 
 export const CANVAS_OBJECT_SIZES: Record<CanvasObjectKind, CanvasObjectSize> = {
   item: { width: 162, height: 190 },
-  reference: { width: 162, height: 214 },
   note: { width: 220, height: 150 },
   text: { width: 220, height: 96 },
 };
 
 export const CANVAS_OBJECT_MIN_SIZES: Record<CanvasObjectKind, CanvasObjectSize> = {
   item: { width: 118, height: 138 },
-  reference: { width: 118, height: 156 },
   note: { width: 150, height: 104 },
   text: { width: 132, height: 60 },
 };
@@ -87,7 +85,7 @@ function validDimension(value: number | undefined): value is number {
 }
 
 export function sizeForCanvasImageObject(
-  kind: Extract<CanvasObjectKind, "item" | "reference">,
+  kind: Extract<CanvasObjectKind, "item">,
   geometry?: Partial<CanvasObjectSize>,
   media?: Partial<CanvasObjectSize>,
 ): CanvasObjectSize {

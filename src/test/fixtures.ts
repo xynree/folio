@@ -36,7 +36,6 @@ export function makeCanvas(id: string, overrides: Partial<Canvas> = {}): Canvas 
     positions: {},
     notes: [],
     edges: [],
-    references: [],
     strokes: [],
     texts: [],
     ...overrides,

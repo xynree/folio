@@ -10,7 +10,6 @@ import { computeHash, sanitizeFileBaseName } from "../helpers";
 import { SCHEMA_VERSION } from "../constants";
 import {
   Canvas,
-  CanvasReference,
   FolioData,
   FolioItem,
   ImportSource,
@@ -22,7 +21,6 @@ import {
   ThumbnailUrls,
 } from "../types";
 import { ArchiveManager } from "./archive.manager";
-import { readImageDimensionsForFile } from "./media.helpers";
 import { FolioStorage } from "./storage.manager";
 
 const execFileAsync = promisify(execFile);
@@ -30,7 +28,7 @@ const PHOTOS_PICKER_CANCELLED = "__FOLIO_PHOTOS_PICKER_CANCELLED__";
 const PHOTOS_PICKER_HELPER_NAME = "FolioPhotosPicker";
 const IMAGES_DIR_NAME = "images";
 const WORKS_DIR_NAME = "works";
-const REFERENCES_DIR_NAME = "references";
+const LEGACY_REFERENCES_DIR_NAME = "references";
 
 interface ImportFileSelection {
   filePaths: string[];
@@ -59,12 +57,7 @@ export interface FolioManagerInterface {
   importToFolio(): Promise<FolioItem[]>;
   importToProject(projectId: string): Promise<FolioItem[]>;
   setProjectWorkItems(projectId: string, workItemIds: string[]): Promise<FolioData>;
-  copyReference(
-    canvasId: string,
-    filePaths: string[],
-  ): Promise<CanvasReference[]>;
   deleteItems(itemIds: string[]): Promise<FolioData>;
-  ensureReferenceThumbnail(referenceId: string, filePath: string): Promise<string>;
   startWatcher(mainWindow: BrowserWindow): void;
 }
 
@@ -135,22 +128,12 @@ export class FolioManager implements FolioManagerInterface {
       (_: unknown, projectId: string, sources: ImportSource[]) =>
         this.importSourcesToProject(projectId, sources),
     );
-    ipcMain.handle(
-      "folio:copy-reference",
-      (_: unknown, canvasId: string, filePaths: string[]) =>
-        this.copyReference(canvasId, filePaths),
-    );
     ipcMain.handle("folio:delete-items", (_: unknown, itemIds: string[]) =>
       this.deleteItems(itemIds),
     );
     ipcMain.handle("folio:open-file-dialog", () => this.openFileDialog());
     ipcMain.handle("folio:ensure-thumbnails", (_: unknown, itemIds: string[]) =>
       this.ensureThumbnails(itemIds),
-    );
-    ipcMain.handle(
-      "folio:ensure-reference-thumbnail",
-      (_: unknown, referenceId: string, filePath: string) =>
-        this.ensureReferenceThumbnail(referenceId, filePath),
     );
     ipcMain.handle("folio:get-file-data-url", (_: unknown, filePath: string) =>
       this.archiveManager.getFileDataUrl(filePath),
@@ -294,39 +277,36 @@ export class FolioManager implements FolioManagerInterface {
     await this.ensureMediaDirectories();
     const repairedLegacyOutputStages = this.repairLegacyOutputStages();
     const migratedProjects = await this.migrateProjectData();
+    const removedLegacyCanvasReferences = this.removeLegacyCanvasReferences();
     const migratedMediaFiles = await this.migrateMediaFilesToFlatFolders();
     const repairedMissingFlags = await this.repairMissingFlagsForExistingFiles();
     const repairedMediaDimensions =
       await this.archiveManager.repairMissingMediaDimensions();
-    const repairedReferenceMediaDimensions =
-      this.repairReferenceMediaDimensions();
 
     if (
       repairedLegacyOutputStages ||
       migratedProjects ||
-      migratedMediaFiles.itemsChanged ||
+      migratedMediaFiles ||
       repairedMissingFlags ||
       repairedMediaDimensions
     ) {
       await this.archiveManager.save(this.version);
     }
 
-    if (
-      migratedProjects ||
-      migratedMediaFiles.referencesChanged ||
-      repairedReferenceMediaDimensions
-    ) {
+    if (migratedProjects || removedLegacyCanvasReferences) {
       await Promise.all([
         this.storageManager.saveCanvases(
           this.canvasesPath,
           this.canvases,
           this.version,
         ),
-        this.storageManager.saveProjects(
-          this.projectsPath,
-          this.projects,
-          this.version,
-        ),
+        migratedProjects
+          ? this.storageManager.saveProjects(
+              this.projectsPath,
+              this.projects,
+              this.version,
+            )
+          : Promise.resolve(),
       ]);
     }
 
@@ -339,42 +319,20 @@ export class FolioManager implements FolioManagerInterface {
     };
   }
 
-  private repairReferenceMediaDimensions(): boolean {
-    let changed = false;
-
-    this.canvases = this.canvases.map((canvas) => {
-      let canvasChanged = false;
-      const references = (canvas.references ?? []).map((reference) => {
-        if (reference.mediaWidth && reference.mediaHeight) return reference;
-
-        const dimensions = readImageDimensionsForFile(
-          path.join(this.folioRoot, reference.path),
-        );
-        if (!dimensions) return reference;
-
-        canvasChanged = true;
-        return { ...reference, ...dimensions };
-      });
-
-      if (!canvasChanged) return canvas;
-      changed = true;
-      return { ...canvas, references };
-    });
-
-    return changed;
-  }
-
   async saveFolioData(data: FolioData): Promise<void> {
     this.version = SCHEMA_VERSION;
     this.archiveManager.setItems(
-      data.items.map((item) =>
-        (item.stage as string | undefined) === "output"
-          ? { ...item, stage: "final" }
-          : item,
-      ),
+      data.items.map((item) => {
+        const legacyStage = item.stage as string | undefined;
+        if (legacyStage === "output") return { ...item, stage: "final" };
+        if (legacyStage === "reference") return { ...item, stage: undefined };
+        return item;
+      }),
     );
     this.tags = data.tags;
-    this.canvases = data.canvases;
+    this.canvases = data.canvases.map((canvas) =>
+      this.stripLegacyCanvasReferences(canvas),
+    );
     this.projects = data.projects.map((project) => ({
       ...project,
       reviews: project.reviews ?? [],
@@ -469,26 +427,6 @@ export class FolioManager implements FolioManagerInterface {
     return project;
   }
 
-  private getProjectForCanvas(canvasId: string): Project | undefined {
-    const canvas = this.canvases.find((candidate) => candidate.id === canvasId);
-    if (canvas?.projectId) {
-      const project = this.projects.find(
-        (candidate) => candidate.id === canvas.projectId,
-      );
-      if (project) return project;
-    }
-
-    return this.projects.find((project) => project.boardIds.includes(canvasId));
-  }
-
-  private getProjectForCanvasOrThrow(canvasId: string): Project {
-    const project = this.getProjectForCanvas(canvasId);
-    if (!project) {
-      throw new Error(`Project for board ${canvasId} was not found.`);
-    }
-    return project;
-  }
-
   private getProjectForImageFilePath(filePath: string): Project | undefined {
     const absolutePath = path.resolve(filePath);
     return this.projects.find((project) =>
@@ -505,7 +443,9 @@ export class FolioManager implements FolioManagerInterface {
   }
 
   async saveCanvases(canvases: Canvas[]): Promise<void> {
-    this.canvases = canvases;
+    this.canvases = canvases.map((canvas) =>
+      this.stripLegacyCanvasReferences(canvas),
+    );
     await this.storageManager.saveCanvases(
       this.canvasesPath,
       this.canvases,
@@ -600,6 +540,7 @@ export class FolioManager implements FolioManagerInterface {
         ? {
             ...candidate,
             workItemIds: nextWorkItemIds,
+            workUpdatedAt: savedAt,
             updatedAt: savedAt,
           }
         : candidate,
@@ -614,14 +555,6 @@ export class FolioManager implements FolioManagerInterface {
     );
 
     return this.currentData();
-  }
-
-  async copyReference(
-    canvasId: string,
-    filePaths: string[],
-  ): Promise<CanvasReference[]> {
-    const project = this.getProjectForCanvasOrThrow(canvasId);
-    return this.archiveManager.copyReferences(project.folderPath, filePaths);
   }
 
   async deleteItems(itemIds: string[]): Promise<FolioData> {
@@ -783,13 +716,6 @@ export class FolioManager implements FolioManagerInterface {
 
   async ensureThumbnails(itemIds: string[]): Promise<ThumbnailUrls> {
     return this.archiveManager.ensureThumbnails(itemIds);
-  }
-
-  async ensureReferenceThumbnail(
-    referenceId: string,
-    filePath: string,
-  ): Promise<string> {
-    return this.archiveManager.ensureReferenceThumbnail(referenceId, filePath);
   }
 
   getReconciliationResult(): ReconciliationResult {
@@ -997,10 +923,7 @@ export class FolioManager implements FolioManagerInterface {
     return changed;
   }
 
-  private async migrateMediaFilesToFlatFolders(): Promise<{
-    itemsChanged: boolean;
-    referencesChanged: boolean;
-  }> {
+  private async migrateMediaFilesToFlatFolders(): Promise<boolean> {
     await this.ensureMediaDirectories();
 
     const projectFolderById = new Map(
@@ -1010,63 +933,13 @@ export class FolioManager implements FolioManagerInterface {
       projectFolderById,
       this.projects[0]?.id,
     );
-    const referencesChanged = await this.migrateReferencesToProjectFolders();
 
     await Promise.all(
       this.projects.map((project) => this.syncProjectWorksFolder(project)),
     );
     await this.removeLegacyMediaDirectories();
 
-    return { itemsChanged, referencesChanged };
-  }
-
-  private async migrateReferencesToProjectFolders(): Promise<boolean> {
-    let changed = false;
-
-    this.canvases = await Promise.all(
-      this.canvases.map(async (canvas) => {
-        const project = this.getProjectForCanvas(canvas.id);
-        if (!project) return canvas;
-
-        let canvasChanged = false;
-        const referencesDir = path.join(
-          this.folioRoot,
-          project.folderPath,
-          REFERENCES_DIR_NAME,
-        );
-        await fs.mkdir(referencesDir, { recursive: true });
-
-        const references = await Promise.all(
-          (canvas.references ?? []).map(async (reference) => {
-            const sourcePath = this.archiveManager.getAbsolutePath(reference.path);
-            if (!(await this.fileExists(sourcePath))) return reference;
-
-            if (this.isFlatFileInDirectory(sourcePath, referencesDir)) {
-              return reference;
-            }
-
-            const destPath = await this.moveFileToDirectory(
-              sourcePath,
-              referencesDir,
-              reference.filename || path.basename(reference.path),
-            );
-            const nextReference = {
-              ...reference,
-              filename: path.basename(destPath),
-              path: path.relative(this.folioRoot, destPath),
-            };
-            canvasChanged = true;
-            return nextReference;
-          }),
-        );
-
-        if (!canvasChanged) return canvas;
-        changed = true;
-        return { ...canvas, references };
-      }),
-    );
-
-    return changed;
+    return itemsChanged;
   }
 
   private async ensureMediaDirectories(): Promise<void> {
@@ -1129,7 +1002,7 @@ export class FolioManager implements FolioManagerInterface {
     await this.removeGeneratedWorksDirectory(path.join(this.folioRoot, WORKS_DIR_NAME));
     await this.removeDirectoryIfEmpty(path.join(this.folioRoot, WORKS_DIR_NAME));
     await this.removeEmptyDirectoryTree(
-      path.join(this.folioRoot, REFERENCES_DIR_NAME),
+      path.join(this.folioRoot, LEGACY_REFERENCES_DIR_NAME),
     );
 
     await Promise.all(
@@ -1139,7 +1012,7 @@ export class FolioManager implements FolioManagerInterface {
         await Promise.all(
           project.boardIds.map((boardId) =>
             this.removeDirectoryIfEmpty(
-              path.join(projectRoot, "boards", boardId, REFERENCES_DIR_NAME),
+              path.join(projectRoot, "boards", boardId, LEGACY_REFERENCES_DIR_NAME),
             ),
           ),
         );
@@ -1395,7 +1268,6 @@ export class FolioManager implements FolioManagerInterface {
     await Promise.all([
       fs.mkdir(path.join(projectRoot, IMAGES_DIR_NAME), { recursive: true }),
       fs.mkdir(path.join(projectRoot, WORKS_DIR_NAME), { recursive: true }),
-      fs.mkdir(path.join(projectRoot, REFERENCES_DIR_NAME), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "boards"), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "reviews"), { recursive: true }),
       ...project.boardIds.map((boardId) =>
@@ -1414,6 +1286,27 @@ export class FolioManager implements FolioManagerInterface {
     }
 
     return changed;
+  }
+
+  private removeLegacyCanvasReferences(): boolean {
+    let changed = false;
+
+    this.canvases = this.canvases.map((canvas) => {
+      const legacyCanvas = canvas as Canvas & { references?: unknown };
+      if (!Object.prototype.hasOwnProperty.call(legacyCanvas, "references")) {
+        return canvas;
+      }
+      changed = true;
+      return this.stripLegacyCanvasReferences(canvas);
+    });
+
+    return changed;
+  }
+
+  private stripLegacyCanvasReferences(canvas: Canvas): Canvas {
+    const nextCanvas = { ...canvas } as Canvas & { references?: unknown };
+    delete nextCanvas.references;
+    return nextCanvas;
   }
 
   private async syncProjectReviewFiles(project: Project): Promise<void> {

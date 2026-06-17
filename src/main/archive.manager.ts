@@ -10,7 +10,6 @@ import {
 } from "../helpers";
 import { SCHEMA_VERSION } from "../constants";
 import type {
-  CanvasReference,
   FolioItem,
   ImportSource,
   ItemType,
@@ -33,7 +32,6 @@ interface ImportResult {
 
 const PLACEHOLDER_SVG_BY_TYPE: Record<ItemType, string> = {
   sketch: "Sketch",
-  ref: "Reference",
   music: "Audio",
   anim: "Motion",
   text: "Text",
@@ -42,7 +40,6 @@ const PLACEHOLDER_SVG_BY_TYPE: Record<ItemType, string> = {
 const THUMBNAIL_JPEG_QUALITY = 72;
 const THUMBNAIL_SIZE = 320;
 const IMAGES_DIR_NAME = "images";
-const REFERENCES_DIR_NAME = "references";
 
 /**
  * ArchiveManager handles filesystem-level operations for the media archive:
@@ -66,6 +63,10 @@ export class ArchiveManager {
     this.items = items.map((item) => ({
       ...item,
       type: normalizeArchiveItemType(item.type),
+      stage:
+        (item.stage as string | undefined) === "reference"
+          ? undefined
+          : item.stage,
       tagIds: item.tagIds ?? [],
       description: item.description ?? "",
     }));
@@ -216,38 +217,6 @@ export class ArchiveManager {
     return destPath;
   }
 
-  async copyReferences(
-    projectFolderPath: string,
-    filePaths: string[],
-  ): Promise<CanvasReference[]> {
-    const destDir = this.projectReferencesDirectory(projectFolderPath);
-    await fs.mkdir(destDir, { recursive: true });
-
-    const references: CanvasReference[] = [];
-    for (const filePath of filePaths) {
-      const originalExt = path.extname(filePath);
-      const ext = originalExt.toLowerCase();
-      const filename = path.basename(filePath, originalExt);
-      const destPath = await this.saveToDirectory(
-        { kind: "path", filePath },
-        filename,
-        ext,
-        destDir,
-      );
-
-      references.push({
-        id: nanoid(),
-        filename: path.basename(destPath),
-        path: path.relative(this.folioRoot, destPath),
-        ...readImageDimensionsForFile(destPath),
-        x: 0,
-        y: 0,
-      });
-    }
-
-    return references;
-  }
-
   public isRecentlyCopied(filePath: string): boolean {
     return this.recentlyCopied.has(path.resolve(filePath));
   }
@@ -288,44 +257,6 @@ export class ArchiveManager {
     }
 
     return urls;
-  }
-
-  public async ensureReferenceThumbnail(
-    referenceId: string,
-    relativeOrAbsolutePath: string,
-  ): Promise<string> {
-    const thumbPath = this.getReferenceThumbnailPath(referenceId, "jpg");
-    const placeholderPath = this.getReferenceThumbnailPath(referenceId, "svg");
-
-    if (await exists(thumbPath)) return this.getThumbnailUrl(thumbPath);
-
-    const sourcePath = this.getAbsolutePath(relativeOrAbsolutePath);
-    if (!(await exists(sourcePath))) {
-      if (!(await exists(placeholderPath))) {
-        await this.writeReferencePlaceholderThumbnail(placeholderPath);
-      }
-      return this.getThumbnailUrl(placeholderPath);
-    }
-
-    await fs.mkdir(path.dirname(thumbPath), { recursive: true });
-
-    try {
-      const thumb = await nativeImage.createThumbnailFromPath(sourcePath, {
-        width: THUMBNAIL_SIZE,
-        height: THUMBNAIL_SIZE,
-      });
-
-      if (thumb.isEmpty()) {
-        await this.writeReferencePlaceholderThumbnail(placeholderPath);
-        return this.getThumbnailUrl(placeholderPath);
-      }
-
-      await fs.writeFile(thumbPath, thumb.toJPEG(THUMBNAIL_JPEG_QUALITY));
-      return this.getThumbnailUrl(thumbPath);
-    } catch {
-      await this.writeReferencePlaceholderThumbnail(placeholderPath);
-      return this.getThumbnailUrl(placeholderPath);
-    }
   }
 
   public async getFileDataUrl(relativeOrAbsolutePath: string): Promise<string> {
@@ -579,10 +510,6 @@ export class ArchiveManager {
     return path.join(this.folioRoot, projectFolderPath, IMAGES_DIR_NAME);
   }
 
-  private projectReferencesDirectory(projectFolderPath: string): string {
-    return path.join(this.folioRoot, projectFolderPath, REFERENCES_DIR_NAME);
-  }
-
   private isFlatFileInDirectory(filePath: string, directory: string): boolean {
     return path.resolve(path.dirname(filePath)) === path.resolve(directory);
   }
@@ -658,7 +585,7 @@ export class ArchiveManager {
     const sourcePath = this.getAbsolutePath(item.path);
     const sourceExists = await exists(sourcePath);
 
-    if (!sourceExists || !["sketch", "ref", "anim"].includes(item.type)) {
+    if (!sourceExists || !["sketch", "anim"].includes(item.type)) {
       const placeholderPath = this.getPlaceholderPath(item);
       await this.writePlaceholderThumbnail(item, placeholderPath);
       return placeholderPath;
@@ -696,21 +623,9 @@ export class ArchiveManager {
     await fs.writeFile(thumbPath, svg, "utf-8");
   }
 
-  private async writeReferencePlaceholderThumbnail(thumbPath: string) {
-    await fs.mkdir(path.dirname(thumbPath), { recursive: true });
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
-  <rect width="400" height="400" fill="#f3efe7"/>
-  <rect x="42" y="42" width="316" height="316" rx="22" fill="#fffdf8" stroke="#d7c9b4" stroke-width="2"/>
-  <path d="M112 256 L176 192 L218 232 L258 184 L304 256 Z" fill="none" stroke="#9f6b3d" stroke-width="12" stroke-linejoin="round"/>
-  <circle cx="150" cy="146" r="20" fill="#385d56"/>
-  <text x="200" y="316" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="32" fill="#6b5a48">Reference</text>
-</svg>`;
-    await fs.writeFile(thumbPath, svg, "utf-8");
-  }
-
   private getPrimaryThumbnailPath(item: FolioItem): string {
     const thumbsDir = path.join(this.folioRoot, ".folio", "thumbs");
-    if (!["sketch", "ref", "anim"].includes(item.type)) {
+    if (!["sketch", "anim"].includes(item.type)) {
       return path.join(thumbsDir, `${item.id}-small.svg`);
     }
     return path.join(thumbsDir, `${item.id}-small.jpg`);
@@ -718,19 +633,6 @@ export class ArchiveManager {
 
   private getPlaceholderPath(item: FolioItem): string {
     return path.join(this.folioRoot, ".folio", "thumbs", `${item.id}-small.svg`);
-  }
-
-  private getReferenceThumbnailPath(
-    referenceId: string,
-    extension: "jpg" | "svg",
-  ) {
-    const safeId = sanitizeFileBaseName(referenceId);
-    return path.join(
-      this.folioRoot,
-      ".folio",
-      "thumbs",
-      `reference-${safeId}-small.${extension}`,
-    );
   }
 
   private getThumbnailUrl(thumbPath: string): string {

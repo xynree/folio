@@ -45,7 +45,6 @@ function formatReviewTimestamp(value: string): string {
 function kindLabel(entry: ProjectTimelineEntry): string {
   if (entry.kind === "work") return "Work";
   if (entry.kind === "review") return "Review";
-  if (entry.kind === "reference") return "Reference";
   if (entry.kind === "note") return "Note";
   if (entry.kind === "relationship") return "Relationship";
   return "Image";
@@ -128,7 +127,6 @@ export function ProjectReviewView({
     ["Reviews", String(review.recap.reviewCount)],
     ["Images", String(review.recap.imageCount)],
     ["Boards", String(review.recap.boardCount)],
-    ["References", String(review.recap.referenceCount)],
     ["Active days", String(review.recap.activeDays)],
     ["First image", formatShortDate(review.recap.firstImageDate)],
     ["Latest saved", formatShortDate(review.recap.latestSavedDate)],
@@ -426,6 +424,56 @@ function ProjectTimeline({
                 }
 
                 const entry = row.entry;
+                const workGridItems = entry.kind === "work"
+                  ? (entry.itemIds ?? [])
+                      .map((itemId) => itemById.get(itemId))
+                      .filter((item): item is FolioItem => Boolean(item))
+                  : [];
+
+                if (workGridItems.length) {
+                  return (
+                    <li
+                      className="project-timeline-entry project-timeline-image-grid-entry project-timeline-work-grid-entry"
+                      key={entry.id}
+                    >
+                      <span className="project-timeline-kind">{kindLabel(entry)}</span>
+                      <div className="project-timeline-copy">
+                        <strong>{entry.title}</strong>
+                        <span>{entry.detail}</span>
+                        <div
+                          className="project-timeline-image-grid"
+                          aria-label={`${entry.title} added to work`}
+                        >
+                          {workGridItems.map((item) => (
+                            <figure
+                              className="project-timeline-thumb"
+                              key={item.id}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Edit ${itemTitle(item)}`}
+                              onDoubleClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                onOpenItem(item.id);
+                              }}
+                              onKeyDown={(event) =>
+                                openItemFromKeyboard(event, item.id, onOpenItem)
+                              }
+                            >
+                              <LazyThumbnail
+                                item={item}
+                                thumbUrls={thumbUrls}
+                                setThumbUrls={setThumbUrls}
+                              />
+                              <figcaption>{itemTitle(item)}</figcaption>
+                            </figure>
+                          ))}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                }
+
                 const item = entry.itemId ? itemById.get(entry.itemId) : null;
                 const workItem = entry.kind === "work" && item ? item : null;
                 return (

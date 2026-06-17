@@ -6,7 +6,7 @@ import type {
   CanvasPosition,
 } from "../../types";
 
-export type CanvasObjectKind = "item" | "reference" | "note" | "text";
+export type CanvasObjectKind = "item" | "note" | "text";
 
 export type CanvasTool = "select" | "pen" | "eraser" | "text";
 

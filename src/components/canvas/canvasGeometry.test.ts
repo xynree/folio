@@ -70,12 +70,6 @@ describe("canvas geometry helpers", () => {
       }),
     ).toEqual({ width: 190, height: 95 });
     expect(
-      sizeForCanvasImageObject("reference", { x: 0, y: 0 }, {
-        width: 900,
-        height: 1200,
-      }),
-    ).toEqual({ width: 143, height: 190 });
-    expect(
       sizeForCanvasImageObject("item", { x: 0, y: 0, width: 240 }, {
         width: 400,
         height: 200,

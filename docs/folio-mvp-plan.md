@@ -30,7 +30,7 @@ The design should preserve these principles:
 
 ## Current product read
 
-The completed MVP already provides the archive foundation, local import pipeline, thumbnail cache, daily strip, heatmap, tags, board browser, draggable board cards, notes, and board-local references. Conceptually, it is strongest as a grouped archive and early spatial board tool.
+The completed MVP already provides the archive foundation, local import pipeline, thumbnail cache, daily strip, heatmap, tags, board browser, draggable board cards, notes, and project-image placement on boards. Conceptually, it is strongest as a grouped archive and early spatial board tool.
 
 The next gap is not raw file handling. The next gap is making **Projects** the first-screen organizing model: a user can create any number of projects, import or paste images into a project, promote selected images into Works, and create project boards that use those images.
 
@@ -47,7 +47,7 @@ The next gap is not raw file handling. The next gap is making **Projects** the f
 
 ### 1.2 Define folder structure and JSON schema
 
-- [x] Create `~/Documents/Folio/projects/` and per-project `images/`, `works/`, `references/`, `boards/`, and `reviews/` folders
+- [x] Create `~/Documents/Folio/projects/` and per-project `images/`, `works/`, `boards/`, and `reviews/` folders
 - [x] Create `~/Documents/Folio/.folio/thumbs/` on first launch if it doesn't exist
 - [x] Define and document the split JSON schema (folio.json, tags.json, canvases.json)
 - [x] Write TypeScript types for the full schema (`src/types/`, imported by both main and renderer)
@@ -61,8 +61,6 @@ The next gap is not raw file handling. The next gap is making **Projects** the f
         hand-gestures.png
       works/
         figure-study-5-<item-id>.jpg
-      references/
-        palette-reference.png
       boards/
         <board-id>/
       reviews/
@@ -89,11 +87,11 @@ window.folio.getFolioData();
 window.folio.saveFolioData(data);
 window.folio.copyToFolio(filePaths);
 window.folio.importToFolio();
-window.folio.copyReference(canvasId, filePaths);
+window.folio.copyToProject(projectId, filePaths);
+window.folio.importToProject(projectId);
 window.folio.deleteItems(itemIds);
 window.folio.openFileDialog();
 window.folio.ensureThumbnails(itemIds);
-window.folio.ensureReferenceThumbnail(referenceId, filePath);
 window.folio.getFileDataUrl(filePath);
 window.folio.getReconciliationResult(); // called once on launch by renderer
 window.folio.openInFinder(filePath);
@@ -116,10 +114,10 @@ window.folio.onFilesAdded(callback);
 - [x] `saveFolioData()`: atomic writes — split data and write to respective `.json.tmp` files, then rename over target files; the OS-level rename is the crash guard
 - [x] `copyToFolio()`: route legacy import calls into the default project and copy files to `projects/<project>/images/<sanitized-name>.<ext>`, handling name collisions with `_2`, `_3` suffix
 - [x] `computeHash(filePath)`: read first 64KB of file, return 8-char hex hash using Node's built-in `crypto.createHash('sha256')` — fast enough for large files, unique enough for a personal archive
-- [x] `copyReference()`: copy files to `projects/<project>/references/`
-- [x] Imported archive images and board-local references store optional natural image dimensions for proportional board card sizing
+- [x] Project image imports copy files to `projects/<project>/images/`
+- [x] Imported archive and project images store optional natural image dimensions for proportional board card sizing
 - [x] `loadFolioData()`: read all three `.json` files in parallel on startup; if missing, create fresh empty schemas via `initialize()`
-- [x] File sanitization helper: lowercase, spaces → hyphens, strip special characters (shared utility used by both `copyToFolio` and `copyReference`)
+- [x] File sanitization helper: lowercase, spaces → hyphens, strip special characters
 
 ### 1.6 Launch reconciliation
 
@@ -136,9 +134,7 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 - [x] Use `nativeImage.createThumbnailFromPath(path, { width: 320, height: 320 })` — built into Electron, no extra dependency
 - [x] Write generated archive thumbnails to `~/Documents/Folio/.folio/thumbs/<id>-small.jpg` via `thumb.toJPEG(72)`
-- [x] Write generated reference thumbnails to `~/Documents/Folio/.folio/thumbs/reference-<reference-id>-small.jpg`
 - [x] `ensureThumbnails(ids[])`: skip already-cached items, process missing ones sequentially, and repair missing flags when files have reappeared
-- [x] `ensureReferenceThumbnail(referenceId, path)`: generate a small cache image for canvas-only reference files
 - [x] For audio, text, unsupported media, and missing files: create static SVG placeholders in the thumbs cache
 - [x] Renderer loads thumbnails from the main-process `folio://thumb/...` protocol so dev-server origins do not block local media
 - [x] Renderer batches visible thumbnail requests in `LazyThumbnail` so many cards entering the viewport do not fan out into one IPC call per card
@@ -232,7 +228,7 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [x] Boards view opens to either a board browser grid or a focused active board
 - [x] Board browser cards show colored dot, board name, item count, and member thumbnail preview grid (max 8)
 - [x] Board browser contains the New board action; focused boards have a back button that returns to the browser
-- [x] Focused board header shows Add note, Add reference, Import images, drawing/text tools, folder, undo, and Edit actions in one row
+- [x] Focused board header shows Add note, Import images, drawing/text tools, folder, undo, and Edit actions in one row
 - [x] Board edit popover supports rename, color picker, save, and delete board
 - [x] Canvas dots shown under strip/grid thumbnails (one smaller colored dot per board membership)
 - [x] Board chips shown in detail modal
@@ -245,7 +241,7 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 - [x] Canvas boards live in the project sidebar's Boards view, not in a persistent side dock beside the archive
 - [x] Board browser shows all boards and creates new boards
-- [x] Opening a board loads its items, positions, notes, and references exactly as left
+- [x] Opening a board loads its items, positions, notes, text, strokes, and edges exactly as left
 - [x] Header shows board name, colored dot, created/saved timestamps, and board actions
 - [x] Switching boards loads persisted state from `canvases.json`
 
@@ -268,25 +264,21 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 - [x] Empty note on blur: auto-delete
 - [x] Notes saved to `canvas.notes[]` in `canvases.json`
 
-### 3.4 References on the canvas
+### 3.4 Project images on the canvas
 
-Reference images belong to a canvas, not to items. They are first-class positionable objects on the canvas surface — drag them around alongside items and notes.
+Images dropped onto boards are imported into the project first, then added to the board as reusable project image cards.
 
-- [x] Drop image files directly onto the canvas to add a reference at the drop position
+- [x] Drop image files directly onto the canvas to import project images and place them at the drop position
 - [x] Import images button in the focused board header imports archive items directly onto the active board
-- [x] Browse reference button: `window.folio.openFileDialog()` → `copyReference(canvasId, paths)` — drops new reference at a default position near the centre of the current viewport
-- [x] References copy to `projects/<project>/references/` on disk, never into the project image library
-- [x] Reference card on canvas: generated small thumbnail, pinned remove button, and drag-anywhere behavior
-- [x] Reference thumbnails render from `ensureReferenceThumbnail(referenceId, path)` on the board surface instead of falling back to full source files
-- [x] Reference cards can be moved freely like item cards — position saved to `canvas.references[].x/y`
-- [x] Edges can connect reference cards to item cards, notes, and text elements through the shared `CanvasEdge` mechanism
+- [x] Project image cards use generated small thumbnails and can be dragged, resized, removed from the board, and connected to notes or text
+- [x] Board membership stays in `canvas.itemIds[]` and item positions stay in `canvas.positions`
 
 ### 3.5 Edges and side connectors
 
 - [x] Each card-like canvas object exposes FigJam-style side connector nodes at the middle of the top, right, bottom, and left edges
-- [x] Connector nodes work for archive item cards, reference cards, notes, and board text elements
+- [x] Connector nodes work for archive item cards, notes, and board text elements
 - [x] Drag from one connector node to another to draw a connection edge
-- [x] Hold Shift and drag from one item, note, reference, or text card to another as a shortcut to draw a connection edge
+- [x] Hold Shift and drag from one item, note, or text card to another as a shortcut to draw a connection edge
 - [x] Edge renders as a derived SVG curve between the selected sides, with an optional label
 - [x] Edge direction can be changed between no direction, single direction, and bidirectional; single-arrow links can be reversed from the selected-link toolbar
 - [x] Click an edge to select it; double-click to edit the label inline
@@ -320,7 +312,7 @@ This phase turns the current archive and board system into a project-based creat
 - [x] Open the app to a Projects view that lists all projects instead of opening directly to the archive/board workspace.
 - [x] Let the user create any number of projects from the Projects view.
 - [x] Project creation should create a readable folder at `~/Documents/Folio/projects/<project-slug-or-id>/`.
-- [x] Each project folder should include `images/`, `works/`, `references/`, `boards/`, and `reviews/` subfolders.
+- [x] Each project folder should include `images/`, `works/`, `boards/`, and `reviews/` subfolders.
 - [x] Add a migration path that creates a default project for existing archive items and existing canvases.
 - [x] Assign existing canvases to the default project with `canvas.projectId` and `project.boardIds`.
 - [x] Define project as a personal studio container, not a collaborative workspace; avoid collaborator, owner, assignee, review-request, comment-thread, or approval concepts.
@@ -343,17 +335,17 @@ This phase turns the current archive and board system into a project-based creat
 - [x] Works should represent the actual pieces of work being tracked, not every captured reference or process image.
 - [x] Keep Works lightweight: promoting to Works should not force stage, tag, title, or board assignment decisions.
 - [x] Add a user-accessible `works/` folder representation for promoted Works, while keeping canonical membership in `projects.json` so it can be reconciled.
-- [x] Add item `stage`: `reference`, `sketch`, `wip`, `process`, `final`, `note`, `other` only after Works membership exists, so stage does not carry the burden of identifying Works.
+- [x] Add item `stage`: `sketch`, `wip`, `process`, `final`, `note`, `other` only after Works membership exists, so stage does not carry the burden of identifying Works.
 
 ### 4.4 Project boards
 
 - [x] Let each project have any number of boards.
 - [x] Scope the board browser to the active project by `Project.boardIds` and `canvas.projectId`.
 - [x] Creating a board from inside a project should create a `Canvas` owned by that project.
-- [x] Existing canvas behavior remains the project board surface: draggable image cards, notes, board text, references, strokes, and edges.
+- [x] Existing canvas behavior remains the project board surface: draggable image cards, notes, board text, strokes, and edges.
 - [x] Any image in `Project.imageIds` should be available to place on any board in that project.
 - [x] Existing project images are available in a scrollable tray beside the focused board, with Added/Missing states.
-- [x] Board references should save under `projects/<project>/references/` while board membership remains in `canvases.json`.
+- [x] Board media should come from reusable project images while board membership remains in `canvases.json`.
 - [x] Keep board headers focused on created/saved timestamps and board actions, not object counts.
 - [ ] Board edit UI can expose board kind, status, brief, and outcome later without cluttering quick rename/color editing.
 
@@ -369,9 +361,9 @@ This phase turns the current archive and board system into a project-based creat
 ### 4.6 Project review and progress timeline
 
 - [x] Add a project detail/timeline view from the owning `Project`, not from a single board.
-- [x] Timeline should combine project images, Works, board references, notes, review documents, and relationship changes in chronological order.
+- [x] Timeline should combine project images, Works, notes, review documents, and relationship changes in chronological order.
 - [x] Group timeline entries by day, week, or milestone depending on density.
-- [x] Add project recap metadata: image count, Works count, review count, board count, reference count, active days, first image date, latest saved date.
+- [x] Add project recap metadata: image count, Works count, review count, board count, active days, first image date, latest saved date.
 - [x] Expand heatmap meaning from upload volume to Works activity in the project Works view.
 - [x] Keep review timeline entries focused on project progress, with image activity shown as thumbnail grids instead of board-jump actions.
 - [x] Add relationship type `version-of` or a dedicated `ItemRevisionGroup` to connect iterations of the same work.
@@ -381,17 +373,17 @@ This phase turns the current archive and board system into a project-based creat
 
 ## Phase 5 — Reference graph: Pinterest-like collection and explicit links
 
-This phase makes references and inspiration first-class. The goal is to move from boards that merely contain images to boards that explain why things are related.
+This phase would make references and inspiration first-class again if the product needs a dedicated inspiration library. Current Folio treats inspiration images as normal project images so they remain reusable across All Images, Works, Boards, and Review.
 
 ### 5.1 Reference capture
 
-- [x] Finish Browse reference button: `window.folio.openFileDialog()` -> `copyReference(canvasId, paths)` -> place at the center of the visible canvas viewport.
+- [x] Retire board-local reference capture in favor of importing images into the project All Images list before board placement.
 - [ ] Add paste-from-clipboard support for images and copied files.
 - [ ] Add URL reference capture: store URL, title, source domain, optional image, and captured date.
 - [ ] Add reference metadata: `sourceUrl`, `sourceTitle`, `author`, `capturedAt`, `notes`, and `tagIds`.
-- [ ] Decide whether board-local references can be added to project Images; support "Add to project images" if yes.
+- [ ] If a future reference library exists, support saving selected references into project Images.
 - [ ] Add reference detail modal parallel to item detail modal.
-- [ ] Add "reference inbox" for captured references not yet assigned to a project board.
+- [ ] Add an optional inspiration inbox only if references need to exist before project assignment.
 
 ### 5.2 Edge drawing and rendering
 
@@ -452,7 +444,7 @@ This phase improves the canvas as a thinking surface so complex boards stay read
 - [ ] Add marquee/lasso selection on the canvas.
 - [ ] Allow moving multiple selected canvas objects together.
 - [ ] Add align left, align top, distribute horizontal, distribute vertical, and tidy grid actions.
-- [ ] Add duplicate and remove actions for selected notes/references.
+- [ ] Add duplicate and remove actions for selected notes and text elements.
 - [ ] Add keyboard shortcuts for delete, escape, zoom reset, and fit to content.
 - [ ] Add "fit board to content" and "zoom to selection".
 
@@ -462,7 +454,7 @@ This phase improves the canvas as a thinking surface so complex boards stay read
 - [ ] Add zoom controls in the board header or corner overlay.
 - [ ] Add saved viewport per board so returning to a board restores the last useful area.
 - [ ] Add "jump to latest" and "jump to reviewed Work" actions.
-- [ ] Add search-within-board that highlights matching cards, notes, references, and labels.
+- [ ] Add search-within-board that highlights matching cards, notes, text elements, and labels.
 
 ### 6.4 Board templates
 
@@ -516,7 +508,7 @@ These ideas should not block the project workspace and reference graph MVP, but 
 - [ ] Export selected work and references into a portable folder with metadata JSON.
 - [ ] Add "presentation mode" for a board: clean view, hide controls, step through sections or reviewed Works.
 - [ ] Add printable project review summaries.
-- [ ] Add "Show project images", "Show project Works", and "Show board references" actions that open Finder to the folders related to the project.
+- [ ] Add scoped folder actions only for current project folders that need direct Finder access.
 
 ### 8.2 Sync and portability
 
@@ -560,7 +552,6 @@ These ideas should not block the project workspace and reference graph MVP, but 
 - [x] Strip, grid, board previews, and canvas image cards use generated small thumbnails instead of loading full source files
 - [x] Visible thumbnail requests are batched in the renderer before crossing IPC
 - [x] Board browser prefetches preview thumbnails in one batch and disables duplicate per-card requests for those previews
-- [x] Canvas references use `ensureReferenceThumbnail` instead of loading original reference images for every render
 - [x] Split JSON state read once at startup, kept in memory, written only on change
 - [x] `recentlyCopied` is an in-memory `Set<string>` on the main process; entries are added by `copyToFolio()` and auto-deleted after 2 seconds via `setTimeout`
 - [x] File watcher debounced at 300ms

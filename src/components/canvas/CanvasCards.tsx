@@ -4,7 +4,6 @@ import type {
   CanvasConnectionSide,
   CanvasNote,
   CanvasObjectGeometry,
-  CanvasReference,
   CanvasTextElement,
   CanvasTextSize,
   FolioItem,
@@ -148,80 +147,6 @@ export function CanvasItemCard({
       <ResizeCorner label={label} onPointerDown={onResizePointerDown} />
       <ConnectionHandles
         label={label}
-        onConnectorPointerDown={onConnectorPointerDown}
-      />
-    </div>
-  );
-}
-
-export function ReferenceCard({
-  reference,
-  position,
-  onRemove,
-  onConnectorPointerDown,
-  onPointerDown,
-  onResizePointerDown,
-  onClickCapture,
-}: {
-  reference: CanvasReference;
-  position: CanvasObjectGeometry;
-  onRemove: (referenceId: string) => void;
-  onConnectorPointerDown: ConnectorPointerDownHandler;
-  onPointerDown: (event: React.PointerEvent) => void;
-  onResizePointerDown: ResizePointerDownHandler;
-  onClickCapture: (event: React.MouseEvent) => void;
-}) {
-  const [src, setSrc] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setSrc(null);
-    window.folio
-      .ensureReferenceThumbnail(reference.id, reference.path)
-      .then((url) => {
-        if (!cancelled) setSrc(url);
-      })
-      .catch((error) => console.error(error));
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reference.id, reference.path]);
-
-  return (
-    <div
-      className="canvas-card reference-card"
-      data-canvas-object-id={reference.id}
-      data-canvas-object-kind="reference"
-      style={objectCardStyle("reference", position)}
-      onPointerDown={onPointerDown}
-      onClickCapture={onClickCapture}
-    >
-      <span className="thumb-shell">
-        {src ? (
-          <img loading="lazy" src={src} alt="" draggable={false} />
-        ) : (
-          <span className="thumb-placeholder">Ref</span>
-        )}
-      </span>
-      <button
-        className="icon-button canvas-card-remove-button"
-        type="button"
-        aria-label={`Remove ${reference.filename}`}
-        title="Remove reference"
-        onClick={(event) => {
-          event.stopPropagation();
-          onRemove(reference.id);
-        }}
-      >
-        <ButtonIcon icon={X} />
-      </button>
-      <ResizeCorner
-        label={reference.filename}
-        onPointerDown={onResizePointerDown}
-      />
-      <ConnectionHandles
-        label={reference.filename}
         onConnectorPointerDown={onConnectorPointerDown}
       />
     </div>

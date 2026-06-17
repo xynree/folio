@@ -8,7 +8,6 @@ import {
   deleteCanvasTextElement,
   eraseCanvasStrokesAtPoint,
   moveCanvasObject,
-  removeCanvasReference,
   removeCanvasStrokes,
   removeItemFromCanvas,
   removeLastCanvasStroke,
@@ -46,13 +45,10 @@ function canvasFixture(): Canvas {
       {
         id: "edge-2",
         fromId: "item-2",
-        toId: "reference-1",
+        toId: "text-1",
         fromSide: "bottom",
         toSide: "top",
       },
-    ],
-    references: [
-      { id: "reference-1", filename: "ref.png", path: "refs/ref.png", x: 40, y: 50 },
     ],
     strokes: [{ id: "stroke-1", color: "#111111", path: "M 0 0 L 10 10" }],
     texts: [{ id: "text-1", text: "Caption", x: 60, y: 70 }],
@@ -96,14 +92,7 @@ describe("canvas model helpers", () => {
       updateCanvasTextElementSize(updatedCanvas, "text-1", "large").texts?.[0]
         .size,
     ).toBe("large");
-    expect(deleteCanvasTextElement(updatedCanvas, "text-1").edges).toHaveLength(2);
-  });
-
-  it("removes references with their connected links", () => {
-    const nextCanvas = removeCanvasReference(canvasFixture(), "reference-1");
-
-    expect(nextCanvas.references).toEqual([]);
-    expect(nextCanvas.edges.map((edge) => edge.id)).toEqual(["edge-1"]);
+    expect(deleteCanvasTextElement(updatedCanvas, "text-1").edges).toHaveLength(1);
   });
 
   it("adds and removes strokes", () => {
@@ -169,7 +158,7 @@ describe("canvas model helpers", () => {
     expect(unlabeledCanvas.edges[0].label).toBeUndefined();
     expect(edge).toEqual(
       expect.objectContaining({
-        fromId: "reference-1",
+        fromId: "text-1",
         toId: "item-2",
         fromSide: "top",
         toSide: "bottom",
@@ -207,10 +196,6 @@ describe("canvas model helpers", () => {
       ],
     ).toEqual({ x: 11, y: 12 });
     expect(
-      moveCanvasObject(canvas, "reference", "reference-1", { x: 21, y: 22 })
-        .references[0],
-    ).toEqual(expect.objectContaining({ x: 21, y: 22 }));
-    expect(
       moveCanvasObject(canvas, "note", "note-1", { x: 31, y: 32 }).notes[0],
     ).toEqual(expect.objectContaining({ x: 31, y: 32 }));
     expect(
@@ -224,12 +209,6 @@ describe("canvas model helpers", () => {
       "item",
       "item-1",
       { width: 240, height: 280 },
-    );
-    const resizedReferenceCanvas = resizeCanvasObject(
-      canvasFixture(),
-      "reference",
-      "reference-1",
-      { width: 260, height: 320 },
     );
     const resizedNoteCanvas = resizeCanvasObject(
       canvasFixture(),
@@ -249,10 +228,6 @@ describe("canvas model helpers", () => {
       y: 20,
       width: 240,
       height: 280,
-    });
-    expect(resizedReferenceCanvas.references[0]).toMatchObject({
-      width: 260,
-      height: 320,
     });
     expect(resizedNoteCanvas.notes[0]).toMatchObject({
       width: 280,

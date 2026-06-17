@@ -159,7 +159,6 @@ export function createCanvas(
     positions: {},
     notes: [],
     edges: [],
-    references: [],
     strokes: [],
     texts: [],
   };
@@ -229,6 +228,6 @@ export function canvasColorsForItem(
 }
 
 export function itemCanUseDirectPreview(item: FolioItem): boolean {
-  return !item.missing && ["sketch", "ref", "anim"].includes(item.type)
+  return !item.missing && ["sketch", "anim"].includes(item.type)
     && IMAGE_FILE_PATTERN.test(item.path);
 }

@@ -2,10 +2,10 @@ import path from "node:path";
 import type { ImportSource, ItemType } from "../types";
 
 export function normalizeArchiveItemType(type: string): ItemType {
-  if (type === "image") return "sketch";
+  if (type === "image" || type === "ref") return "sketch";
   if (type === "audio") return "music";
   if (type === "video") return "anim";
-  if (["sketch", "ref", "music", "anim", "text", "other"].includes(type)) {
+  if (["sketch", "music", "anim", "text", "other"].includes(type)) {
     return type as ItemType;
   }
   return "other";

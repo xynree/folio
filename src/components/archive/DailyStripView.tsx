@@ -18,14 +18,12 @@ export function DailyStripView({
   thumbUrls,
   setThumbUrls,
   selectedItemIds,
+  workItemIds = [],
   showDateGaps,
   onBackgroundClick,
   onDragStart,
   onItemOpen,
   onEditItem,
-  onAddTag,
-  onRemoveTag,
-  onDeleteItem,
 }: {
   items: FolioItem[];
   tags: Tag[];
@@ -33,14 +31,12 @@ export function DailyStripView({
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   selectedItemIds: string[];
+  workItemIds?: string[];
   showDateGaps: boolean;
   onBackgroundClick: () => void;
   onDragStart: (itemId: string, event: React.DragEvent<HTMLElement>) => void;
   onItemOpen: ItemOpenHandler;
   onEditItem: (itemId: string) => void;
-  onAddTag: (itemId: string, tagText: string) => void;
-  onRemoveTag: (itemId: string, tagText: string) => void;
-  onDeleteItem: (itemId: string) => void;
 }) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const groups = useMemo(() => groupItemsByDate(items), [items]);
@@ -56,6 +52,7 @@ export function DailyStripView({
     [dates, groups],
   );
   const selectedSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
+  const workItemSet = useMemo(() => new Set(workItemIds), [workItemIds]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
@@ -114,14 +111,12 @@ export function DailyStripView({
                     thumbUrls={thumbUrls}
                     setThumbUrls={setThumbUrls}
                     isSelected={selectedSet.has(item.id)}
+                    isWork={workItemSet.has(item.id)}
                     onDragStart={onDragStart}
                     onOpen={(itemId, event) =>
                       onItemOpen(itemId, event, visualOrderedItems, true)
                     }
                     onEdit={onEditItem}
-                    onAddTag={onAddTag}
-                    onRemoveTag={onRemoveTag}
-                    onDelete={onDeleteItem}
                   />
                 ))}
               </div>

@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, protocol } from "electron";
+import { app, BrowserWindow, dialog, protocol, session } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
 import { initialize } from "./main/initialize";
 import { FolioManager } from "./main/base.manager";
+import { installRendererContentSecurityPolicy } from "./main/security";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -63,6 +64,10 @@ app.on("ready", async () => {
     // Register window.folio IPC handlers
     manager.registerHandlers();
     manager.registerProtocol();
+    installRendererContentSecurityPolicy(
+      session.defaultSession,
+      MAIN_WINDOW_VITE_DEV_SERVER_URL,
+    );
 
     await manager.prepareForLaunch();
 

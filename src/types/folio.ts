@@ -17,10 +17,9 @@ export interface FolioData {
 }
 
 /** Supported media types in the archive */
-export type ItemType = "sketch" | "ref" | "music" | "anim" | "text" | "other";
+export type ItemType = "sketch" | "music" | "anim" | "text" | "other";
 
 export type ItemStage =
-  | "reference"
   | "sketch"
   | "wip"
   | "process"
@@ -37,6 +36,7 @@ export interface Project {
   status?: ProjectStatus;
   createdAt: string;
   updatedAt: string;
+  workUpdatedAt?: string;
   folderPath: string;
   imageIds: string[];
   workItemIds: string[];

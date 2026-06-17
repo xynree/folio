@@ -42,24 +42,18 @@ const thumbUrls: ThumbnailUrls = {
 
 function noopProps() {
   return {
-    onAddTag: vi.fn(),
     onBackgroundClick: vi.fn(),
-    onDeleteItem: vi.fn(),
     onDragStart: vi.fn(),
     onEditItem: vi.fn(),
     onItemOpen: vi.fn(),
-    onRemoveTag: vi.fn(),
     setThumbUrls: vi.fn(),
   };
 }
 
 describe("archive components", () => {
-  it("opens item cards and handles menu tag/edit/delete actions", async () => {
+  it("opens item cards and edits on double click without card overflow actions", () => {
     const onOpen = vi.fn();
     const onEdit = vi.fn();
-    const onAddTag = vi.fn();
-    const onRemoveTag = vi.fn();
-    const onDelete = vi.fn();
 
     render(
       <ItemCard
@@ -72,30 +66,15 @@ describe("archive components", () => {
         onDragStart={vi.fn()}
         onOpen={onOpen}
         onEdit={onEdit}
-        onAddTag={onAddTag}
-        onRemoveTag={onRemoveTag}
-        onDelete={onDelete}
       />,
     );
 
     fireEvent.click(screen.getAllByRole("button", { name: /Alpha/ })[0]);
     fireEvent.doubleClick(screen.getAllByRole("button", { name: /Alpha/ })[0]);
-    fireEvent.click(screen.getByLabelText("More actions for Alpha"));
-    fireEvent.mouseEnter(screen.getByText("Add tags"));
-    fireEvent.click(await screen.findByRole("menuitemcheckbox", { name: /sketch/ }));
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /reference/ }));
-    fireEvent.mouseEnter(screen.getByText("Edit"));
-    fireEvent.click(screen.getByText("Edit"));
-
-    fireEvent.click(screen.getByLabelText("More actions for Alpha"));
-    fireEvent.click(screen.getByText("Delete"));
 
     expect(onOpen).toHaveBeenCalledWith("alpha", expect.any(Object));
-    expect(onRemoveTag).toHaveBeenCalledWith("alpha", "sketch");
-    expect(onAddTag).toHaveBeenCalledWith("alpha", "reference");
     expect(onEdit).toHaveBeenCalledWith("alpha");
-    expect(onEdit).toHaveBeenCalledTimes(2);
-    expect(onDelete).toHaveBeenCalledWith("alpha");
+    expect(screen.queryByLabelText("More actions for Alpha")).toBeNull();
   });
 
   it("filters and expands tag sidebar thumbnails", async () => {
@@ -161,13 +140,11 @@ describe("archive components", () => {
         tagFilter="all"
         setTagFilter={setTagFilter}
         selectedItemIds={["alpha"]}
+        workItemIds={["alpha"]}
         onBackgroundClick={props.onBackgroundClick}
         onDragStart={props.onDragStart}
         onItemOpen={props.onItemOpen}
         onEditItem={props.onEditItem}
-        onAddTag={props.onAddTag}
-        onRemoveTag={props.onRemoveTag}
-        onDeleteItem={props.onDeleteItem}
       />,
     );
 
@@ -176,6 +153,7 @@ describe("archive components", () => {
         (node) => node.textContent,
       ),
     ).toEqual(["Bravo", "Alpha"]);
+    expect(screen.getAllByTitle("Marked as Work")).toHaveLength(1);
 
     fireEvent.change(screen.getByLabelText("Sort grid items"), {
       target: { value: "title" },
@@ -204,14 +182,12 @@ describe("archive components", () => {
         thumbUrls={thumbUrls}
         setThumbUrls={props.setThumbUrls}
         selectedItemIds={["bravo"]}
+        workItemIds={["alpha"]}
         showDateGaps={false}
         onBackgroundClick={props.onBackgroundClick}
         onDragStart={props.onDragStart}
         onItemOpen={props.onItemOpen}
         onEditItem={props.onEditItem}
-        onAddTag={props.onAddTag}
-        onRemoveTag={props.onRemoveTag}
-        onDeleteItem={props.onDeleteItem}
       />,
     );
 
@@ -221,6 +197,7 @@ describe("archive components", () => {
 
     expect(screen.getByText("Tue, Jun 16, 2026")).not.toBeNull();
     expect(screen.getByText("Mon, Jun 15, 2026")).not.toBeNull();
+    expect(screen.getAllByTitle("Marked as Work")).toHaveLength(1);
     expect(sessionStorage.getItem("folio:strip-scroll")).toBe("42");
   });
 
@@ -238,9 +215,6 @@ describe("archive components", () => {
         onDragStart={vi.fn()}
         onItemOpen={vi.fn()}
         onEditItem={vi.fn()}
-        onAddTag={vi.fn()}
-        onRemoveTag={vi.fn()}
-        onDeleteItem={vi.fn()}
       />,
     );
 

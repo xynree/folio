@@ -1,22 +1,15 @@
 import React, { useMemo, useState } from "react";
-import { FolderOpen, Plus } from "lucide-react";
-import type { FolioData, Project } from "../../types";
+import { Plus } from "lucide-react";
+import type { FolioData, FolioItem, Project, ThumbnailUrls } from "../../types";
 import { formatCount } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
+import { LazyThumbnail } from "../shared/LazyThumbnail";
+
+const PROJECT_PREVIEW_LIMIT = 3;
 
 function projectTime(project: Project): number {
   const time = Date.parse(project.updatedAt || project.createdAt);
   return Number.isNaN(time) ? 0 : time;
-}
-
-function formatProjectDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
 }
 
 function projectSortWeight(project: Project): number {
@@ -38,20 +31,26 @@ export function sortedProjects(projects: Project[]): Project[] {
 export function ProjectsView({
   data,
   busy,
+  thumbUrls,
+  setThumbUrls,
   onCreateProject,
-  onOpenFolder,
   onOpenProject,
 }: {
   data: FolioData;
   busy: boolean;
+  thumbUrls: ThumbnailUrls;
+  setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   onCreateProject: (title: string) => Promise<void>;
-  onOpenFolder: (project: Project) => void;
   onOpenProject: (projectId: string) => void;
 }) {
   const [titleDraft, setTitleDraft] = useState("");
   const projects = useMemo(
     () => sortedProjects(data.projects ?? []),
     [data.projects],
+  );
+  const itemsById = useMemo(
+    () => new Map(data.items.map((item) => [item.id, item])),
+    [data.items],
   );
 
   const createProject = async (event: React.FormEvent) => {
@@ -92,52 +91,62 @@ export function ProjectsView({
       {projects.length ? (
         <section className="projects-grid" aria-label="Projects">
           {projects.map((project) => {
-            const latestSaved = project.updatedAt || project.createdAt;
+            const usesWorkPreview = project.workItemIds.length > 0;
+            const previewItemIds = usesWorkPreview
+              ? project.workItemIds
+              : project.imageIds;
+            const memberItems = previewItemIds
+              .map((itemId) => itemsById.get(itemId))
+              .filter(Boolean) as FolioItem[];
+            const previewItems = memberItems.slice(0, PROJECT_PREVIEW_LIMIT);
+            const previewCount = Math.min(
+              previewItems.length,
+              PROJECT_PREVIEW_LIMIT,
+            );
+            const countNoun = usesWorkPreview ? "work" : "image";
             return (
-              <article className="project-card" key={project.id}>
-                <div className="project-card-main">
-                  <span className="project-status">{project.status ?? "active"}</span>
-                  <h2>{project.title}</h2>
-                  {project.description ? <p>{project.description}</p> : null}
-                  <dl>
-                    <div>
-                      <dt>Images</dt>
-                      <dd>{project.imageIds.length}</dd>
-                    </div>
-                    <div>
-                      <dt>Works</dt>
-                      <dd>{project.workItemIds.length}</dd>
-                    </div>
-                    <div>
-                      <dt>Boards</dt>
-                      <dd>{project.boardIds.length}</dd>
-                    </div>
-                  </dl>
-                </div>
-                <div className="project-card-footer">
-                  <span>
-                    Saved <time dateTime={latestSaved}>{formatProjectDate(latestSaved)}</time>
+              <article className="project-card canvas-board-tile" key={project.id}>
+                <button
+                  className="canvas-board-open-button"
+                  type="button"
+                  aria-label={`Open project ${project.title}, ${formatCount(
+                    previewItemIds.length,
+                    countNoun,
+                  )}`}
+                  onClick={() => onOpenProject(project.id)}
+                >
+                  <span
+                    className={`canvas-board-cover canvas-board-cover-${previewCount}`}
+                  >
+                    {previewItems.length ? (
+                      previewItems.map((item, index) => (
+                        <span
+                          className={`canvas-board-cover-slot canvas-board-cover-slot-${
+                            index + 1
+                          }`}
+                          key={item.id}
+                        >
+                          <LazyThumbnail
+                            item={item}
+                            thumbUrls={thumbUrls}
+                            setThumbUrls={setThumbUrls}
+                          />
+                        </span>
+                      ))
+                    ) : (
+                      <span className="canvas-board-cover-empty">
+                        <span className="canvas-board-cover-dot project-card-empty-dot" />
+                      </span>
+                    )}
                   </span>
-                  <span>{project.folderPath}</span>
-                </div>
-                <div className="project-card-actions">
-                  <button
-                    className="secondary-action project-open-folder-button"
-                    type="button"
-                    onClick={() => onOpenFolder(project)}
-                  >
-                    <ButtonIcon icon={FolderOpen} />
-                    Open folder
-                  </button>
-                  <button
-                    className="secondary-action project-open-button"
-                    type="button"
-                    onClick={() => onOpenProject(project.id)}
-                  >
-                    <ButtonIcon icon={FolderOpen} />
-                    Open project
-                  </button>
-                </div>
+                  <span className="canvas-board-tile-meta">
+                    <span className="canvas-board-tile-title">
+                      <span className="canvas-board-tile-dot project-card-kind-dot" />
+                      <strong title={project.title}>{project.title}</strong>
+                    </span>
+                    <small>{formatCount(previewItemIds.length, countNoun)}</small>
+                  </span>
+                </button>
               </article>
             );
           })}

@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
-  CanvasReference,
   FolioData,
   FolioItem,
   ImportSource,
@@ -47,12 +46,6 @@ const folioApi = {
   ): Promise<FolioData> =>
     ipcRenderer.invoke("folio:set-project-work-items", projectId, workItemIds),
 
-  copyReference: (
-    canvasId: string,
-    filePaths: string[],
-  ): Promise<CanvasReference[]> =>
-    ipcRenderer.invoke("folio:copy-reference", canvasId, filePaths),
-
   deleteItems: (itemIds: string[]): Promise<FolioData> =>
     ipcRenderer.invoke("folio:delete-items", itemIds),
 
@@ -61,12 +54,6 @@ const folioApi = {
 
   ensureThumbnails: (itemIds: string[]): Promise<ThumbnailUrls> =>
     ipcRenderer.invoke("folio:ensure-thumbnails", itemIds),
-
-  ensureReferenceThumbnail: (
-    referenceId: string,
-    filePath: string,
-  ): Promise<string> =>
-    ipcRenderer.invoke("folio:ensure-reference-thumbnail", referenceId, filePath),
 
   getFileDataUrl: (filePath: string): Promise<string> =>
     ipcRenderer.invoke("folio:get-file-data-url", filePath),

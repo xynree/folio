@@ -25,7 +25,7 @@ type UseCanvasObjectResizeOptions = {
 };
 
 function shouldPreserveAspectRatio(kind: CanvasObjectKind) {
-  return kind === "item" || kind === "reference";
+  return kind === "item";
 }
 
 function resizeWithAspectRatio(

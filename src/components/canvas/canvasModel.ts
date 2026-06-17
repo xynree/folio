@@ -6,7 +6,6 @@ import type {
   CanvasNote,
   CanvasObjectSize,
   CanvasPosition,
-  CanvasReference,
   CanvasStroke,
   CanvasTextElement,
   CanvasTextSize,
@@ -51,15 +50,6 @@ export function moveCanvasObject(
     };
   }
 
-  if (kind === "reference") {
-    return {
-      ...canvas,
-      references: canvas.references.map((reference) =>
-        reference.id === objectId ? { ...reference, ...position } : reference,
-      ),
-    };
-  }
-
   if (kind === "text") {
     return {
       ...canvas,
@@ -95,15 +85,6 @@ export function resizeCanvasObject(
           height: size.height,
         },
       },
-    };
-  }
-
-  if (kind === "reference") {
-    return {
-      ...canvas,
-      references: canvas.references.map((reference) =>
-        reference.id === objectId ? { ...reference, ...size } : reference,
-      ),
     };
   }
 
@@ -192,19 +173,6 @@ export function deleteCanvasTextElement(
       (textElement) => textElement.id !== textElementId,
     ),
     edges: removeEdgesForObject(canvas.edges ?? [], textElementId),
-  };
-}
-
-export function removeCanvasReference(
-  canvas: Canvas,
-  referenceId: string,
-): Canvas {
-  return {
-    ...canvas,
-    references: canvas.references.filter(
-      (reference) => reference.id !== referenceId,
-    ),
-    edges: removeEdgesForObject(canvas.edges ?? [], referenceId),
   };
 }
 
@@ -340,18 +308,6 @@ export function replaceCanvasNote(
     ...canvas,
     notes: canvas.notes.map((currentNote) =>
       currentNote.id === note.id ? note : currentNote,
-    ),
-  };
-}
-
-export function replaceCanvasReference(
-  canvas: Canvas,
-  reference: CanvasReference,
-): Canvas {
-  return {
-    ...canvas,
-    references: canvas.references.map((currentReference) =>
-      currentReference.id === reference.id ? reference : currentReference,
     ),
   };
 }

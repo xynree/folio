@@ -25,13 +25,11 @@ export function GridView({
   tagFilter,
   setTagFilter,
   selectedItemIds,
+  workItemIds = [],
   onBackgroundClick,
   onDragStart,
   onItemOpen,
   onEditItem,
-  onAddTag,
-  onRemoveTag,
-  onDeleteItem,
 }: {
   items: FolioItem[];
   tags: Tag[];
@@ -41,13 +39,11 @@ export function GridView({
   tagFilter: GridTagFilter;
   setTagFilter: React.Dispatch<React.SetStateAction<GridTagFilter>>;
   selectedItemIds: string[];
+  workItemIds?: string[];
   onBackgroundClick: () => void;
   onDragStart: (itemId: string, event: React.DragEvent<HTMLElement>) => void;
   onItemOpen: ItemOpenHandler;
   onEditItem: (itemId: string) => void;
-  onAddTag: (itemId: string, tagText: string) => void;
-  onRemoveTag: (itemId: string, tagText: string) => void;
-  onDeleteItem: (itemId: string) => void;
 }) {
   const [sortMode, setSortMode] = useState<GridSortMode>("recent");
   const filteredItems = useMemo(
@@ -83,6 +79,7 @@ export function GridView({
     return nextItems;
   }, [filteredItems, sortMode]);
   const selectedSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
+  const workItemSet = useMemo(() => new Set(workItemIds), [workItemIds]);
 
   return (
     <section
@@ -146,14 +143,12 @@ export function GridView({
               thumbUrls={thumbUrls}
               setThumbUrls={setThumbUrls}
               isSelected={selectedSet.has(item.id)}
+              isWork={workItemSet.has(item.id)}
               onDragStart={onDragStart}
               onOpen={(itemId, event) =>
                 onItemOpen(itemId, event, sortedItems, true)
               }
               onEdit={onEditItem}
-              onAddTag={onAddTag}
-              onRemoveTag={onRemoveTag}
-              onDelete={onDeleteItem}
             />
           ))}
         </div>

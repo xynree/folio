@@ -8,7 +8,7 @@ describe("archive manager helpers", () => {
     expect(normalizeArchiveItemType("image")).toBe("sketch");
     expect(normalizeArchiveItemType("audio")).toBe("music");
     expect(normalizeArchiveItemType("video")).toBe("anim");
-    expect(normalizeArchiveItemType("ref")).toBe("ref");
+    expect(normalizeArchiveItemType("ref")).toBe("sketch");
     expect(normalizeArchiveItemType("unknown")).toBe("other");
   });
 

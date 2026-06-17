@@ -1,5 +1,4 @@
 import type {
-  CanvasReference,
   FolioData,
   FolioItem,
   ImportSource,
@@ -28,14 +27,9 @@ export interface FolioApi {
     projectId: string,
     workItemIds: string[],
   ) => Promise<FolioData>;
-  copyReference: (
-    canvasId: string,
-    filePaths: string[],
-  ) => Promise<CanvasReference[]>;
   deleteItems: (itemIds: string[]) => Promise<FolioData>;
   openFileDialog: () => Promise<string[]>;
   ensureThumbnails: (itemIds: string[]) => Promise<ThumbnailUrls>;
-  ensureReferenceThumbnail: (referenceId: string, filePath: string) => Promise<string>;
   getFileDataUrl: (filePath: string) => Promise<string>;
   getReconciliationResult: () => Promise<ReconciliationResult>;
   openInFinder: (filePath: string) => Promise<void>;

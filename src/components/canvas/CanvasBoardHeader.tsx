@@ -5,7 +5,7 @@ import {
   Eraser,
   FolderOpen,
   ImagePlus,
-  Paperclip,
+  Images,
   PenLine,
   StickyNote,
   Type,
@@ -38,6 +38,8 @@ type CanvasBoardHeaderProps = {
   boardColorDraft: string;
   boardTitleDraft: string;
   boardToolsOpen: boolean;
+  projectImageCount: number;
+  projectImagePickerOpen: boolean;
   onActiveToolChange: React.Dispatch<React.SetStateAction<CanvasTool>>;
   onAddNote: () => void;
   onBackToBoards: () => void;
@@ -45,10 +47,10 @@ type CanvasBoardHeaderProps = {
   onBoardTitleDraftChange: (title: string) => void;
   onDeleteBoard: () => void;
   onImportImages: () => void;
-  onImportReferences: () => void;
   onOpenBoardFolder: () => void;
   onSaveBoardSettings: (canvas: Canvas) => void;
   onToggleBoardTools: () => void;
+  onToggleProjectImages: () => void;
   onUndoStroke: () => void;
 };
 
@@ -59,6 +61,8 @@ export function CanvasBoardHeader({
   boardColorDraft,
   boardTitleDraft,
   boardToolsOpen,
+  projectImageCount,
+  projectImagePickerOpen,
   onActiveToolChange,
   onAddNote,
   onBackToBoards,
@@ -66,10 +70,10 @@ export function CanvasBoardHeader({
   onBoardTitleDraftChange,
   onDeleteBoard,
   onImportImages,
-  onImportReferences,
   onOpenBoardFolder,
   onSaveBoardSettings,
   onToggleBoardTools,
+  onToggleProjectImages,
   onUndoStroke,
 }: CanvasBoardHeaderProps) {
   const toggleTool = (tool: CanvasTool) => {
@@ -113,13 +117,24 @@ export function CanvasBoardHeader({
           <ButtonIcon icon={StickyNote} />
         </button>
         <button
-          className="canvas-board-action-button"
+          className={`canvas-board-action-button canvas-board-image-toggle ${
+            projectImagePickerOpen ? "canvas-board-action-active" : ""
+          }`}
           type="button"
-          aria-label="Add reference"
-          title="Add reference"
-          onClick={onImportReferences}
+          aria-label={
+            projectImagePickerOpen ? "Hide project images" : "Show project images"
+          }
+          aria-controls="canvas-project-image-picker"
+          aria-expanded={projectImagePickerOpen}
+          title={
+            projectImagePickerOpen ? "Hide project images" : "Show project images"
+          }
+          onClick={onToggleProjectImages}
         >
-          <ButtonIcon icon={Paperclip} />
+          <ButtonIcon icon={Images} />
+          <span className="canvas-board-action-count" aria-hidden="true">
+            {projectImageCount}
+          </span>
         </button>
         <button
           className="canvas-board-action-button"

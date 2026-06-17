@@ -18,6 +18,7 @@ describe("project review model", () => {
         },
       ],
       updatedAt: "2026-06-18T12:00:00.000Z",
+      workUpdatedAt: "2026-06-19T09:00:00.000Z",
     });
     const items = [
       makeItem("alpha", {
@@ -36,16 +37,6 @@ describe("project review model", () => {
       makeCanvas("board-1", {
         title: "Board 1",
         itemIds: ["alpha"],
-        references: [
-          {
-            id: "ref-1",
-            filename: "swatch.png",
-            path: "projects/studio-archive/references/swatch.png",
-            x: 0,
-            y: 0,
-            capturedAt: "2026-06-16T10:00:00.000Z",
-          },
-        ],
         notes: [
           {
             id: "note-1",
@@ -59,7 +50,7 @@ describe("project review model", () => {
           {
             id: "edge-1",
             fromId: "alpha",
-            toId: "ref-1",
+            toId: "note-1",
             relationshipType: "version-of",
             createdAt: "2026-06-18T08:00:00.000Z",
           },
@@ -73,17 +64,21 @@ describe("project review model", () => {
       imageCount: 2,
       workCount: 1,
       boardCount: 1,
-      referenceCount: 1,
       reviewCount: 1,
-      activeDays: 4,
+      activeDays: 5,
       firstImageDate: "2026-06-15T08:00:00.000Z",
-      latestSavedDate: "2026-06-18T12:00:00.000Z",
+      latestSavedDate: "2026-06-19T09:00:00.000Z",
     });
     expect(review.timelineGroups.flatMap((group) => group.entries)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ kind: "work", title: "Alpha" }),
+        expect.objectContaining({
+          kind: "work",
+          title: "1 image",
+          detail: "Added to work",
+          timestamp: "2026-06-19T09:00:00.000Z",
+          itemIds: ["alpha"],
+        }),
         expect.objectContaining({ kind: "review", title: "Week 1 review" }),
-        expect.objectContaining({ kind: "reference", title: "swatch.png" }),
         expect.objectContaining({ kind: "note", title: "Revise values" }),
         expect.objectContaining({
           kind: "relationship",
@@ -91,5 +86,14 @@ describe("project review model", () => {
         }),
       ]),
     );
+    expect(
+      review.timelineGroups
+        .flatMap((group) => group.entries)
+        .some((entry) => entry.kind === "image" && entry.itemId === "alpha"),
+    ).toBe(false);
+    expect(review.timelineGroups[0].entries[0]).toMatchObject({
+      kind: "work",
+      detail: "Added to work",
+    });
   });
 });

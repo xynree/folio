@@ -10,7 +10,6 @@ export const EMPTY_DATA = {
 
 export const TYPE_LABELS: Record<ItemType, string> = {
   sketch: "Sketch",
-  ref: "Ref",
   music: "Music",
   anim: "Anim",
   text: "Text",
@@ -18,7 +17,6 @@ export const TYPE_LABELS: Record<ItemType, string> = {
 };
 
 export const ITEM_STAGE_LABELS: Record<ItemStage, string> = {
-  reference: "Reference",
   sketch: "Sketch",
   wip: "WIP",
   process: "Process",

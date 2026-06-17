@@ -4,7 +4,6 @@ import { dateKeyFromDate, formatDateLabel } from "../folio/model";
 export type ProjectTimelineKind =
   | "image"
   | "work"
-  | "reference"
   | "note"
   | "review"
   | "relationship";
@@ -17,6 +16,7 @@ export type ProjectTimelineEntry = {
   timestamp: string;
   boardId?: string;
   itemId?: string;
+  itemIds?: string[];
   reviewId?: string;
 };
 
@@ -30,7 +30,6 @@ export type ProjectRecap = {
   imageCount: number;
   workCount: number;
   boardCount: number;
-  referenceCount: number;
   reviewCount: number;
   activeDays: number;
   firstImageDate: string | null;
@@ -120,32 +119,42 @@ export function buildProjectReview(
   const entries: ProjectTimelineEntry[] = [];
   const projectReviews = project.reviews ?? [];
 
-  projectItems.forEach((item) => {
-    const timestamp = fallbackTimestamp(item.date, item.updatedAt);
-    entries.push({
-      id: `image-${item.id}`,
-      kind: "image",
-      title: itemTitle(item),
-      detail: "Project image",
-      timestamp,
-      boardId: projectCanvases.find((canvas) => canvas.itemIds.includes(item.id))?.id,
-      itemId: item.id,
+  projectItems
+    .filter((item) => !projectWorkIds.has(item.id))
+    .forEach((item) => {
+      const timestamp = fallbackTimestamp(item.date, item.updatedAt);
+      entries.push({
+        id: `image-${item.id}`,
+        kind: "image",
+        title: itemTitle(item),
+        detail: "Project image",
+        timestamp,
+        boardId: projectCanvases.find((canvas) => canvas.itemIds.includes(item.id))?.id,
+        itemId: item.id,
+      });
     });
-  });
 
-  project.workItemIds.forEach((itemId) => {
-    const item = itemById.get(itemId);
-    if (!item || !projectImageIds.has(item.id)) return;
+  const projectWorkItems = project.workItemIds
+    .map((itemId) => itemById.get(itemId))
+    .filter(
+      (item): item is FolioItem => Boolean(item && projectImageIds.has(item.id)),
+    );
+
+  if (projectWorkItems.length) {
+    const imageCount = projectWorkItems.length;
     entries.push({
-      id: `work-${item.id}`,
+      id: `work-${project.id}`,
       kind: "work",
-      title: itemTitle(item),
-      detail: "Marked as Work",
-      timestamp: fallbackTimestamp(item.updatedAt, item.date),
-      boardId: projectCanvases.find((canvas) => canvas.itemIds.includes(item.id))?.id,
-      itemId: item.id,
+      title: `${imageCount} ${imageCount === 1 ? "image" : "images"}`,
+      detail: "Added to work",
+      timestamp: fallbackTimestamp(
+        project.workUpdatedAt,
+        project.updatedAt,
+        ...projectWorkItems.flatMap((item) => [item.updatedAt, item.date]),
+      ),
+      itemIds: projectWorkItems.map((item) => item.id),
     });
-  });
+  }
 
   projectReviews.forEach((review) => {
     entries.push({
@@ -159,22 +168,6 @@ export function buildProjectReview(
   });
 
   projectCanvases.forEach((canvas) => {
-    canvas.references.forEach((reference) => {
-      entries.push({
-        id: `reference-${canvas.id}-${reference.id}`,
-        kind: "reference",
-        title: reference.filename,
-        detail: `Reference on ${boardTitle(canvas)}`,
-        timestamp: fallbackTimestamp(
-          reference.updatedAt,
-          reference.capturedAt,
-          canvas.updatedAt,
-          canvas.createdAt,
-        ),
-        boardId: canvas.id,
-      });
-    });
-
     canvas.notes.forEach((note) => {
       entries.push({
         id: `note-${canvas.id}-${note.id}`,
@@ -200,12 +193,21 @@ export function buildProjectReview(
     });
   });
 
-  const dateKeys = new Set(entries.map((entry) => entry.timestamp.slice(0, 10)));
   const itemDates = projectItems
     .map((item) => validTimestamp(item.date))
     .filter(Boolean) as string[];
+  const activityTimestamps = [
+    ...entries.map((entry) => entry.timestamp),
+    ...projectItems.flatMap((item) => [item.date, item.updatedAt]),
+  ]
+    .map(validTimestamp)
+    .filter(Boolean) as string[];
+  const dateKeys = new Set(
+    activityTimestamps.map((timestamp) => timestamp.slice(0, 10)),
+  );
   const latestCandidates = [
     project.updatedAt,
+    project.workUpdatedAt,
     ...projectItems.flatMap((item) => [item.updatedAt, item.date]),
     ...projectReviews.flatMap((review) => [review.updatedAt, review.createdAt]),
     ...projectCanvases.map((canvas) => canvas.updatedAt ?? canvas.createdAt),
@@ -219,10 +221,6 @@ export function buildProjectReview(
         (itemId) => projectWorkIds.has(itemId) && projectImageIds.has(itemId),
       ).length,
       boardCount: projectCanvases.length,
-      referenceCount: projectCanvases.reduce(
-        (count, canvas) => count + canvas.references.length,
-        0,
-      ),
       reviewCount: projectReviews.length,
       activeDays: dateKeys.size,
       firstImageDate: itemDates.length

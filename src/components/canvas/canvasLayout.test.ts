@@ -8,7 +8,6 @@ import {
   itemsForCanvas,
   positionForCanvasItem,
   positionForCanvasNote,
-  positionForCanvasReference,
   positionForCanvasText,
 } from "./canvasLayout";
 
@@ -34,17 +33,6 @@ function canvasFixture(): Canvas {
     positions: { "item-1": { x: 10, y: 20, width: 240, height: 280 } },
     notes: [{ id: "note-1", text: "Note", x: 30, y: 40, width: 260, height: 180 }],
     edges: [],
-    references: [
-      {
-        id: "reference-1",
-        filename: "ref.png",
-        path: "refs/ref.png",
-        x: 50,
-        y: 60,
-        width: 300,
-        height: 340,
-      },
-    ],
     texts: [{ id: "text-1", text: "Text", x: 70, y: 80, width: 320, height: 120 }],
   };
 }
@@ -123,34 +111,9 @@ describe("canvas layout helpers", () => {
     ).toEqual({ x: 500, y: 600 });
   });
 
-  it("resolves drag preview positions for references, notes, and text", () => {
+  it("resolves drag preview positions for notes and text", () => {
     const canvas = canvasFixture();
 
-    expect(positionForCanvasReference(canvas.references[0], null)).toEqual({
-      x: 50,
-      y: 60,
-      width: 300,
-      height: 340,
-    });
-    expect(
-      positionForCanvasReference(
-        {
-          id: "reference-2",
-          filename: "wide-ref.png",
-          path: "refs/wide-ref.png",
-          x: 90,
-          y: 100,
-          mediaWidth: 800,
-          mediaHeight: 400,
-        },
-        null,
-      ),
-    ).toEqual({
-      x: 90,
-      y: 100,
-      width: 190,
-      height: 95,
-    });
     expect(
       positionForCanvasNote(canvas.notes[0], {
         id: "note-1",
@@ -173,7 +136,6 @@ describe("canvas layout helpers", () => {
       activeCanvas: canvas,
       activeItems: [item("item-1"), item("item-2")],
       activeNotes: canvas.notes,
-      activeReferences: canvas.references,
       activeTexts: canvas.texts ?? [],
       dragPreview: null,
     });
@@ -181,7 +143,6 @@ describe("canvas layout helpers", () => {
     expect(Array.from(layouts.keys())).toEqual([
       "item-1",
       "item-2",
-      "reference-1",
       "note-1",
       "text-1",
     ]);

@@ -40,7 +40,7 @@ export type BoardStatus = "active" | "paused" | "done" | "archived";
 /** A connecting line between two objects on a canvas */
 export interface CanvasEdge {
   id: string;
-  fromId: string; // ID of an item, note, reference, or text element
+  fromId: string; // ID of an item, note, or text element
   toId: string;
   fromSide?: CanvasConnectionSide;
   toSide?: CanvasConnectionSide;
@@ -73,17 +73,6 @@ export interface CanvasTextElement extends CanvasObjectGeometry {
   size?: CanvasTextSize;
 }
 
-/** A reference image that only exists on a specific canvas */
-export type CanvasReference = CanvasObjectGeometry & {
-  id: string;
-  path: string; // Path relative to ~/Documents/Folio/
-  filename: string;
-  mediaWidth?: number; // Natural source image width when known
-  mediaHeight?: number; // Natural source image height when known
-  capturedAt?: string;
-  updatedAt?: string;
-};
-
 /** A named thinking surface with positioned items and annotations */
 export interface Canvas {
   id: string;
@@ -104,7 +93,6 @@ export interface Canvas {
   positions: Record<string, CanvasObjectGeometry>; // Item geometry keyed by item ID
   notes: CanvasNote[];
   edges: CanvasEdge[];
-  references: CanvasReference[];
   strokes?: CanvasStroke[];
   texts?: CanvasTextElement[];
 }

@@ -10,7 +10,7 @@ Electron app
     - ~/Documents/Folio initialization
     - import, copy, delete, and Finder reconciliation
     - file watcher
-    - thumbnail and reference thumbnail generation
+    - thumbnail generation
     - custom folio:// protocol
     - Photos picker helper launch on macOS
 
@@ -37,9 +37,9 @@ Folio is moving toward a project-first local studio model with three connected p
 
 1. **Projects as the primary workspace**: opening the app should show a Projects view. Each project owns a local folder, an image library, a Works subset, and any number of boards.
 2. **Interactive studio wall**: within a project, selected images can be promoted to Works and reviewed over time through strip, grid, and heatmap views.
-3. **Reference and inspiration graph**: project boards can connect references, notes, sketches, WIP, and final work to each other spatially.
+3. **Reference and inspiration graph**: project boards can connect project images, notes, sketches, WIP, and final work to each other spatially.
 
-The current architecture already supports the base of this direction: local archive items, board membership, board-local references, notes, and a persisted `CanvasEdge` shape. The next architectural work is to add a real `Project` storage domain so boards and image lists are scoped to a project instead of treating the archive as the primary surface.
+The current architecture supports the base of this direction through project images, Works membership, project-scoped boards, notes, text elements, and a persisted `CanvasEdge` shape.
 
 Important product constraints remain:
 
@@ -55,7 +55,7 @@ Important product constraints remain:
 
 ### Main Process
 
-The main process owns all disk access. `src/main/base.manager.ts` registers IPC handlers, manages app launch preparation, watches Folio folders, handles import dialogs, and coordinates saves. `src/main/archive.manager.ts` handles lower-level media operations: copying files, computing hashes, deduplicating imports, copying canvas references, and generating thumbnails. `src/main/storage.manager.ts` owns split JSON reads and atomic writes.
+The main process owns all disk access. `src/main/base.manager.ts` registers IPC handlers, manages app launch preparation, watches Folio folders, handles import dialogs, and coordinates saves. `src/main/archive.manager.ts` handles lower-level media operations: copying files, computing hashes, deduplicating imports, and generating thumbnails. `src/main/storage.manager.ts` owns split JSON reads and atomic writes.
 
 The main process also registers the `folio://` protocol:
 
@@ -71,11 +71,11 @@ window.folio.getFolioData();
 window.folio.saveFolioData(data);
 window.folio.copyToFolio(filePaths);
 window.folio.importToFolio();
-window.folio.copyReference(canvasId, filePaths);
+window.folio.copyToProject(projectId, filePaths);
+window.folio.importToProject(projectId);
 window.folio.deleteItems(itemIds);
 window.folio.openFileDialog();
 window.folio.ensureThumbnails(itemIds);
-window.folio.ensureReferenceThumbnail(referenceId, filePath);
 window.folio.getFileDataUrl(filePath);
 window.folio.getReconciliationResult();
 window.folio.openInFinder(filePath);
@@ -101,8 +101,6 @@ Folio creates and manages `~/Documents/Folio`. Project folders are the canonical
         uploaded-project-image.png
       works/
         promoted-work-image.png
-      references/
-        board-reference.png
       reviews/
         review-<review-id>.md
       boards/
@@ -115,7 +113,7 @@ Folio creates and manages `~/Documents/Folio`. Project folders are the canonical
     thumbs/
 ```
 
-The visible folders are normal user files. `.folio/` is the app's bookkeeping directory. The thumbnail cache is fully regenerable. Project `images/` contains all images imported into the project. Project `works/` is the user-accessible representation of images promoted into Works; implementation may use copies, links, or generated exports, but canonical work membership remains in metadata so it can be reconciled. Project `references/` contains board references for that project. Legacy `items/`, root-level `images/`, root-level `works/`, root-level `references/`, and old board-local reference folders are migration sources only.
+The visible folders are normal user files. `.folio/` is the app's bookkeeping directory. The thumbnail cache is fully regenerable. Project `images/` contains all images imported into the project, including images dropped directly onto boards. Project `works/` is the user-accessible representation of images promoted into Works; implementation may use copies, links, or generated exports, but canonical work membership remains in metadata so it can be reconciled. Legacy `items/`, root-level `images/`, and root-level `works/` folders are migration sources only.
 
 ## Data Model
 
@@ -128,7 +126,7 @@ interface FolioItem {
   id: string;
   path: string;
   hash: string;
-  type: "sketch" | "ref" | "music" | "anim" | "text" | "other";
+  type: "sketch" | "music" | "anim" | "text" | "other";
   date: string;
   title: string;
   description: string;
@@ -148,7 +146,7 @@ interface Tag {
 }
 ```
 
-`canvases.json` stores boards, spatial object geometry, notes, references, and future edge data:
+`canvases.json` stores boards, spatial object geometry, notes, text, strokes, and edge data:
 
 ```ts
 interface CanvasObjectGeometry {
@@ -159,14 +157,6 @@ interface CanvasObjectGeometry {
 }
 
 type CanvasTextSize = "sm" | "md" | "large";
-
-interface CanvasReference extends CanvasObjectGeometry {
-  id: string;
-  path: string;
-  filename: string;
-  mediaWidth?: number;
-  mediaHeight?: number;
-}
 
 interface Canvas {
   id: string;
@@ -179,7 +169,6 @@ interface Canvas {
   positions: Record<string, CanvasObjectGeometry>;
   notes: CanvasNote[];
   edges: CanvasEdge[];
-  references: CanvasReference[];
   strokes?: CanvasStroke[];
   texts?: CanvasTextElement[]; // text elements may include size?: CanvasTextSize
 }
@@ -222,7 +211,6 @@ Proposed item additions:
 
 ```ts
 type ItemStage =
-  | "reference"
   | "sketch"
   | "wip"
   | "process"
@@ -290,20 +278,6 @@ interface CanvasEdge {
 }
 ```
 
-Proposed reference additions:
-
-```ts
-interface CanvasReference {
-  // existing fields...
-  sourceUrl?: string;
-  sourceTitle?: string;
-  author?: string;
-  capturedAt?: string;
-  notes?: string;
-  tagIds?: string[];
-}
-```
-
 The first migrations should remain additive:
 
 - Create a default project for existing archive items and canvases so current users do not lose board context.
@@ -335,14 +309,6 @@ Dragging or pasting a new image directly onto a project board should still impor
 
 Promoting an image to Works updates `Project.workItemIds`. The Works view should reuse the existing strip, grid, and heatmap presentation over that subset of project images.
 
-Project references are copied to:
-
-```text
-~/Documents/Folio/projects/<project-slug-or-id>/references/
-```
-
-References remain associated with their board in `canvases.json` and do not become project images unless the user explicitly adds or promotes them. Older references in `~/Documents/Folio/references/<board-id>/` and `projects/<project>/boards/<board-id>/references/` are migrated into the owning project `references/` folder when Folio can match them to canvas metadata.
-
 ## Thumbnail Pipeline
 
 Cards, project image lists, Works views, and board previews should not load full source images. The renderer requests small thumbnails through `LazyThumbnail`, which batches visible thumbnail requests over a short frame window before calling `ensureThumbnails`.
@@ -351,7 +317,6 @@ The main process generates:
 
 - 320px JPEG thumbnails for image-like project and archive items.
 - SVG placeholders for missing files, unsupported media, audio, text, or failed thumbnail generation.
-- 320px JPEG reference thumbnails through `ensureReferenceThumbnail`.
 
 Generated files use `-small` suffixes and are served through `folio://thumb/...`. Board browser previews batch their thumbnail request at the board level and then render `LazyThumbnail` with automatic per-card requests disabled.
 
@@ -361,7 +326,7 @@ Opening the app should show a Projects view, not the archive. The Projects view 
 
 Opening a project shows a project workspace with three primary surfaces:
 
-- **All Images**: every image in `Project.imageIds`, including images dragged, pasted, imported, or dropped onto a project board.
+- **All Images**: every image in `Project.imageIds`, including images dragged, pasted, imported, or dropped onto a project board. This lives in its own Library area in the project sidebar.
 - **Works**: the subset in `Project.workItemIds`, shown with strip, grid, and heatmap views so the user can track actual pieces of work over time.
 - **Review**: a progress overview with Markdown review documents for private self-review against Works. Opening a review navigates to a dedicated editor page with Work tags and direct navigation back to Projects.
 - **Boards**: all canvases owned by the project, with creation, switching, project-image tray placement, and board canvas editing.
@@ -403,9 +368,9 @@ Board settings support title and color editing. The selected board color appears
 
 Board headers show `createdAt` and `updatedAt` timestamps instead of object counts. New boards set both fields when created, and board mutations refresh `updatedAt` before the updated `canvases.json` payload is saved. Legacy boards without timestamps remain readable and receive timestamp fields the next time a board save touches them.
 
-Canvas boards use `CanvasViewport`, which renders the dotted background with an actual HTML `<canvas>`. The scrollable surface contains cards, notes, and references as absolutely positioned React elements. Wheel input zooms around the pointer, clamps between the configured min and max zoom, and prevents the page-style scroll effect once the zoom limit is reached.
+Canvas boards use `CanvasViewport`, which renders the dotted background with an actual HTML `<canvas>`. The scrollable surface contains project image cards, notes, and text elements as absolutely positioned React elements. Wheel input zooms around the pointer, clamps between the configured min and max zoom, and prevents the page-style scroll effect once the zoom limit is reached.
 
-Canvas project-image cards and references render as image-only objects in the board surface. When source dimensions are known, default card bounds are scaled from the image's natural proportions instead of a single fixed rectangle; legacy items without dimensions use the existing fallback size. Cards, references, notes, and text elements are draggable from any non-control area. Pointer movement beyond the small drag threshold becomes a drag; otherwise the action remains a click. They can also be resized from the lower-right corner; saved dimensions are optional `width`/`height` fields on the same canvas objects, and image cards preserve their aspect ratio while resizing. Remove/delete controls appear on hover or focus. Board text renders in lightweight resizable text boxes, supports `sm`, `md`, and `large` text sizes, and saves typed text after a short debounce.
+Canvas project-image cards render as image-only objects in the board surface. When source dimensions are known, default card bounds are scaled from the image's natural proportions instead of a single fixed rectangle; legacy items without dimensions use the existing fallback size. Cards, notes, and text elements are draggable from any non-control area. Pointer movement beyond the small drag threshold becomes a drag; otherwise the action remains a click. They can also be resized from the lower-right corner; saved dimensions are optional `width`/`height` fields on the same canvas objects, and image cards preserve their aspect ratio while resizing. Remove/delete controls appear on hover or focus. Board text renders in lightweight resizable text boxes, supports `sm`, `md`, and `large` text sizes, and saves typed text after a short debounce.
 
 ## Project Home Architecture
 
@@ -428,7 +393,6 @@ The project Review surface builds a derived timeline from the owning `Project` a
 - Image events come from `Project.imageIds` and each item `date` or `updatedAt`.
 - Works events come from `Project.workItemIds` and each promoted item's timeline metadata.
 - Review events come from `Project.reviews`; each review stores Markdown and `workItemIds` for Works tagged in that review.
-- Reference events come from references in canvases where `canvas.projectId` matches the project.
 - Note events come from `canvas.notes` using optional note timestamps when present.
 - Relationship events come from edges with `createdAt` or `updatedAt`; edges also support a lightweight relationship type including `version-of`.
 
@@ -444,35 +408,21 @@ interface CanvasNote {
   updatedAt?: string;
 }
 
-interface CanvasReference {
-  id: string;
-  path: string;
-  filename: string;
-  x: number;
-  y: number;
-  capturedAt?: string;
-  updatedAt?: string;
-}
 ```
 
-The project timeline does not duplicate source data. It sorts and groups existing records into a presentation model, then routes edits back to the owning project, item, note, reference, edge, or canvas.
+The project timeline does not duplicate source data. It sorts and groups existing records into a presentation model, then routes edits back to the owning project, item, note, edge, or canvas.
 
-## Reference Graph Architecture
+## Future Inspiration Library Architecture
 
-The current `CanvasReference` type is board-local. That is sufficient for drag/drop reference cards, but a Pinterest-like reference library will need a clearer distinction:
+Folio no longer has a board-local `CanvasReference` type. Images used as inspiration should enter the project through All Images, then be placed on boards as normal project image cards. That keeps the media reusable across boards and review flows.
 
-- **Board-local reference**: an image or URL captured for one board only.
-- **Project image/reference item**: a reusable image stored in a project image list and available across that project's boards.
-- **Global reference index**: a future optional store if references need independent browsing before they belong to any board.
+A future Pinterest-like inspiration library should be designed as a separate feature rather than reviving board-only images implicitly. Useful options include:
 
-The recommended path is incremental:
+1. Add URL/source metadata to regular project images.
+2. Add a filtered inspiration view over project images when tags or source metadata justify it.
+3. Introduce a separate `references.json` only if references need independent life before they belong to a project.
 
-1. Keep `CanvasReference` board-local and add source metadata.
-2. Add a references browser that flattens references across canvases at render time.
-3. Add "add to project images" when a reference should become reusable across boards in the same project.
-4. Introduce a separate `references.json` only if board-local flattening becomes awkward or references need to exist before board assignment.
-
-Edges should remain attached to canvases because their meaning is spatial and contextual. A connection between a reference and an item on one project board may not mean the same thing elsewhere.
+Edges should remain attached to canvases because their meaning is spatial and contextual.
 
 ## Edge Rendering Architecture
 
@@ -483,7 +433,7 @@ Edges should remain attached to canvases because their meaning is spatial and co
 - Keep edge path data derived, not persisted.
 - Store only semantic edge data: IDs, side endpoints, direction, type, label, and timestamps.
 - Recompute paths while dragging so edges stay attached.
-- Support current board object endpoints: project/archive items, references, notes, and board text elements.
+- Support current board object endpoints: project/archive items, notes, and board text elements.
 - Render `direction: "none" | "forward" | "bidirectional"` with no arrow, end arrow, or both arrows.
 
 Selection should be local renderer state until the user edits or deletes an edge. Edge creation, label edits, type edits, and deletes should persist through `saveFolioData`.
@@ -496,7 +446,6 @@ Search should start as a renderer-side in-memory index built from loaded `FolioD
 - item title, description, path, stage, and tags
 - board title, brief, outcome, kind, and status
 - note text
-- reference filename, notes, source title, source URL, and tags
 - edge label and relationship type
 
 If search needs ranking, highlighting, or fuzzy matching, add a small local search helper in the renderer. Do not move search into the main process until it needs disk-only data, OCR text extraction, or background indexing.
@@ -516,7 +465,7 @@ Folder access should use existing main-process shell capabilities:
 
 - `openInFinder(filePath)` opens individual items and opens directory paths directly.
 - Project-level actions reveal `~/Documents/Folio/projects/<project-slug-or-id>/`.
-- Scoped actions open project `images/`, `works/`, and `references/` folders.
+- Scoped actions open the project folder, with project media organized under `images/`, `works/`, `boards/`, and `reviews/`.
 - If a legacy project spans old archive month folders or root-level media folders, migrate matched files into the project folder before relying on Finder folder access.
 
 No persistent collaborator, comment, permission, or shared-review schema is needed for these flows.
@@ -559,7 +508,7 @@ Planned and possible future JSON files:
 ```text
 .folio/
   projects.json      # top-level project records and project ordering
-  references.json    # only if references need global life outside boards
+  references.json    # only if a future reference library needs independent storage
   search-index.json  # only if background indexing becomes necessary
 ```
 
@@ -567,8 +516,7 @@ Planned and possible future JSON files:
 
 Completed MVP foundation:
 
-- Board-local reference capture from drag/drop and file dialog.
-- SVG edge rendering and editing for item, reference, note, and text connections.
+- SVG edge rendering and editing for item, note, and text connections.
 - Side connector nodes with no-direction, single-direction, and bidirectional edge modes.
 - Freehand canvas strokes with board-color ink, eraser, and Cmd+Z undo.
 - Editable board text elements that can be dragged, connected, and deleted.
@@ -581,18 +529,18 @@ Near-term roadmap:
 - Add project image intake from drag/drop, paste, import, and board drop.
 - Add Works promotion and Works strip/grid/heatmap views.
 - Scope boards to projects while preserving existing canvas behavior.
-- Add item stages so sketches, WIP, final pieces, notes, and references are distinct.
-- Add project timeline view from existing item/reference/note data.
-- Add clipboard paste and URL capture for references.
+- Add item stages so sketches, WIP, final pieces, notes, and other process states are distinct.
+- Add project timeline view from existing item, note, review, and relationship data.
+- Add clipboard paste and URL capture for project images.
 - Add backlinks and connected-item summaries in detail views.
-- Add project folder access actions for images, Works, and board references.
+- Add project folder access actions for images and Works.
 
 Middle-term roadmap:
 
 - Add canvas sections, board templates, lasso selection, alignment, and minimap.
 - Add reference browser with Pinterest-like browsing and filters.
 - Add iteration/version grouping and richer Work review flows.
-- Add global search across items, boards, notes, references, tags, and edges.
+- Add global search across items, boards, notes, tags, and edges.
 - Add weekly/project self-review summaries.
 - Add export for board snapshots, project timelines, and contact sheets.
 

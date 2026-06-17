@@ -75,6 +75,7 @@ function setupFolio({
             ? {
                 ...project,
                 workItemIds,
+                workUpdatedAt: savedAt,
                 updatedAt: savedAt,
               }
             : project,
@@ -83,7 +84,6 @@ function setupFolio({
       return cloneData(currentData);
     },
   );
-  vi.mocked(window.folio.copyReference).mockResolvedValue([]);
   vi.mocked(window.folio.deleteItems).mockImplementation(async (itemIds) => {
     currentData = {
       ...currentData,
@@ -116,9 +116,6 @@ function setupFolio({
     Object.fromEntries(
       itemIds.map((itemId) => [itemId, `folio://thumb/${itemId}.jpg`]),
     ),
-  );
-  vi.mocked(window.folio.ensureReferenceThumbnail).mockImplementation(
-    async (referenceId) => `folio://thumb/reference-${referenceId}.jpg`,
   );
   vi.mocked(window.folio.getFileDataUrl).mockImplementation(async (filePath) =>
     `data:image/png;base64,${btoa(filePath)}`,
@@ -265,13 +262,31 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(await screen.findByRole("heading", { name: /studio workspace/i }))
       .not.toBeNull();
     expect(screen.getByText("Studio Archive")).not.toBeNull();
-    expect(screen.getByText("3")).not.toBeNull();
+    expect(screen.getByText("3 images")).not.toBeNull();
     expect(screen.queryByRole("button", { name: /strip/i })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /open project/i }));
 
     expect(await screen.findByRole("button", { name: /strip/i })).not.toBeNull();
     expect(screen.getByRole("button", { name: /^projects$/i })).not.toBeNull();
+  });
+
+  it("shows Works on project tiles before falling back to All Images", async () => {
+    setupFolio({
+      data: makeData({
+        projects: [makeProject("project-1", { workItemIds: ["alpha"] })],
+      }),
+    });
+
+    expect(await screen.findByRole("heading", { name: /studio workspace/i }))
+      .not.toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: /open project studio archive, 1 work/i,
+      }),
+    ).not.toBeNull();
+    expect(screen.getByText("1 work")).not.toBeNull();
+    expect(screen.queryByText("3 images")).toBeNull();
   });
 
   it("normalizes legacy data without projects before rendering", async () => {
@@ -311,19 +326,16 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
     expect(screen.getByText("Project created")).not.toBeNull();
     expect(screen.getByText("Color Studies")).not.toBeNull();
-    expect(screen.getByText("projects/color-studies")).not.toBeNull();
+    expect(screen.getByText("0 images")).not.toBeNull();
+    expect(screen.queryByText("projects/color-studies")).toBeNull();
   });
 
-  it("opens project folders from the home view and workspace", async () => {
+  it("opens project folders from the workspace sidebar", async () => {
     setupFolio();
     const user = userEvent.setup();
 
     await screen.findByRole("heading", { name: /studio workspace/i });
-    await user.click(screen.getByRole("button", { name: /^open folder$/i }));
-
-    expect(window.folio.openInFinder).toHaveBeenCalledWith(
-      "projects/studio-archive",
-    );
+    expect(screen.queryByRole("button", { name: /^open folder$/i })).toBeNull();
 
     await waitForArchive();
     await user.click(screen.getByLabelText("Open project folder"));
@@ -358,10 +370,20 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(projectActionSidebar).not.toBeNull();
     expect(
       projectActionSidebar?.querySelectorAll(".project-sidebar-section-heading svg"),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(
       projectActionSidebar?.querySelectorAll(".project-surface-tabs button svg"),
     ).toHaveLength(4);
+    expect(
+      screen.getByRole("button", { name: /^all images$/i }).closest(
+        ".project-library-group",
+      ),
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: /^all images$/i }).closest(
+        ".project-views-group",
+      ),
+    ).toBeNull();
     expect(
       screen.getByRole("button", { name: /^projects$/i }).closest(
         ".project-action-sidebar",
@@ -884,18 +906,24 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("adds existing project images to an open board from the board tray", async () => {
+  it("adds existing project images to an open board from the board image grid", async () => {
     const app = setupFolio();
     const user = userEvent.setup();
 
     await waitForArchive();
     await openActiveBoardCanvas(user);
 
-    const tray = screen.getByRole("complementary", { name: /project images/i });
+    const hideButton = screen.getByRole("button", { name: /hide project images/i });
+    expect(hideButton.getAttribute("aria-expanded")).toBe("true");
+    await user.click(hideButton);
+    expect(screen.queryByRole("region", { name: /project images/i })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /show project images/i }));
+
+    const tray = screen.getByRole("region", { name: /project images/i });
     const alphaButton = within(tray).getByRole("button", {
       name: /alpha is already on this board/i,
     }) as HTMLButtonElement;
-    expect(alphaButton.disabled).toBe(true);
+    expect(alphaButton.getAttribute("aria-pressed")).toBe("true");
 
     await user.click(
       within(tray).getByRole("button", { name: /add bravo to board/i }),
@@ -909,7 +937,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const bravoButton = within(tray).getByRole("button", {
       name: /bravo is already on this board/i,
     }) as HTMLButtonElement;
-    expect(bravoButton.disabled).toBe(true);
+    expect(bravoButton.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("tags selected items from the selection action bar", async () => {
@@ -974,6 +1002,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.projects[0].workItemIds).toEqual(["alpha"]);
       expect(app.data.items.find((item) => item.id === "alpha")?.stage).toBeUndefined();
     });
+    expect(within(itemButton(/alpha/i)).getByTitle("Marked as Work")).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: /^works$/i }));
 
@@ -981,6 +1010,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(gridTitles()).toEqual(["Alpha"]);
     });
     expect(screen.getAllByText("1 item").length).toBeGreaterThan(0);
+    expect(screen.queryByTitle("Marked as Work")).toBeNull();
   });
 
   it("unmarks selected Works without removing project images", async () => {
@@ -1044,16 +1074,6 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
             id: "board-2",
             title: "Review Board",
             itemIds: ["alpha"],
-            references: [
-              {
-                id: "ref-1",
-                filename: "swatch.png",
-                path: "projects/studio-archive/references/swatch.png",
-                x: 0,
-                y: 0,
-                capturedAt: "2026-06-16T10:00:00.000Z",
-              },
-            ],
             notes: [
               {
                 id: "note-1",
@@ -1067,7 +1087,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
               {
                 id: "edge-1",
                 fromId: "alpha",
-                toId: "ref-1",
+                toId: "note-1",
                 relationshipType: "version-of",
                 createdAt: "2026-06-17T08:00:00.000Z",
               },
@@ -1078,6 +1098,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
           makeProject("project-1", {
             imageIds: ["alpha", "bravo"],
             workItemIds: ["alpha", "bravo"],
+            workUpdatedAt: "2026-06-17T11:00:00.000Z",
             boardIds: ["board-1", "board-2"],
             reviews: [
               {
@@ -1099,7 +1120,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await user.click(screen.getByRole("button", { name: /^review$/i }));
 
     expect(screen.getByLabelText("Project review")).not.toBeNull();
-    expect(screen.getByText("References")).not.toBeNull();
+    expect(screen.queryByText("References")).toBeNull();
     expect(screen.getByText("Reviews")).not.toBeNull();
     expect(screen.queryByText("Outputs")).toBeNull();
     expect(screen.getAllByText("Week 1 review").length).toBeGreaterThan(0);
@@ -1109,19 +1130,19 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.queryByRole("button", { name: /open on board/i })).toBeNull();
     expect(screen.queryByLabelText("Review editor")).toBeNull();
 
-    const imageTimelineGrid = screen.getByLabelText("2 images in timeline");
-    expect(within(imageTimelineGrid).getByText("Alpha")).not.toBeNull();
-    expect(within(imageTimelineGrid).getByText("Bravo")).not.toBeNull();
+    const workTimelineGrid = screen.getByLabelText("2 images added to work");
+    expect(within(workTimelineGrid).getByText("Alpha")).not.toBeNull();
+    expect(within(workTimelineGrid).getByText("Bravo")).not.toBeNull();
+    expect(screen.getByText("Added to work")).not.toBeNull();
+    expect(screen.queryByText("Project images")).toBeNull();
     await waitFor(() => {
-      expect(imageTimelineGrid.querySelectorAll(".thumb-shell img")).toHaveLength(2);
+      expect(workTimelineGrid.querySelectorAll(".thumb-shell img")).toHaveLength(2);
     });
-    await waitFor(() => {
-      expect(
-        document.querySelectorAll(".entry-work .project-timeline-work-thumb img"),
-      ).toHaveLength(2);
-    });
-    const workTimelineEntry = document.querySelector(".entry-work") as HTMLElement;
-    await user.dblClick(workTimelineEntry);
+    await user.dblClick(
+      within(workTimelineGrid).getByRole("button", {
+        name: /edit alpha/i,
+      }),
+    );
     expect(screen.getByLabelText("Item details")).not.toBeNull();
     await user.click(screen.getByLabelText("Close details"));
 
@@ -1230,7 +1251,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(selectedItemTitles()).not.toContain("Older C");
   });
 
-  it("adds and removes item tags from the More menu hover submenu", async () => {
+  it("adds item tags from the selected-items action bar", async () => {
     const app = setupFolio({
       data: makeData({
         items: [
@@ -1242,18 +1263,22 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await user.click(screen.getByLabelText(/more actions for bravo/i));
-    await user.hover(screen.getByRole("menuitem", { name: /add tags/i }));
-    const tagSubmenu = screen.getByRole("menu", {
-      name: /add or remove tags/i,
+    await user.click(itemButton(/bravo/i));
+    expect(screen.queryByLabelText(/more actions for bravo/i)).toBeNull();
+
+    const selectionPopup = screen
+      .getByText("1 item selected")
+      .closest(".selection-bar") as HTMLElement;
+    await user.click(within(selectionPopup).getByRole("button", { name: /^tag$/i }));
+    const tagDialog = await screen.findByRole("dialog", {
+      name: /tag selected items/i,
     });
-    expect(tagSubmenu.closest(".item-submenu")).not.toBeNull();
-    await user.click(screen.getByRole("menuitemcheckbox", { name: /sketchbook/i }));
-    await user.click(screen.getByRole("menuitemcheckbox", { name: /warmup/i }));
+    await user.type(within(tagDialog).getByLabelText("Tag name"), "sketchbook");
+    await user.click(within(tagDialog).getByRole("button", { name: /apply/i }));
 
     await waitFor(() => {
       const bravo = app.data.items.find((item) => item.id === "bravo");
-      expect(bravo?.tagIds).toEqual(["tag-sketch"]);
+      expect(bravo?.tagIds).toEqual(["tag-warmup", "tag-sketch"]);
     });
   });
 
@@ -1262,8 +1287,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await user.click(screen.getByLabelText(/more actions for alpha/i));
-    await user.click(screen.getByRole("menuitem", { name: /edit/i }));
+    await user.dblClick(itemButton(/alpha/i));
 
     const dialog = await screen.findByRole("dialog", { name: /item details/i });
     const tagInput = within(dialog).getByPlaceholderText("Tag name");
@@ -1285,13 +1309,12 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("opens item details from the More menu and saves metadata changes", async () => {
+  it("opens item details from a double click and saves metadata changes", async () => {
     const app = setupFolio();
     const user = userEvent.setup();
 
     await waitForArchive();
-    await user.click(screen.getByLabelText(/more actions for alpha/i));
-    await user.click(screen.getByRole("menuitem", { name: /edit/i }));
+    await user.dblClick(itemButton(/alpha/i));
 
     const dialog = await screen.findByRole("dialog", { name: /item details/i });
     const titleInput = within(dialog).getByLabelText("Title");
@@ -1328,8 +1351,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await user.click(screen.getByLabelText(/more actions for alpha/i));
-    await user.click(screen.getByRole("menuitem", { name: /edit/i }));
+    await user.dblClick(itemButton(/alpha/i));
 
     const dialog = await screen.findByRole("dialog", { name: /item details/i });
     expect(within(dialog).getByText("Board 1")).not.toBeNull();
@@ -1356,8 +1378,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await user.click(screen.getByLabelText(/more actions for bravo/i));
-    await user.click(screen.getByRole("menuitem", { name: /edit/i }));
+    await user.dblClick(itemButton(/bravo/i));
     const dialog = await screen.findByRole("dialog", { name: /item details/i });
     await user.click(within(dialog).getByRole("button", { name: /add to board/i }));
 
@@ -1373,8 +1394,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await waitForArchive();
-    await user.click(screen.getByLabelText(/more actions for bravo/i));
-    await user.click(screen.getByRole("menuitem", { name: /edit/i }));
+    await user.dblClick(itemButton(/bravo/i));
     const dialog = await screen.findByRole("dialog", { name: /item details/i });
     await user.click(within(dialog).getByRole("button", { name: /add to board/i }));
 
@@ -1411,8 +1431,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     setupFolio();
 
     await waitForArchive();
-    await user.click(screen.getByLabelText(/more actions for alpha/i));
-    await user.click(screen.getByRole("menuitem", { name: /edit/i }));
+    await user.dblClick(itemButton(/alpha/i));
     expect(await screen.findByRole("dialog", { name: /item details/i })).not.toBeNull();
 
     fireEvent.keyDown(window, { key: "Escape" });
@@ -1420,8 +1439,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(screen.queryByRole("dialog", { name: /item details/i })).toBeNull();
     });
 
-    await user.click(screen.getByLabelText(/more actions for alpha/i));
-    await user.click(screen.getByRole("menuitem", { name: /edit/i }));
+    await user.dblClick(itemButton(/alpha/i));
     const dialog = await screen.findByRole("dialog", { name: /item details/i });
     fireEvent.mouseDown(dialog.parentElement as HTMLElement);
 
@@ -1884,81 +1902,15 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(window.folio.copyToProject).toHaveBeenCalledWith("project-1", [
         "/tmp/board-image.png",
       ]);
-      expect(window.folio.copyReference).not.toHaveBeenCalled();
       expect(app.data.projects[0].imageIds).toContain("board-image");
       expect(app.data.canvases[0].itemIds).toEqual(["alpha", "board-image"]);
       expect(app.data.canvases[0].positions["board-image"]).toBeTruthy();
     });
-    expect(await screen.findByText("Board Image")).not.toBeNull();
-  });
-
-  it("imports reference images from the focused board toolbar", async () => {
-    const app = setupFolio({
-      dialogPaths: ["/tmp/reference-a.png", "/tmp/reference-b.png"],
-    });
-    vi.mocked(window.folio.copyReference).mockResolvedValueOnce([
-      {
-        id: "ref-a",
-        filename: "reference-a.png",
-        path: "projects/studio-archive/references/reference-a.png",
-        x: 0,
-        y: 0,
-      },
-      {
-        id: "ref-b",
-        filename: "reference-b.png",
-        path: "projects/studio-archive/references/reference-b.png",
-        x: 0,
-        y: 0,
-      },
-    ]);
-    const user = userEvent.setup();
-
-    await waitForArchive();
-    await openActiveBoardCanvas(user);
-    await new Promise((resolve) => {
-      window.setTimeout(resolve, 320);
-    });
-    const scroll = document.querySelector(".canvas-scroll") as HTMLElement;
-    Object.defineProperties(scroll, {
-      clientHeight: { configurable: true, value: 300 },
-      clientWidth: { configurable: true, value: 400 },
-    });
-    scroll.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        top: 0,
-        right: 400,
-        bottom: 300,
-        width: 400,
-        height: 300,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      }) as DOMRect;
-    scroll.scrollLeft = CANVAS_WORLD_ORIGIN - 40;
-    scroll.scrollTop = CANVAS_WORLD_ORIGIN - 20;
-
-    await user.click(screen.getByRole("button", { name: /add reference/i }));
-
-    await waitFor(() => {
-      expect(window.folio.openFileDialog).toHaveBeenCalledTimes(1);
-      expect(window.folio.copyReference).toHaveBeenCalledWith("board-1", [
-        "/tmp/reference-a.png",
-        "/tmp/reference-b.png",
-      ]);
-      expect(app.data.canvases[0].references).toHaveLength(2);
-    });
-    expect(app.data.canvases[0].references[0]).toMatchObject({
-      id: "ref-a",
-      x: 160,
-      y: 130,
-    });
-    expect(app.data.canvases[0].references[1]).toMatchObject({
-      id: "ref-b",
-      x: 188,
-      y: 158,
-    });
+    expect(
+      await screen.findByRole("button", {
+        name: /board image is already on this board/i,
+      }),
+    ).not.toBeNull();
   });
 
   it("draws, labels, and deletes edges between canvas objects", async () => {
@@ -2076,7 +2028,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("connects item, reference, note, and text objects through side nodes", async () => {
+  it("connects item, note, and text objects through side nodes", async () => {
     const app = setupFolio({
       data: makeData({
         canvases: [
@@ -2084,15 +2036,6 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
             ...makeData().canvases[0],
             itemIds: ["alpha"],
             positions: { alpha: { x: 80, y: 90 } },
-            references: [
-              {
-                id: "ref-a",
-                filename: "swatch.png",
-                path: "projects/studio-archive/references/swatch.png",
-                x: 320,
-                y: 90,
-              },
-            ],
             notes: [
               {
                 id: "note-a",
@@ -2121,9 +2064,6 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const alphaCard = document.querySelector(
       '[data-canvas-object-id="alpha"]',
     ) as HTMLElement;
-    const referenceCard = document.querySelector(
-      '[data-canvas-object-id="ref-a"]',
-    ) as HTMLElement;
     const noteCard = document.querySelector(
       '[data-canvas-object-id="note-a"]',
     ) as HTMLElement;
@@ -2133,16 +2073,16 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     fireEvent.pointerDown(
       within(alphaCard).getByRole("button", {
-        name: /connect alpha from right/i,
+        name: /connect alpha from bottom/i,
       }),
-      { button: 0, clientX: 242, clientY: 185 },
+      { button: 0, clientX: 161, clientY: 280 },
     );
-    fireEvent.pointerMove(window, { clientX: 320, clientY: 185 });
+    fireEvent.pointerMove(window, { clientX: 190, clientY: 340 });
     fireEvent.pointerUp(
-      within(referenceCard).getByRole("button", {
-        name: /connect swatch\.png from left/i,
+      within(noteCard).getByRole("button", {
+        name: /connect note from top/i,
       }),
-      { clientX: 320, clientY: 185 },
+      { clientX: 190, clientY: 340 },
     );
 
     fireEvent.pointerDown(
@@ -2164,9 +2104,9 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
         expect.arrayContaining([
           expect.objectContaining({
             fromId: "alpha",
-            toId: "ref-a",
-            fromSide: "right",
-            toSide: "left",
+            toId: "note-a",
+            fromSide: "bottom",
+            toSide: "top",
           }),
           expect.objectContaining({
             fromId: "note-a",

@@ -467,13 +467,6 @@ export function AppShell() {
     });
   }, []);
 
-  const openProjectFolder = useCallback(
-    (project: Project) => {
-      openFolioPath(project.folderPath);
-    },
-    [openFolioPath],
-  );
-
   const createProjectReview = useCallback((): ProjectReviewDocument => {
     if (!activeProject) {
       throw new Error("No active project is open.");
@@ -1207,14 +1200,17 @@ export function AppShell() {
             </div>
 
             <section
-              className="project-action-group"
-              aria-labelledby="project-views-heading"
+              className="project-action-group project-library-group"
+              aria-labelledby="project-library-heading"
             >
-              <div className="project-sidebar-section-heading" id="project-views-heading">
-                <ButtonIcon icon={Archive} size={14} />
-                <span>Views</span>
+              <div
+                className="project-sidebar-section-heading"
+                id="project-library-heading"
+              >
+                <ButtonIcon icon={Images} size={14} />
+                <span>Library</span>
               </div>
-              <nav className="project-surface-tabs" aria-label="Project views">
+              <nav className="project-surface-tabs" aria-label="Project library">
                 <button
                   className={projectSurface === "images" ? "active" : ""}
                   type="button"
@@ -1227,6 +1223,18 @@ export function AppShell() {
                   <ButtonIcon icon={Images} size={15} />
                   <span>All Images</span>
                 </button>
+              </nav>
+            </section>
+
+            <section
+              className="project-action-group project-views-group"
+              aria-labelledby="project-views-heading"
+            >
+              <div className="project-sidebar-section-heading" id="project-views-heading">
+                <ButtonIcon icon={Archive} size={14} />
+                <span>Views</span>
+              </div>
+              <nav className="project-surface-tabs" aria-label="Project views">
                 <button
                   className={projectSurface === "works" ? "active" : ""}
                   type="button"
@@ -1454,14 +1462,16 @@ export function AppShell() {
                         thumbUrls={thumbUrls}
                         setThumbUrls={setThumbUrls}
                         selectedItemIds={selectedItemIds}
+                        workItemIds={
+                          projectSurface === "images"
+                            ? activeProject?.workItemIds ?? []
+                            : []
+                        }
                         showDateGaps={gridTagFilter === "all"}
                         onBackgroundClick={clearSelection}
                         onDragStart={startArchiveItemDrag}
                         onItemOpen={handleItemOpen}
                         onEditItem={(itemId) => openItemDetails(itemId, "details")}
-                        onAddTag={addTagToItem}
-                        onRemoveTag={removeTagFromItem}
-                        onDeleteItem={deleteItem}
                       />
                     ) : (
                       <GridView
@@ -1473,13 +1483,15 @@ export function AppShell() {
                         tagFilter={gridTagFilter}
                         setTagFilter={setGridTagFilter}
                         selectedItemIds={selectedItemIds}
+                        workItemIds={
+                          projectSurface === "images"
+                            ? activeProject?.workItemIds ?? []
+                            : []
+                        }
                         onBackgroundClick={clearSelection}
                         onDragStart={startArchiveItemDrag}
                         onItemOpen={handleItemOpen}
                         onEditItem={(itemId) => openItemDetails(itemId, "details")}
-                        onAddTag={addTagToItem}
-                        onRemoveTag={removeTagFromItem}
-                        onDeleteItem={deleteItem}
                       />
                     )}
                   </ArchiveWorkspace>
@@ -1519,8 +1531,9 @@ export function AppShell() {
         <ProjectsView
           data={data}
           busy={busy}
+          thumbUrls={thumbUrls}
+          setThumbUrls={setThumbUrls}
           onCreateProject={createProjectFromHome}
-          onOpenFolder={openProjectFolder}
           onOpenProject={openProject}
         />
       )}
