@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type {
   Canvas,
   CanvasNote,
+  CanvasObjectGeometry,
   CanvasPosition,
   CanvasReference,
   CanvasTextElement,
+  CanvasTextSize,
   FolioData,
   FolioItem,
   ThumbnailUrls,
@@ -20,6 +22,7 @@ import {
   addItemsToCanvas,
   createId,
   formatCount,
+  markCanvasSaved,
   mergeItems,
 } from "../folio/model";
 import { chooseAndImportItems } from "../folio/importing";
@@ -47,12 +50,14 @@ import {
   removeCanvasReference,
   removeItemFromCanvas,
   updateCanvasNoteText,
+  updateCanvasTextElementSize,
   updateCanvasTextElementText,
 } from "./canvasModel";
 import { CanvasViewport } from "./CanvasViewport";
 import { useCanvasDrawingTools } from "./useCanvasDrawingTools";
 import { useCanvasEdges } from "./useCanvasEdges";
 import { useCanvasObjectDrag } from "./useCanvasObjectDrag";
+import { useCanvasObjectResize } from "./useCanvasObjectResize";
 
 const BOARD_BROWSER_PREVIEW_LIMIT = 3;
 
@@ -212,11 +217,14 @@ export function CanvasView({
 
   const updateCanvas = useCallback(
     (canvasId: string, updater: (canvas: Canvas) => Canvas, message?: string) => {
+      const savedAt = new Date().toISOString();
       commitData(
         (current) => ({
           ...current,
           canvases: current.canvases.map((canvas) =>
-            canvas.id === canvasId ? updater(canvas) : canvas,
+            canvas.id === canvasId
+              ? markCanvasSaved(updater(canvas), savedAt)
+              : canvas,
           ),
         }),
         message,
@@ -253,13 +261,16 @@ export function CanvasView({
         (canvas, item) => addItemToCanvas(canvas, item.id),
         activeCanvas,
       );
+      const savedAt = new Date().toISOString();
 
       saveData(
         {
           ...data,
           items: nextItems,
           canvases: data.canvases.map((canvas) =>
-            canvas.id === activeCanvas.id ? nextCanvas : canvas,
+            canvas.id === activeCanvas.id
+              ? markCanvasSaved(nextCanvas, savedAt)
+              : canvas,
           ),
         },
         `${formatCount(imported.length, "item")} added to board`,
@@ -346,28 +357,28 @@ export function CanvasView({
   }, [activeCanvas, updateCanvas]);
 
   const positionForItem = useCallback(
-    (item: FolioItem, index: number): CanvasPosition => {
+    (item: FolioItem, index: number): CanvasObjectGeometry => {
       return positionForCanvasItem(item, index, activeCanvas, dragPreview);
     },
     [activeCanvas, dragPreview],
   );
 
   const positionForReference = useCallback(
-    (reference: CanvasReference): CanvasPosition => {
+    (reference: CanvasReference): CanvasObjectGeometry => {
       return positionForCanvasReference(reference, dragPreview);
     },
     [dragPreview],
   );
 
   const positionForNote = useCallback(
-    (note: CanvasNote): CanvasPosition => {
+    (note: CanvasNote): CanvasObjectGeometry => {
       return positionForCanvasNote(note, dragPreview);
     },
     [dragPreview],
   );
 
   const positionForText = useCallback(
-    (textElement: CanvasTextElement): CanvasPosition => {
+    (textElement: CanvasTextElement): CanvasObjectGeometry => {
       return positionForCanvasText(textElement, dragPreview);
     },
     [dragPreview],
@@ -458,6 +469,14 @@ export function CanvasView({
     startEdgeDrag,
   });
 
+  const { startResize } = useCanvasObjectResize({
+    activeCanvas,
+    canvasZoom,
+    data,
+    saveData,
+    setDragPreview,
+  });
+
   const centerPositionForCurrentViewport = useCallback((): CanvasPosition => {
     const scroll = scrollRef.current;
     if (!scroll) return { x: 120, y: 120 };
@@ -541,16 +560,20 @@ export function CanvasView({
           x: point.x + index * 28,
           y: point.y + index * 28,
         }));
+        const savedAt = new Date().toISOString();
 
         commitData(
           (current) => ({
             ...current,
             canvases: current.canvases.map((canvas) =>
               canvas.id === activeCanvas.id
-                ? {
-                    ...canvas,
-                    references: [...(canvas.references ?? []), ...placed],
-                  }
+                ? markCanvasSaved(
+                    {
+                      ...canvas,
+                      references: [...(canvas.references ?? []), ...placed],
+                    },
+                    savedAt,
+                  )
                 : canvas,
             ),
           }),
@@ -643,6 +666,18 @@ export function CanvasView({
       if (!activeCanvas) return;
       updateCanvas(activeCanvas.id, (canvas) =>
         updateCanvasTextElementText(canvas, textElementId, text),
+      );
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const updateTextElementSize = useCallback(
+    (textElementId: string, size: CanvasTextSize) => {
+      if (!activeCanvas) return;
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => updateCanvasTextElementSize(canvas, textElementId, size),
+        "Text size updated",
       );
     },
     [activeCanvas, updateCanvas],
@@ -741,13 +776,17 @@ export function CanvasView({
         const knownItemIds = new Set(data.items.map((item) => item.id));
         const validItemIds = itemIds.filter((itemId) => knownItemIds.has(itemId));
         if (!validItemIds.length) return;
+        const savedAt = new Date().toISOString();
 
         commitData(
           (current) => ({
             ...current,
             canvases: current.canvases.map((canvas) =>
               canvas.id === canvasId
-                ? addItemsToCanvas(canvas, validItemIds)
+                ? markCanvasSaved(
+                    addItemsToCanvas(canvas, validItemIds),
+                    savedAt,
+                  )
                 : canvas,
             ),
           }),
@@ -907,9 +946,11 @@ export function CanvasView({
             onRemoveReference={removeReference}
             onStartConnectorDrag={startConnectorDrag}
             onStartDrag={startDrag}
+            onStartResize={startResize}
             onSuppressClickAfterDrag={suppressClickAfterDrag}
             onUpdateNote={updateNote}
             onUpdateTextElement={updateTextElement}
+            onUpdateTextElementSize={updateTextElementSize}
           />
         </CanvasViewport>
       </div>

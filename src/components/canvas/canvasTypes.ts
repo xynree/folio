@@ -2,6 +2,7 @@ import type {
   CanvasConnectionSide,
   CanvasEdge,
   CanvasEdgeDirection,
+  CanvasObjectSize,
   CanvasPosition,
 } from "../../types";
 
@@ -12,6 +13,7 @@ export type CanvasTool = "select" | "pen" | "eraser" | "text";
 export type CanvasObjectLayout = {
   id: string;
   kind: CanvasObjectKind;
+  size: CanvasObjectSize;
   center: CanvasPosition;
   sides: Record<CanvasConnectionSide, CanvasPosition>;
 };

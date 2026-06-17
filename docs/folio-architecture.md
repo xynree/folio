@@ -142,21 +142,32 @@ interface Tag {
 }
 ```
 
-`canvases.json` stores boards, spatial positions, notes, references, and future edge data:
+`canvases.json` stores boards, spatial object geometry, notes, references, and future edge data:
 
 ```ts
+interface CanvasObjectGeometry {
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+}
+
+type CanvasTextSize = "sm" | "md" | "large";
+
 interface Canvas {
   id: string;
   title: string;
   description?: string;
   color?: string;
+  createdAt?: string;
+  updatedAt?: string;
   itemIds: string[];
-  positions: Record<string, CanvasPosition>;
+  positions: Record<string, CanvasObjectGeometry>;
   notes: CanvasNote[];
   edges: CanvasEdge[];
   references: CanvasReference[];
   strokes?: CanvasStroke[];
-  texts?: CanvasTextElement[];
+  texts?: CanvasTextElement[]; // text elements may include size?: CanvasTextSize
 }
 ```
 
@@ -330,9 +341,11 @@ The right dock is minimized by default. When open, it can show either:
 
 Board settings support title and color editing. The selected board color appears as dots on archive cards that belong to that board.
 
+Board headers show `createdAt` and `updatedAt` timestamps instead of object counts. New boards set both fields when created, and board mutations refresh `updatedAt` before the updated `canvases.json` payload is saved. Legacy boards without timestamps remain readable and receive timestamp fields the next time a board save touches them.
+
 Canvas boards use `CanvasViewport`, which renders the dotted background with an actual HTML `<canvas>`. The scrollable surface contains cards, notes, and references as absolutely positioned React elements. Wheel input zooms around the pointer, clamps between the configured min and max zoom, and prevents the page-style scroll effect once the zoom limit is reached.
 
-Canvas cards, references, and notes are draggable from any non-control area. Pointer movement beyond the small drag threshold becomes a drag; otherwise the action remains a click.
+Canvas cards, references, notes, and text elements are draggable from any non-control area. Pointer movement beyond the small drag threshold becomes a drag; otherwise the action remains a click. They can also be resized from the lower-right handle; saved dimensions are optional `width`/`height` fields on the same canvas objects, and image cards preserve their aspect ratio while resizing. Board text renders as transparent canvas text rather than a card, supports `sm`, `md`, and `large` text sizes, and saves typed text after a short debounce.
 
 ## Studio Wall Architecture
 

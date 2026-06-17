@@ -6,15 +6,18 @@ import {
   deleteCanvasEdge,
   deleteCanvasNote,
   deleteCanvasTextElement,
+  eraseCanvasStrokesAtPoint,
   moveCanvasObject,
   removeCanvasReference,
   removeCanvasStrokes,
   removeItemFromCanvas,
   removeLastCanvasStroke,
+  resizeCanvasObject,
   reverseCanvasEdgeDirection,
   updateCanvasEdgeDirection,
   updateCanvasEdgeLabel,
   updateCanvasNoteText,
+  updateCanvasTextElementSize,
   updateCanvasTextElementText,
 } from "./canvasModel";
 
@@ -88,6 +91,10 @@ describe("canvas model helpers", () => {
     );
 
     expect(updatedCanvas.texts?.[0].text).toBe("Edited");
+    expect(
+      updateCanvasTextElementSize(updatedCanvas, "text-1", "large").texts?.[0]
+        .size,
+    ).toBe("large");
     expect(deleteCanvasTextElement(updatedCanvas, "text-1").edges).toHaveLength(2);
   });
 
@@ -116,6 +123,29 @@ describe("canvas model helpers", () => {
         (stroke) => stroke.id,
       ),
     ).toEqual(["stroke-2"]);
+  });
+
+  it("erases only the stroke portions inside the eraser circle", () => {
+    let idCounter = 0;
+    const canvas: Canvas = {
+      ...canvasFixture(),
+      strokes: [
+        { id: "stroke-1", color: "#111111", path: "M 100 100 L 200 100" },
+        { id: "stroke-2", color: "#222222", path: "M 240 100 L 280 100" },
+      ],
+    };
+
+    const nextCanvas = eraseCanvasStrokesAtPoint(
+      canvas,
+      { x: 150, y: 100 },
+      () => `stroke-piece-${idCounter += 1}`,
+    );
+
+    expect(nextCanvas.strokes).toEqual([
+      { id: "stroke-piece-1", color: "#111111", path: "M 100 100 L 132 100" },
+      { id: "stroke-piece-2", color: "#111111", path: "M 168 100 L 200 100" },
+      { id: "stroke-2", color: "#222222", path: "M 240 100 L 280 100" },
+    ]);
   });
 
   it("updates edge labels and direction state", () => {
@@ -179,5 +209,51 @@ describe("canvas model helpers", () => {
     expect(
       moveCanvasObject(canvas, "text", "text-1", { x: 41, y: 42 }).texts?.[0],
     ).toEqual(expect.objectContaining({ x: 41, y: 42 }));
+  });
+
+  it("resizes every supported canvas object kind", () => {
+    const resizedItemCanvas = resizeCanvasObject(
+      canvasFixture(),
+      "item",
+      "item-1",
+      { width: 240, height: 280 },
+    );
+    const resizedReferenceCanvas = resizeCanvasObject(
+      canvasFixture(),
+      "reference",
+      "reference-1",
+      { width: 260, height: 320 },
+    );
+    const resizedNoteCanvas = resizeCanvasObject(
+      canvasFixture(),
+      "note",
+      "note-1",
+      { width: 280, height: 180 },
+    );
+    const resizedTextCanvas = resizeCanvasObject(
+      canvasFixture(),
+      "text",
+      "text-1",
+      { width: 300, height: 120 },
+    );
+
+    expect(resizedItemCanvas.positions["item-1"]).toMatchObject({
+      x: 10,
+      y: 20,
+      width: 240,
+      height: 280,
+    });
+    expect(resizedReferenceCanvas.references[0]).toMatchObject({
+      width: 260,
+      height: 320,
+    });
+    expect(resizedNoteCanvas.notes[0]).toMatchObject({
+      width: 280,
+      height: 180,
+    });
+    expect(resizedTextCanvas.texts?.[0]).toMatchObject({
+      width: 300,
+      height: 120,
+    });
   });
 });

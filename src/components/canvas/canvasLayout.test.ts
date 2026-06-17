@@ -30,13 +30,21 @@ function canvasFixture(): Canvas {
     id: "canvas-1",
     title: "Board",
     itemIds: ["item-1", "missing", "item-2"],
-    positions: { "item-1": { x: 10, y: 20 } },
-    notes: [{ id: "note-1", text: "Note", x: 30, y: 40 }],
+    positions: { "item-1": { x: 10, y: 20, width: 240, height: 280 } },
+    notes: [{ id: "note-1", text: "Note", x: 30, y: 40, width: 260, height: 180 }],
     edges: [],
     references: [
-      { id: "reference-1", filename: "ref.png", path: "refs/ref.png", x: 50, y: 60 },
+      {
+        id: "reference-1",
+        filename: "ref.png",
+        path: "refs/ref.png",
+        x: 50,
+        y: 60,
+        width: 300,
+        height: 340,
+      },
     ],
-    texts: [{ id: "text-1", text: "Text", x: 70, y: 80 }],
+    texts: [{ id: "text-1", text: "Text", x: 70, y: 80, width: 320, height: 120 }],
   };
 }
 
@@ -64,6 +72,8 @@ describe("canvas layout helpers", () => {
     expect(positionForCanvasItem(item("item-1"), 0, canvas, null)).toEqual({
       x: 10,
       y: 20,
+      width: 240,
+      height: 280,
     });
     expect(positionForCanvasItem(item("item-3"), 4, canvas, null)).toEqual({
       x: 80,
@@ -84,6 +94,8 @@ describe("canvas layout helpers", () => {
     expect(positionForCanvasReference(canvas.references[0], null)).toEqual({
       x: 50,
       y: 60,
+      width: 300,
+      height: 340,
     });
     expect(
       positionForCanvasNote(canvas.notes[0], {
@@ -119,9 +131,12 @@ describe("canvas layout helpers", () => {
       "note-1",
       "text-1",
     ]);
-    expect(layouts.get("note-1")?.center).toEqual({
-      x: CANVAS_WORLD_ORIGIN + 30 + 110,
-      y: CANVAS_WORLD_ORIGIN + 40 + 75,
+    expect(layouts.get("note-1")).toMatchObject({
+      center: {
+        x: CANVAS_WORLD_ORIGIN + 30 + 130,
+        y: CANVAS_WORLD_ORIGIN + 40 + 90,
+      },
+      size: { width: 260, height: 180 },
     });
   });
 });

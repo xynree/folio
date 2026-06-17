@@ -1,5 +1,6 @@
 import React, { useCallback, useRef } from "react";
-import type { Canvas, CanvasPosition, FolioData } from "../../types";
+import type { Canvas, CanvasObjectGeometry, FolioData } from "../../types";
+import { markCanvasSaved } from "../folio/model";
 import type { CanvasDragPreview } from "./canvasLayout";
 import { moveCanvasObject } from "./canvasModel";
 import type { CanvasObjectKind } from "./canvasTypes";
@@ -40,7 +41,7 @@ export function useCanvasObjectDrag({
       event: React.PointerEvent,
       kind: CanvasObjectKind,
       objectId: string,
-      startPosition: CanvasPosition,
+      startPosition: CanvasObjectGeometry,
     ) => {
       if (!activeCanvas) return;
       if (event.button !== 0) return;
@@ -55,17 +56,22 @@ export function useCanvasObjectDrag({
       let isDragging = false;
 
       const positionFromPointer = (clientX: number, clientY: number) => ({
+        ...startPosition,
         x: startPosition.x + (clientX - startPointer.x) / canvasZoom,
         y: startPosition.y + (clientY - startPointer.y) / canvasZoom,
       });
 
-      const commitPosition = (finalPosition: CanvasPosition) => {
+      const commitPosition = (finalPosition: CanvasObjectGeometry) => {
+        const savedAt = new Date().toISOString();
         saveData(
           {
             ...data,
             canvases: data.canvases.map((canvas) =>
               canvas.id === activeCanvas.id
-                ? moveCanvasObject(canvas, kind, objectId, finalPosition)
+                ? markCanvasSaved(
+                    moveCanvasObject(canvas, kind, objectId, finalPosition),
+                    savedAt,
+                  )
                 : canvas,
             ),
           },

@@ -206,8 +206,14 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.getByLabelText(/minimize heatmap/i)).not.toBeNull();
     expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
     expect(screen.getByRole("separator", { name: /resize tags panel/i })).not.toBeNull();
+    expect(screen.getByRole("button", { name: /make archive prominent/i }))
+      .not.toBeNull();
+    expect(screen.getByRole("button", { name: /make boards prominent/i }))
+      .not.toBeNull();
+    expect(screen.queryByRole("button", { name: /open archive panel/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /open board panel/i })).toBeNull();
     expect(document.querySelector(".canvas-dock-minimized")).toBeNull();
+    expect(document.querySelector(".archive-panel-minimized")).toBeNull();
     expect(document.querySelector(".canvas-board-browser")).not.toBeNull();
     expect(document.querySelector(".canvas-board-grid")).not.toBeNull();
     expect(
@@ -282,6 +288,25 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
           .getPropertyValue("--archive-sidebar-width"),
       ).toBe("260px");
     });
+
+    await user.click(screen.getByRole("button", { name: /make boards prominent/i }));
+    expect(document.querySelector(".archive-panel-minimized")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /open archive panel/i })).not.toBeNull();
+    expect(screen.queryByRole("separator", { name: /resize open board panel/i }))
+      .toBeNull();
+    expect(workspace.style.gridTemplateColumns).toContain("58px 0px");
+    expect(workspace.style.gridTemplateColumns).toContain("minmax(420px, 1fr)");
+
+    await user.click(screen.getByRole("button", { name: /open archive panel/i }));
+    expect(document.querySelector(".archive-panel-minimized")).toBeNull();
+    expect(document.querySelector(".canvas-dock-minimized")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /open board panel/i })).not.toBeNull();
+    expect(workspace.style.gridTemplateColumns).toContain("0px 58px");
+
+    await user.click(screen.getByRole("button", { name: /open board panel/i }));
+    expect(document.querySelector(".canvas-dock-minimized")).toBeNull();
+    expect(screen.getByRole("separator", { name: /resize open board panel/i }))
+      .not.toBeNull();
 
     await user.click(screen.getByLabelText(/minimize heatmap/i));
     expect(
@@ -575,7 +600,8 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(app.data.canvases[0].title).toBe("Story");
     expect(app.data.canvases[0].itemIds).toEqual(["alpha", "bravo", "charlie"]);
     expect(screen.queryByRole("dialog", { name: /name new board/i })).toBeNull();
-    expect(screen.getByText("3 items · 0 notes · 0 references")).not.toBeNull();
+    expect(screen.getByText(/Created/).textContent).toContain("Last saved");
+    expect(screen.queryByText("3 items · 0 notes · 0 references")).toBeNull();
 
     await waitFor(() => {
       expect(document.querySelectorAll(".canvas-card")).toHaveLength(3);
@@ -1625,6 +1651,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.canvases[0].texts).toHaveLength(1);
     });
     expect(app.data.canvases[0].texts?.[0]).toMatchObject({
+      size: "md",
       text: "Text",
       x: 160,
       y: 180,
@@ -1633,10 +1660,14 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const textArea = await screen.findByLabelText(/board text/i);
     await user.clear(textArea);
     await user.type(textArea, "Open question");
-    fireEvent.blur(textArea);
 
     await waitFor(() => {
       expect(app.data.canvases[0].texts?.[0].text).toBe("Open question");
+    });
+
+    await user.click(screen.getByRole("button", { name: /large text/i }));
+    await waitFor(() => {
+      expect(app.data.canvases[0].texts?.[0].size).toBe("large");
     });
 
     await user.click(screen.getByRole("button", { name: /delete text/i }));
@@ -1694,8 +1725,12 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     fireEvent.pointerUp(window, { clientX: 20110, clientY: 20104 });
 
     await waitFor(() => {
-      expect(app.data.canvases[0].strokes).toHaveLength(0);
+      expect(app.data.canvases[0].strokes).toHaveLength(1);
     });
+    expect(app.data.canvases[0].strokes?.[0].path).not.toContain(
+      "M 20110 20120",
+    );
+    expect(app.data.canvases[0].strokes?.[0].path).toContain("L 20160 20170");
 
     await user.click(screen.getByRole("button", { name: /pen tool/i }));
     fireEvent.pointerDown(surface, { button: 0, clientX: 20110, clientY: 20120 });
@@ -1704,12 +1739,12 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     fireEvent.pointerUp(window, { clientX: 20160, clientY: 20170 });
 
     await waitFor(() => {
-      expect(app.data.canvases[0].strokes).toHaveLength(1);
+      expect(app.data.canvases[0].strokes).toHaveLength(2);
     });
 
     fireEvent.keyDown(window, { key: "z", metaKey: true });
     await waitFor(() => {
-      expect(app.data.canvases[0].strokes).toHaveLength(0);
+      expect(app.data.canvases[0].strokes).toHaveLength(1);
     });
   });
 
@@ -1743,6 +1778,43 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     fireEvent.click(movedImage);
 
     expect(await screen.findByRole("dialog", { name: /item details/i })).not.toBeNull();
+  });
+
+  it("resizes canvas cards and preserves image card proportions", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openActiveBoardCanvas(user);
+
+    const alphaCard = document.querySelector(
+      '[data-canvas-object-id="alpha"]',
+    ) as HTMLElement;
+    expect(alphaCard).not.toBeNull();
+    expect(alphaCard.style.width).toBe("162px");
+    expect(alphaCard.style.height).toBe("190px");
+
+    const resizeHandle = within(alphaCard).getByRole("button", {
+      name: /resize alpha/i,
+    });
+    fireEvent.pointerDown(resizeHandle, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(window, { clientX: 262, clientY: 100 });
+
+    await waitFor(() => {
+      expect(alphaCard.style.width).toBe("324px");
+      expect(alphaCard.style.height).toBe("380px");
+    });
+
+    fireEvent.pointerUp(window, { clientX: 262, clientY: 100 });
+
+    await waitFor(() => {
+      expect(app.data.canvases[0].positions.alpha).toMatchObject({
+        x: 80,
+        y: 90,
+        width: 324,
+        height: 380,
+      });
+    });
   });
 
   it("zooms the canvas in and out around the current pointer position", async () => {

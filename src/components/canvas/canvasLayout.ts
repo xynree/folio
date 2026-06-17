@@ -1,7 +1,7 @@
 import type {
   Canvas,
   CanvasNote,
-  CanvasPosition,
+  CanvasObjectGeometry,
   CanvasReference,
   CanvasTextElement,
   FolioItem,
@@ -12,7 +12,7 @@ import type { CanvasObjectKind, CanvasObjectLayout } from "./canvasTypes";
 export type CanvasDragPreview = {
   id: string;
   kind: CanvasObjectKind;
-  position: CanvasPosition;
+  position: CanvasObjectGeometry;
 };
 
 export function itemsByIdFromItems(items: FolioItem[]): Map<string, FolioItem> {
@@ -45,7 +45,7 @@ export function positionForCanvasItem(
   index: number,
   canvas: Canvas | null,
   dragPreview: CanvasDragPreview | null,
-): CanvasPosition {
+): CanvasObjectGeometry {
   if (dragPreview?.kind === "item" && dragPreview.id === item.id) {
     return dragPreview.position;
   }
@@ -59,34 +59,44 @@ export function positionForCanvasItem(
 export function positionForCanvasReference(
   reference: CanvasReference,
   dragPreview: CanvasDragPreview | null,
-): CanvasPosition {
+): CanvasObjectGeometry {
   if (dragPreview?.kind === "reference" && dragPreview.id === reference.id) {
     return dragPreview.position;
   }
 
-  return { x: reference.x, y: reference.y };
+  return {
+    x: reference.x,
+    y: reference.y,
+    width: reference.width,
+    height: reference.height,
+  };
 }
 
 export function positionForCanvasNote(
   note: CanvasNote,
   dragPreview: CanvasDragPreview | null,
-): CanvasPosition {
+): CanvasObjectGeometry {
   if (dragPreview?.kind === "note" && dragPreview.id === note.id) {
     return dragPreview.position;
   }
 
-  return { x: note.x, y: note.y };
+  return { x: note.x, y: note.y, width: note.width, height: note.height };
 }
 
 export function positionForCanvasText(
   textElement: CanvasTextElement,
   dragPreview: CanvasDragPreview | null,
-): CanvasPosition {
+): CanvasObjectGeometry {
   if (dragPreview?.kind === "text" && dragPreview.id === textElement.id) {
     return dragPreview.position;
   }
 
-  return { x: textElement.x, y: textElement.y };
+  return {
+    x: textElement.x,
+    y: textElement.y,
+    width: textElement.width,
+    height: textElement.height,
+  };
 }
 
 export function buildCanvasObjectLayouts({

@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { GripVertical, Trash2, X } from "lucide-react";
+import { GripVertical, Maximize2, Trash2, X } from "lucide-react";
 import type {
   CanvasConnectionSide,
   CanvasNote,
-  CanvasPosition,
+  CanvasObjectGeometry,
   CanvasReference,
   CanvasTextElement,
+  CanvasTextSize,
   FolioItem,
   ThumbnailUrls,
 } from "../../types";
@@ -13,13 +14,39 @@ import { CANVAS_WORLD_ORIGIN } from "../folio/constants";
 import { basename } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
+import { sizeForCanvasObject } from "./canvasGeometry";
+import type { CanvasObjectKind } from "./canvasTypes";
 
 type ConnectorPointerDownHandler = (
   event: React.PointerEvent<HTMLButtonElement>,
   side: CanvasConnectionSide,
 ) => void;
 
+type ResizePointerDownHandler = (
+  event: React.PointerEvent<HTMLButtonElement>,
+) => void;
+
 const CONNECTOR_SIDES: CanvasConnectionSide[] = ["top", "right", "bottom", "left"];
+const TEXT_SAVE_DEBOUNCE_MS = 500;
+const TEXT_SIZE_OPTIONS: Array<{ label: string; size: CanvasTextSize }> = [
+  { label: "Sm", size: "sm" },
+  { label: "Md", size: "md" },
+  { label: "Large", size: "large" },
+];
+
+function objectCardStyle(
+  kind: CanvasObjectKind,
+  geometry: CanvasObjectGeometry,
+): React.CSSProperties {
+  const size = sizeForCanvasObject(kind, geometry);
+  return {
+    height: size.height,
+    transform: `translate(${geometry.x + CANVAS_WORLD_ORIGIN}px, ${
+      geometry.y + CANVAS_WORLD_ORIGIN
+    }px)`,
+    width: size.width,
+  };
+}
 
 function ConnectionHandles({
   label,
@@ -45,6 +72,27 @@ function ConnectionHandles({
   );
 }
 
+function ResizeHandle({
+  label,
+  onPointerDown,
+}: {
+  label: string;
+  onPointerDown: ResizePointerDownHandler;
+}) {
+  return (
+    <button
+      className="icon-button canvas-card-resize-handle"
+      type="button"
+      aria-label={`Resize ${label}`}
+      title="Resize"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={onPointerDown}
+    >
+      <ButtonIcon icon={Maximize2} size={13} />
+    </button>
+  );
+}
+
 export function CanvasItemCard({
   item,
   position,
@@ -54,16 +102,18 @@ export function CanvasItemCard({
   onRemove,
   onConnectorPointerDown,
   onPointerDown,
+  onResizePointerDown,
   onClickCapture,
 }: {
   item: FolioItem;
-  position: CanvasPosition;
+  position: CanvasObjectGeometry;
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   onOpen: (itemId: string) => void;
   onRemove: (itemId: string) => void;
   onConnectorPointerDown: ConnectorPointerDownHandler;
   onPointerDown: (event: React.PointerEvent) => void;
+  onResizePointerDown: ResizePointerDownHandler;
   onClickCapture: (event: React.MouseEvent) => void;
 }) {
   const label = item.title || basename(item.path);
@@ -72,11 +122,7 @@ export function CanvasItemCard({
       className="canvas-card"
       data-canvas-object-id={item.id}
       data-canvas-object-kind="item"
-      style={{
-        transform: `translate(${position.x + CANVAS_WORLD_ORIGIN}px, ${
-          position.y + CANVAS_WORLD_ORIGIN
-        }px)`,
-      }}
+      style={objectCardStyle("item", position)}
       onPointerDown={onPointerDown}
       onClickCapture={onClickCapture}
       onClick={() => onOpen(item.id)}
@@ -101,6 +147,7 @@ export function CanvasItemCard({
         </button>
       </div>
       <strong>{label}</strong>
+      <ResizeHandle label={label} onPointerDown={onResizePointerDown} />
       <ConnectionHandles
         label={label}
         onConnectorPointerDown={onConnectorPointerDown}
@@ -115,13 +162,15 @@ export function ReferenceCard({
   onRemove,
   onConnectorPointerDown,
   onPointerDown,
+  onResizePointerDown,
   onClickCapture,
 }: {
   reference: CanvasReference;
-  position: CanvasPosition;
+  position: CanvasObjectGeometry;
   onRemove: (referenceId: string) => void;
   onConnectorPointerDown: ConnectorPointerDownHandler;
   onPointerDown: (event: React.PointerEvent) => void;
+  onResizePointerDown: ResizePointerDownHandler;
   onClickCapture: (event: React.MouseEvent) => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
@@ -146,11 +195,7 @@ export function ReferenceCard({
       className="canvas-card reference-card"
       data-canvas-object-id={reference.id}
       data-canvas-object-kind="reference"
-      style={{
-        transform: `translate(${position.x + CANVAS_WORLD_ORIGIN}px, ${
-          position.y + CANVAS_WORLD_ORIGIN
-        }px)`,
-      }}
+      style={objectCardStyle("reference", position)}
       onPointerDown={onPointerDown}
       onClickCapture={onClickCapture}
     >
@@ -177,6 +222,10 @@ export function ReferenceCard({
         )}
       </span>
       <strong>{reference.filename}</strong>
+      <ResizeHandle
+        label={reference.filename}
+        onPointerDown={onResizePointerDown}
+      />
       <ConnectionHandles
         label={reference.filename}
         onConnectorPointerDown={onConnectorPointerDown}
@@ -191,6 +240,7 @@ export function CanvasNoteCard({
   onDelete,
   onConnectorPointerDown,
   onPointerDown,
+  onResizePointerDown,
   onClickCapture,
 }: {
   note: CanvasNote;
@@ -198,6 +248,7 @@ export function CanvasNoteCard({
   onDelete: (noteId: string) => void;
   onConnectorPointerDown: ConnectorPointerDownHandler;
   onPointerDown: (event: React.PointerEvent) => void;
+  onResizePointerDown: ResizePointerDownHandler;
   onClickCapture: (event: React.MouseEvent) => void;
 }) {
   const [draft, setDraft] = useState(note.text);
@@ -211,11 +262,7 @@ export function CanvasNoteCard({
       className="canvas-note"
       data-canvas-object-id={note.id}
       data-canvas-object-kind="note"
-      style={{
-        transform: `translate(${note.x + CANVAS_WORLD_ORIGIN}px, ${
-          note.y + CANVAS_WORLD_ORIGIN
-        }px)`,
-      }}
+      style={objectCardStyle("note", note)}
       onPointerDown={onPointerDown}
       onClickCapture={onClickCapture}
     >
@@ -249,6 +296,7 @@ export function CanvasNoteCard({
         }}
         onChange={(event) => setDraft(event.target.value)}
       />
+      <ResizeHandle label="note" onPointerDown={onResizePointerDown} />
       <ConnectionHandles
         label="note"
         onConnectorPointerDown={onConnectorPointerDown}
@@ -261,33 +309,44 @@ export function CanvasTextCard({
   textElement,
   onChange,
   onDelete,
+  onSizeChange,
   onConnectorPointerDown,
   onPointerDown,
+  onResizePointerDown,
   onClickCapture,
 }: {
   textElement: CanvasTextElement;
   onChange: (textElementId: string, text: string) => void;
   onDelete: (textElementId: string) => void;
+  onSizeChange: (textElementId: string, size: CanvasTextSize) => void;
   onConnectorPointerDown: ConnectorPointerDownHandler;
   onPointerDown: (event: React.PointerEvent) => void;
+  onResizePointerDown: ResizePointerDownHandler;
   onClickCapture: (event: React.MouseEvent) => void;
 }) {
   const [draft, setDraft] = useState(textElement.text);
+  const textSize = textElement.size ?? "md";
 
   useEffect(() => {
     setDraft(textElement.text);
   }, [textElement.text]);
 
+  useEffect(() => {
+    if (draft === textElement.text) return undefined;
+
+    const timeout = window.setTimeout(() => {
+      onChange(textElement.id, draft);
+    }, TEXT_SAVE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeout);
+  }, [draft, onChange, textElement.id, textElement.text]);
+
   return (
     <div
-      className="canvas-text-card"
+      className={`canvas-text-card canvas-text-size-${textSize}`}
       data-canvas-object-id={textElement.id}
       data-canvas-object-kind="text"
-      style={{
-        transform: `translate(${textElement.x + CANVAS_WORLD_ORIGIN}px, ${
-          textElement.y + CANVAS_WORLD_ORIGIN
-        }px)`,
-      }}
+      style={objectCardStyle("text", textElement)}
       onPointerDown={onPointerDown}
       onClickCapture={onClickCapture}
     >
@@ -296,6 +355,7 @@ export function CanvasTextCard({
         type="button"
         aria-label="Delete text"
         title="Delete text"
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => {
           event.stopPropagation();
           onDelete(textElement.id);
@@ -303,18 +363,32 @@ export function CanvasTextCard({
       >
         <ButtonIcon icon={Trash2} />
       </button>
+      <div className="canvas-text-size-control" aria-label="Text size">
+        {TEXT_SIZE_OPTIONS.map((option) => (
+          <button
+            className={
+              option.size === textSize ? "canvas-text-size-active" : ""
+            }
+            key={option.size}
+            type="button"
+            aria-label={`${option.label} text`}
+            aria-pressed={option.size === textSize}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSizeChange(textElement.id, option.size);
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
       <textarea
         aria-label="Board text"
         value={draft}
-        onBlur={() => {
-          if (draft.trim()) {
-            onChange(textElement.id, draft);
-          } else {
-            onDelete(textElement.id);
-          }
-        }}
         onChange={(event) => setDraft(event.target.value)}
       />
+      <ResizeHandle label="text" onPointerDown={onResizePointerDown} />
       <ConnectionHandles
         label="text"
         onConnectorPointerDown={onConnectorPointerDown}

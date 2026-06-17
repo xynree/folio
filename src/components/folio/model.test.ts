@@ -1,3 +1,4 @@
+import { describe, it, vi, expect } from "vitest";
 import type { Canvas, FolioItem } from "../../types";
 import {
   addItemsToCanvas,
@@ -7,6 +8,7 @@ import {
   getGaps,
   groupItemsByDate,
   itemCanUseDirectPreview,
+  markCanvasSaved,
   mergeItems,
   tagTextsForItem,
 } from "./model";
@@ -61,22 +63,44 @@ describe("folio model helpers", () => {
 
   it("deduplicates imported items by id", () => {
     expect(
-      mergeItems([item("one", "2026-06-15T08:00:00.000Z")], [
-        { ...item("one", "2026-06-15T09:00:00.000Z"), title: "updated" },
-        item("two", "2026-06-15T10:00:00.000Z"),
-      ]).map((entry) => entry.title),
+      mergeItems(
+        [item("one", "2026-06-15T08:00:00.000Z")],
+        [
+          { ...item("one", "2026-06-15T09:00:00.000Z"), title: "updated" },
+          item("two", "2026-06-15T10:00:00.000Z"),
+        ],
+      ).map((entry) => entry.title),
     ).toEqual(["updated", "two"]);
   });
 
   it("adds canvas items once and assigns drop-relative positions", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-15T12:00:00.000Z"));
     const canvas = createCanvas(0, "Board");
     const next = addItemsToCanvas(canvas, ["a", "b", "a"], { x: -40, y: 20 });
 
+    expect(canvas.createdAt).toBe("2026-06-15T12:00:00.000Z");
+    expect(canvas.updatedAt).toBe("2026-06-15T12:00:00.000Z");
     expect(next.itemIds).toEqual(["a", "b"]);
     expect(next.positions).toEqual({
       a: { x: -40, y: 20 },
       b: { x: 144, y: 20 },
     });
+    vi.useRealTimers();
+  });
+
+  it("marks board saves with an updated timestamp", () => {
+    const next = markCanvasSaved(
+      {
+        ...createCanvas(0, "Board"),
+        createdAt: "2026-06-14T12:00:00.000Z",
+        updatedAt: "2026-06-14T12:30:00.000Z",
+      },
+      "2026-06-15T12:00:00.000Z",
+    );
+
+    expect(next.createdAt).toBe("2026-06-14T12:00:00.000Z");
+    expect(next.updatedAt).toBe("2026-06-15T12:00:00.000Z");
   });
 
   it("maps tags and board membership for archive display", () => {
@@ -86,15 +110,19 @@ describe("folio model helpers", () => {
       { ...createCanvas(1, "Two"), color: "#222222", itemIds: ["other"] },
     ];
 
-    expect(tagTextsForItem(entry, [
-      { id: "tag-a", text: "sketch" },
-      { id: "tag-b", text: "ref" },
-    ])).toEqual(["sketch", "ref"]);
+    expect(
+      tagTextsForItem(entry, [
+        { id: "tag-a", text: "sketch" },
+        { id: "tag-b", text: "ref" },
+      ]),
+    ).toEqual(["sketch", "ref"]);
     expect(canvasColorsForItem("one", canvases)).toEqual(["#111111"]);
   });
 
   it("uses direct previews only for available visual archive files", () => {
-    expect(itemCanUseDirectPreview(item("image", "2026-06-15T08:00:00.000Z"))).toBe(true);
+    expect(
+      itemCanUseDirectPreview(item("image", "2026-06-15T08:00:00.000Z")),
+    ).toBe(true);
     expect(
       itemCanUseDirectPreview({
         ...item("missing", "2026-06-15T08:00:00.000Z"),

@@ -2,9 +2,10 @@ import React from "react";
 import type {
   CanvasConnectionSide,
   CanvasNote,
-  CanvasPosition,
+  CanvasObjectGeometry,
   CanvasReference,
   CanvasTextElement,
+  CanvasTextSize,
   FolioItem,
   ThumbnailUrls,
 } from "../../types";
@@ -27,7 +28,14 @@ type StartObjectDragHandler = (
   event: React.PointerEvent,
   kind: CanvasObjectKind,
   objectId: string,
-  startPosition: CanvasPosition,
+  startPosition: CanvasObjectGeometry,
+) => void;
+
+type StartObjectResizeHandler = (
+  event: React.PointerEvent,
+  kind: CanvasObjectKind,
+  objectId: string,
+  startGeometry: CanvasObjectGeometry,
 ) => void;
 
 type SuppressClickAfterDragHandler = (
@@ -43,10 +51,10 @@ type CanvasObjectLayerProps = {
   activeTexts: CanvasTextElement[];
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
-  positionForItem: (item: FolioItem, index: number) => CanvasPosition;
-  positionForNote: (note: CanvasNote) => CanvasPosition;
-  positionForReference: (reference: CanvasReference) => CanvasPosition;
-  positionForText: (textElement: CanvasTextElement) => CanvasPosition;
+  positionForItem: (item: FolioItem, index: number) => CanvasObjectGeometry;
+  positionForNote: (note: CanvasNote) => CanvasObjectGeometry;
+  positionForReference: (reference: CanvasReference) => CanvasObjectGeometry;
+  positionForText: (textElement: CanvasTextElement) => CanvasObjectGeometry;
   onDeleteNote: (noteId: string) => void;
   onDeleteTextElement: (textElementId: string) => void;
   onOpenItem: ItemDetailsOpenHandler;
@@ -54,9 +62,14 @@ type CanvasObjectLayerProps = {
   onRemoveReference: (referenceId: string) => void;
   onStartConnectorDrag: StartConnectorDragHandler;
   onStartDrag: StartObjectDragHandler;
+  onStartResize: StartObjectResizeHandler;
   onSuppressClickAfterDrag: SuppressClickAfterDragHandler;
   onUpdateNote: (noteId: string, text: string) => void;
   onUpdateTextElement: (textElementId: string, text: string) => void;
+  onUpdateTextElementSize: (
+    textElementId: string,
+    size: CanvasTextSize,
+  ) => void;
 };
 
 export function CanvasObjectLayer({
@@ -77,9 +90,11 @@ export function CanvasObjectLayer({
   onRemoveReference,
   onStartConnectorDrag,
   onStartDrag,
+  onStartResize,
   onSuppressClickAfterDrag,
   onUpdateNote,
   onUpdateTextElement,
+  onUpdateTextElementSize,
 }: CanvasObjectLayerProps) {
   return (
     <>
@@ -99,6 +114,9 @@ export function CanvasObjectLayer({
             }
             onPointerDown={(event) =>
               onStartDrag(event, "item", item.id, position)
+            }
+            onResizePointerDown={(event) =>
+              onStartResize(event, "item", item.id, position)
             }
             onClickCapture={(event) =>
               onSuppressClickAfterDrag(event, "item", item.id)
@@ -121,6 +139,9 @@ export function CanvasObjectLayer({
             onPointerDown={(event) =>
               onStartDrag(event, "reference", reference.id, position)
             }
+            onResizePointerDown={(event) =>
+              onStartResize(event, "reference", reference.id, position)
+            }
             onClickCapture={(event) =>
               onSuppressClickAfterDrag(event, "reference", reference.id)
             }
@@ -142,6 +163,9 @@ export function CanvasObjectLayer({
             onPointerDown={(event) =>
               onStartDrag(event, "note", note.id, position)
             }
+            onResizePointerDown={(event) =>
+              onStartResize(event, "note", note.id, position)
+            }
             onClickCapture={(event) =>
               onSuppressClickAfterDrag(event, "note", note.id)
             }
@@ -157,11 +181,15 @@ export function CanvasObjectLayer({
             textElement={{ ...textElement, ...position }}
             onChange={onUpdateTextElement}
             onDelete={onDeleteTextElement}
+            onSizeChange={onUpdateTextElementSize}
             onConnectorPointerDown={(event, side) =>
               onStartConnectorDrag(event, textElement.id, side)
             }
             onPointerDown={(event) =>
               onStartDrag(event, "text", textElement.id, position)
+            }
+            onResizePointerDown={(event) =>
+              onStartResize(event, "text", textElement.id, position)
             }
             onClickCapture={(event) =>
               onSuppressClickAfterDrag(event, "text", textElement.id)

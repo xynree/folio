@@ -9,12 +9,12 @@ import { CANVAS_COLORS, CANVAS_WORLD_ORIGIN } from "../folio/constants";
 import { createId } from "../folio/model";
 import {
   buildPolylinePath,
-  strokeIntersectsEraser,
+  eraseStrokePathAtPoint,
 } from "./canvasGeometry";
 import {
   addCanvasStroke,
   addCanvasTextElement,
-  removeCanvasStrokes,
+  eraseCanvasStrokesAtPoint,
   removeLastCanvasStroke,
 } from "./canvasModel";
 import type { CanvasTool } from "./canvasTypes";
@@ -67,22 +67,21 @@ export function useCanvasDrawingTools({
   }, [activeCanvas, activeStrokes.length, updateCanvas]);
 
   const eraseStrokesAtPoint = useCallback(
-    (point: CanvasPosition, skippedStrokeIds = new Set<string>()) => {
-      if (!activeCanvas) return [];
-      const strokeIdsToErase = (activeCanvas.strokes ?? [])
-        .filter((stroke) => !skippedStrokeIds.has(stroke.id))
-        .filter((stroke) => strokeIntersectsEraser(stroke, point))
-        .map((stroke) => stroke.id);
+    (point: CanvasPosition) => {
+      if (!activeCanvas) return;
+      const hasErasableInk = (activeCanvas.strokes ?? []).some((stroke) => {
+        const remainingPaths = eraseStrokePathAtPoint(stroke.path, point);
+        return remainingPaths.length !== 1 || remainingPaths[0] !== stroke.path;
+      });
 
-      if (!strokeIdsToErase.length) return [];
+      if (!hasErasableInk) return;
 
-      const erasedStrokeIds = new Set(strokeIdsToErase);
       updateCanvas(
         activeCanvas.id,
-        (canvas) => removeCanvasStrokes(canvas, erasedStrokeIds),
+        (canvas) =>
+          eraseCanvasStrokesAtPoint(canvas, point, () => createId("stroke")),
         "Stroke erased",
       );
-      return strokeIdsToErase;
     },
     [activeCanvas, updateCanvas],
   );
@@ -117,6 +116,7 @@ export function useCanvasDrawingTools({
       if (!activeCanvas) return;
       const textElement: CanvasTextElement = {
         id: createId("text"),
+        size: "md",
         text: "Text",
         x: point.x - CANVAS_WORLD_ORIGIN,
         y: point.y - CANVAS_WORLD_ORIGIN,
@@ -199,18 +199,12 @@ function startEraserDrag({
   startPoint,
   updateToolCursor,
 }: {
-  eraseStrokesAtPoint: (
-    point: CanvasPosition,
-    skippedStrokeIds?: Set<string>,
-  ) => string[];
+  eraseStrokesAtPoint: (point: CanvasPosition) => void;
   startPoint: CanvasPosition | null;
   updateToolCursor: (clientX: number, clientY: number) => CanvasPosition | null;
 }) {
-  const erasedStrokeIds = new Set<string>();
   if (startPoint) {
-    eraseStrokesAtPoint(startPoint).forEach((strokeId) =>
-      erasedStrokeIds.add(strokeId),
-    );
+    eraseStrokesAtPoint(startPoint);
   }
 
   const previousCursor = document.body.style.cursor;
@@ -222,9 +216,7 @@ function startEraserDrag({
     moveEvent.preventDefault();
     const point = updateToolCursor(moveEvent.clientX, moveEvent.clientY);
     if (!point) return;
-    eraseStrokesAtPoint(point, erasedStrokeIds).forEach((strokeId) =>
-      erasedStrokeIds.add(strokeId),
-    );
+    eraseStrokesAtPoint(point);
   };
 
   const onPointerUp = () => {

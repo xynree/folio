@@ -12,10 +12,24 @@ import {
   Undo2,
 } from "lucide-react";
 import type { Canvas } from "../../types";
-import { formatCount } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { BoardEditDialog } from "./BoardEditDialog";
 import type { CanvasTool } from "./canvasTypes";
+
+function formatBoardTimestamp(value?: string) {
+  if (!value) return "Unknown";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
 
 type CanvasBoardHeaderProps = {
   activeCanvas: Canvas;
@@ -61,6 +75,7 @@ export function CanvasBoardHeader({
   const toggleTool = (tool: CanvasTool) => {
     onActiveToolChange((current) => (current === tool ? "select" : tool));
   };
+  const savedAt = activeCanvas.updatedAt ?? activeCanvas.createdAt;
 
   return (
     <header className="canvas-board-header">
@@ -78,9 +93,12 @@ export function CanvasBoardHeader({
         <span className="canvas-board-copy">
           <strong>{activeCanvas.title}</strong>
           <span>
-            {formatCount(activeCanvas.itemIds.length, "item")} ·{" "}
-            {formatCount(activeCanvas.notes.length, "note")} ·{" "}
-            {formatCount(activeCanvas.references.length, "reference")}
+            Created{" "}
+            <time dateTime={activeCanvas.createdAt}>
+              {formatBoardTimestamp(activeCanvas.createdAt)}
+            </time>{" "}
+            · Last saved{" "}
+            <time dateTime={savedAt}>{formatBoardTimestamp(savedAt)}</time>
           </span>
         </span>
       </div>

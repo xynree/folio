@@ -23,6 +23,8 @@ export function makeCanvas(id: string, overrides: Partial<Canvas> = {}): Canvas 
     title: id,
     description: "",
     color: "#9f6b3d",
+    createdAt: "2026-06-15T08:00:00.000Z",
+    updatedAt: "2026-06-15T09:00:00.000Z",
     itemIds: [],
     positions: {},
     notes: [],

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { makeCanvas, makeItem } from "../../test/fixtures";
 import type { ThumbnailUrls } from "../../types";
 import { BoardBrowser } from "./BoardBrowser";
@@ -23,6 +23,8 @@ const thumbUrls: ThumbnailUrls = { alpha: "folio://thumb/alpha.jpg" };
 const board = makeCanvas("board-1", {
   title: "Board",
   color: "#385d56",
+  createdAt: "2026-06-15T12:00:00.000Z",
+  updatedAt: "2026-06-15T12:30:00.000Z",
   itemIds: ["alpha"],
   notes: [{ id: "note-1", text: "Note", x: 30, y: 40 }],
   references: [
@@ -184,6 +186,8 @@ describe("canvas components", () => {
 
     render(<Harness />);
 
+    expect(screen.getByText(/Created/).textContent).toContain("Last saved");
+    expect(screen.queryByText(/1 item · 1 note · 1 reference/)).toBeNull();
     fireEvent.click(screen.getByLabelText("Pen tool"));
     expect(screen.getByLabelText("Pen tool").getAttribute("aria-pressed")).toBe(
       "true",
@@ -334,6 +338,7 @@ describe("canvas components", () => {
     const onRemove = vi.fn();
     const onConnector = vi.fn();
     const onPointerDown = vi.fn();
+    const onResizePointerDown = vi.fn();
     const onClickCapture = vi.fn();
     vi.mocked(window.folio.ensureReferenceThumbnail).mockResolvedValue(
       "folio://thumb/reference.jpg",
@@ -342,32 +347,39 @@ describe("canvas components", () => {
     const { rerender } = render(
       <CanvasItemCard
         item={item}
-        position={{ x: 1, y: 2 }}
+        position={{ x: 1, y: 2, width: 240, height: 280 }}
         thumbUrls={thumbUrls}
         setThumbUrls={vi.fn()}
         onOpen={onOpen}
         onRemove={onRemove}
         onConnectorPointerDown={onConnector}
         onPointerDown={onPointerDown}
+        onResizePointerDown={onResizePointerDown}
         onClickCapture={onClickCapture}
       />,
     );
 
     fireEvent.click(screen.getByText("Alpha"));
     fireEvent.pointerDown(screen.getByLabelText("Connect Alpha from right"));
+    fireEvent.pointerDown(screen.getByLabelText("Resize Alpha"));
     fireEvent.click(screen.getByLabelText("Remove Alpha from board"));
 
     expect(onOpen).toHaveBeenCalledWith("alpha");
     expect(onConnector).toHaveBeenCalledWith(expect.any(Object), "right");
+    expect(onResizePointerDown).toHaveBeenCalledWith(expect.any(Object));
     expect(onRemove).toHaveBeenCalledWith("alpha");
+    const itemCard = document.querySelector(".canvas-card") as HTMLElement;
+    expect(itemCard.style.height).toBe("280px");
+    expect(itemCard.style.width).toBe("240px");
 
     rerender(
       <ReferenceCard
         reference={board.references[0]}
-        position={{ x: 1, y: 2 }}
+        position={{ x: 1, y: 2, width: 220, height: 290 }}
         onRemove={onRemove}
         onConnectorPointerDown={onConnector}
         onPointerDown={onPointerDown}
+        onResizePointerDown={onResizePointerDown}
         onClickCapture={onClickCapture}
       />,
     );
@@ -376,58 +388,76 @@ describe("canvas components", () => {
         "folio://thumb/reference.jpg",
       ),
     );
+    expect(screen.getByLabelText("Resize reference.png")).not.toBeNull();
     fireEvent.click(screen.getByLabelText("Remove reference.png"));
     expect(onRemove).toHaveBeenCalledWith("reference-1");
   });
 
-  it("saves or deletes note and text card drafts on blur", () => {
+  it("saves note drafts on blur and text drafts after debounce", () => {
+    vi.useFakeTimers();
     const onChange = vi.fn();
     const onDelete = vi.fn();
     const onConnector = vi.fn();
+    const onSizeChange = vi.fn();
 
-    const { rerender } = render(
-      <CanvasNoteCard
-        note={board.notes[0]}
-        onChange={onChange}
-        onDelete={onDelete}
-        onConnectorPointerDown={onConnector}
-        onPointerDown={vi.fn()}
-        onClickCapture={vi.fn()}
-      />,
-    );
+    try {
+      const { rerender } = render(
+        <CanvasNoteCard
+          note={board.notes[0]}
+          onChange={onChange}
+          onDelete={onDelete}
+          onConnectorPointerDown={onConnector}
+          onPointerDown={vi.fn()}
+          onResizePointerDown={vi.fn()}
+          onClickCapture={vi.fn()}
+        />,
+      );
 
-    fireEvent.change(screen.getByPlaceholderText("Note"), {
-      target: { value: "Updated note" },
-    });
-    fireEvent.blur(screen.getByPlaceholderText("Note"));
-    fireEvent.change(screen.getByPlaceholderText("Note"), { target: { value: "" } });
-    fireEvent.blur(screen.getByPlaceholderText("Note"));
+      fireEvent.change(screen.getByPlaceholderText("Note"), {
+        target: { value: "Updated note" },
+      });
+      fireEvent.blur(screen.getByPlaceholderText("Note"));
+      fireEvent.change(screen.getByPlaceholderText("Note"), { target: { value: "" } });
+      fireEvent.blur(screen.getByPlaceholderText("Note"));
 
-    rerender(
-      <CanvasTextCard
-        textElement={board.texts?.[0] ?? { id: "text-1", text: "Text", x: 0, y: 0 }}
-        onChange={onChange}
-        onDelete={onDelete}
-        onConnectorPointerDown={onConnector}
-        onPointerDown={vi.fn()}
-        onClickCapture={vi.fn()}
-      />,
-    );
-    fireEvent.change(screen.getByLabelText("Board text"), {
-      target: { value: "Updated text" },
-    });
-    fireEvent.blur(screen.getByLabelText("Board text"));
-    fireEvent.click(screen.getByLabelText("Delete text"));
+      rerender(
+        <CanvasTextCard
+          textElement={
+            board.texts?.[0] ?? { id: "text-1", text: "Text", x: 0, y: 0 }
+          }
+          onChange={onChange}
+          onDelete={onDelete}
+          onSizeChange={onSizeChange}
+          onConnectorPointerDown={onConnector}
+          onPointerDown={vi.fn()}
+          onResizePointerDown={vi.fn()}
+          onClickCapture={vi.fn()}
+        />,
+      );
+      fireEvent.change(screen.getByLabelText("Board text"), {
+        target: { value: "Updated text" },
+      });
+      expect(onChange).not.toHaveBeenCalledWith("text-1", "Updated text");
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      fireEvent.click(screen.getByLabelText("Large text"));
+      fireEvent.click(screen.getByLabelText("Delete text"));
 
-    expect(onChange).toHaveBeenCalledWith("note-1", "Updated note");
-    expect(onChange).toHaveBeenCalledWith("text-1", "Updated text");
-    expect(onDelete).toHaveBeenCalledWith("note-1");
-    expect(onDelete).toHaveBeenCalledWith("text-1");
+      expect(onChange).toHaveBeenCalledWith("note-1", "Updated note");
+      expect(onChange).toHaveBeenCalledWith("text-1", "Updated text");
+      expect(onSizeChange).toHaveBeenCalledWith("text-1", "large");
+      expect(onDelete).toHaveBeenCalledWith("note-1");
+      expect(onDelete).toHaveBeenCalledWith("text-1");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders object layer and forwards object interactions", () => {
     const onOpenItem = vi.fn();
     const onStartDrag = vi.fn();
+    const onStartResize = vi.fn();
     const onSuppressClickAfterDrag = vi.fn();
 
     render(
@@ -438,7 +468,7 @@ describe("canvas components", () => {
         activeTexts={board.texts ?? []}
         thumbUrls={thumbUrls}
         setThumbUrls={vi.fn()}
-        positionForItem={() => ({ x: 1, y: 2 })}
+        positionForItem={() => ({ x: 1, y: 2, width: 210, height: 246 })}
         positionForNote={(note) => ({ x: note.x, y: note.y })}
         positionForReference={(reference) => ({ x: reference.x, y: reference.y })}
         positionForText={(textElement) => ({ x: textElement.x, y: textElement.y })}
@@ -449,20 +479,29 @@ describe("canvas components", () => {
         onRemoveReference={vi.fn()}
         onStartConnectorDrag={vi.fn()}
         onStartDrag={onStartDrag}
+        onStartResize={onStartResize}
         onSuppressClickAfterDrag={onSuppressClickAfterDrag}
         onUpdateNote={vi.fn()}
         onUpdateTextElement={vi.fn()}
+        onUpdateTextElementSize={vi.fn()}
       />,
     );
 
     fireEvent.pointerDown(screen.getByText("Alpha"));
+    fireEvent.pointerDown(screen.getByLabelText("Resize Alpha"));
     fireEvent.click(screen.getByText("Alpha"));
 
     expect(onStartDrag).toHaveBeenCalledWith(
       expect.any(Object),
       "item",
       "alpha",
-      { x: 1, y: 2 },
+      { x: 1, y: 2, width: 210, height: 246 },
+    );
+    expect(onStartResize).toHaveBeenCalledWith(
+      expect.any(Object),
+      "item",
+      "alpha",
+      { x: 1, y: 2, width: 210, height: 246 },
     );
     expect(onOpenItem).toHaveBeenCalledWith("alpha");
     expect(screen.getByText("reference.png")).not.toBeNull();

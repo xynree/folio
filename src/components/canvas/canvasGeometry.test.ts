@@ -6,8 +6,10 @@ import {
   buildPolylinePath,
   distanceToSegment,
   edgeRenderModelFromLayouts,
+  eraseStrokePathAtPoint,
   objectLayoutFromPosition,
   pointsFromStrokePath,
+  sizeForCanvasObject,
   strokeIntersectsEraser,
 } from "./canvasGeometry";
 
@@ -37,6 +39,25 @@ describe("canvas geometry helpers", () => {
     expect(layout.sides.right).toEqual({
       x: CANVAS_WORLD_ORIGIN + 80 + 162,
       y: CANVAS_WORLD_ORIGIN + 90 + 95,
+    });
+
+    const resizedLayout = objectLayoutFromPosition("note", "note", {
+      x: 80,
+      y: 90,
+      width: 260,
+      height: 180,
+    });
+    expect(resizedLayout.size).toEqual({ width: 260, height: 180 });
+    expect(resizedLayout.center).toEqual({
+      x: CANVAS_WORLD_ORIGIN + 80 + 130,
+      y: CANVAS_WORLD_ORIGIN + 90 + 90,
+    });
+  });
+
+  it("resolves default object sizes when geometry has no dimensions", () => {
+    expect(sizeForCanvasObject("text", { width: 300 })).toEqual({
+      width: 300,
+      height: 96,
     });
   });
 
@@ -96,5 +117,17 @@ describe("canvas geometry helpers", () => {
 
     expect(strokeIntersectsEraser(stroke, { x: 140, y: 115 })).toBe(true);
     expect(strokeIntersectsEraser(stroke, { x: 140, y: 150 })).toBe(false);
+  });
+
+  it("keeps only stroke path portions outside the eraser circle", () => {
+    expect(
+      eraseStrokePathAtPoint("M 100 100 L 200 100", { x: 150, y: 100 }),
+    ).toEqual(["M 100 100 L 132 100", "M 168 100 L 200 100"]);
+    expect(
+      eraseStrokePathAtPoint("M 100 100 L 200 100", { x: 110, y: 100 }),
+    ).toEqual(["M 128 100 L 200 100"]);
+    expect(
+      eraseStrokePathAtPoint("M 100 100 L 200 100", { x: 150, y: 150 }),
+    ).toEqual(["M 100 100 L 200 100"]);
   });
 });

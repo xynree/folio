@@ -9,9 +9,22 @@ export interface CanvasPosition {
   y: number;
 }
 
+/** Optional rendered object dimensions saved with canvas objects */
+export interface CanvasObjectGeometry extends CanvasPosition {
+  width?: number;
+  height?: number;
+}
+
+export interface CanvasObjectSize {
+  width: number;
+  height: number;
+}
+
 export type CanvasConnectionSide = "top" | "right" | "bottom" | "left";
 
 export type CanvasEdgeDirection = "none" | "forward" | "bidirectional";
+
+export type CanvasTextSize = "sm" | "md" | "large";
 
 /** A connecting line between two objects on a canvas */
 export interface CanvasEdge {
@@ -32,19 +45,20 @@ export interface CanvasStroke {
 }
 
 /** A sticky note placed directly on the canvas surface */
-export interface CanvasNote extends CanvasPosition {
+export interface CanvasNote extends CanvasObjectGeometry {
   id: string;
   text: string;
 }
 
 /** A lightweight plain text element placed directly on the canvas surface */
-export interface CanvasTextElement extends CanvasPosition {
+export interface CanvasTextElement extends CanvasObjectGeometry {
   id: string;
   text: string;
+  size?: CanvasTextSize;
 }
 
 /** A reference image that only exists on a specific canvas */
-export type CanvasReference = CanvasPosition & {
+export type CanvasReference = CanvasObjectGeometry & {
   id: string;
   path: string; // Path relative to ~/Folio/references/<canvasId>/
   filename: string;
@@ -56,8 +70,10 @@ export interface Canvas {
   title: string;
   description?: string;
   color?: string; // Theme color for the canvas
+  createdAt?: string;
+  updatedAt?: string;
   itemIds: string[]; // IDs of items from the main archive
-  positions: Record<string, CanvasPosition>; // Item positions keyed by item ID
+  positions: Record<string, CanvasObjectGeometry>; // Item geometry keyed by item ID
   notes: CanvasNote[];
   edges: CanvasEdge[];
   references: CanvasReference[];

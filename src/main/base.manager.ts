@@ -339,18 +339,32 @@ export class FolioManager implements FolioManagerInterface {
       .getItems()
       .filter((item) => !ids.has(item.id));
 
+    const savedAt = new Date().toISOString();
     const updatedCanvases = this.canvases.map((canvas) => {
       const positions = { ...canvas.positions };
       ids.forEach((id) => delete positions[id]);
+      const itemIds = canvas.itemIds.filter((id) => !ids.has(id));
+      const edges = canvas.edges.filter(
+        (edge) => !ids.has(edge.fromId) && !ids.has(edge.toId),
+      );
+      const changed =
+        itemIds.length !== canvas.itemIds.length
+        || edges.length !== canvas.edges.length
+        || Object.keys(positions).length !== Object.keys(canvas.positions).length;
 
-      return {
+      const nextCanvas = {
         ...canvas,
-        itemIds: canvas.itemIds.filter((id) => !ids.has(id)),
+        itemIds,
         positions,
-        edges: canvas.edges.filter(
-          (edge) => !ids.has(edge.fromId) && !ids.has(edge.toId),
-        ),
       };
+
+      return changed
+        ? {
+            ...nextCanvas,
+            createdAt: canvas.createdAt ?? canvas.updatedAt ?? savedAt,
+            updatedAt: savedAt,
+          }
+        : nextCanvas;
     });
 
     const nextData = {

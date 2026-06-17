@@ -55,6 +55,7 @@ import {
   createId,
   formatCount,
   getGaps,
+  markCanvasSaved,
   mergeItems,
 } from "./folio/model";
 import { ReconciliationNotice } from "./layout/ReconciliationNotice";
@@ -65,6 +66,7 @@ import { ButtonIcon } from "./shared/ButtonIcon";
 const ARCHIVE_UI_SCALE_MIN = 50;
 const ARCHIVE_UI_SCALE_MAX = 200;
 const ARCHIVE_UI_SCALE_STEP = 5;
+const ARCHIVE_PANEL_COLLAPSED_WIDTH = 58;
 const TAGS_SIDEBAR_DEFAULT_WIDTH = 176;
 const TAGS_SIDEBAR_MIN_WIDTH = 132;
 const TAGS_SIDEBAR_MAX_WIDTH = 360;
@@ -83,6 +85,7 @@ export function AppShell() {
     TAGS_SIDEBAR_DEFAULT_WIDTH,
   );
   const [tagsSidebarResizing, setTagsSidebarResizing] = useState(false);
+  const [archiveMinimized, setArchiveMinimized] = useState(false);
   const [canvasMinimized, setCanvasMinimized] = useState(false);
   const [canvasDockWidth, setCanvasDockWidth] = useState(CANVAS_DOCK_DEFAULT_WIDTH);
   const [canvasDockResizing, setCanvasDockResizing] = useState(false);
@@ -318,6 +321,21 @@ export function AppShell() {
     },
     [clampCanvasDockWidth],
   );
+
+  const showArchiveProminent = useCallback(() => {
+    setArchiveMinimized(false);
+    setCanvasMinimized(true);
+  }, []);
+
+  const showBoardsProminent = useCallback(() => {
+    setCanvasMinimized(false);
+    setArchiveMinimized(true);
+  }, []);
+
+  const showSplitWorkspace = useCallback(() => {
+    setArchiveMinimized(false);
+    setCanvasMinimized(false);
+  }, []);
 
   const sortedItems = useMemo(
     () =>
@@ -638,6 +656,7 @@ export function AppShell() {
       let createdCanvas: Canvas | null = null;
 
       commitData((current) => {
+        const savedAt = new Date().toISOString();
         let canvases = [...current.canvases];
         if (!targetCanvasId || !canvases.some((canvas) => canvas.id === targetCanvasId)) {
           createdCanvas = createCanvas(canvases.length);
@@ -648,7 +667,9 @@ export function AppShell() {
         return {
           ...current,
           canvases: canvases.map((canvas) =>
-            canvas.id === targetCanvasId ? addItemToCanvas(canvas, itemId) : canvas,
+            canvas.id === targetCanvasId
+              ? markCanvasSaved(addItemToCanvas(canvas, itemId), savedAt)
+              : canvas,
           ),
         };
       }, createdCanvas ? "Board created" : "Added to board");
@@ -691,13 +712,17 @@ export function AppShell() {
     let boardId: string | null = null;
     commitData(
       (current) => {
+        const savedAt = new Date().toISOString();
         const knownItemIds = new Set(current.items.map((item) => item.id));
         const validItemIds = itemIds.filter((itemId) => knownItemIds.has(itemId));
         if (!validItemIds.length) return current;
 
-        const board = addItemsToCanvas(
-          createCanvas(current.canvases.length, title),
-          validItemIds,
+        const board = markCanvasSaved(
+          addItemsToCanvas(
+            createCanvas(current.canvases.length, title),
+            validItemIds,
+          ),
+          savedAt,
         );
         boardId = board.id;
 
@@ -784,7 +809,10 @@ export function AppShell() {
     [putData],
   );
 
-  const studioGridTemplateColumns = canvasMinimized
+  const dividerHidden = archiveMinimized || canvasMinimized;
+  const studioGridTemplateColumns = archiveMinimized
+    ? `${ARCHIVE_PANEL_COLLAPSED_WIDTH}px 0px minmax(${CANVAS_DOCK_MIN_WIDTH}px, 1fr)`
+    : canvasMinimized
     ? `minmax(${ARCHIVE_PANEL_MIN_WIDTH}px, 1fr) 0px 58px`
     : `minmax(${ARCHIVE_PANEL_MIN_WIDTH}px, 1fr) ${CANVAS_SPLITTER_WIDTH}px ${canvasDockWidth}px`;
 
@@ -809,180 +837,236 @@ export function AppShell() {
           className={`studio-workspace ${
             canvasMinimized ? "studio-workspace-canvas-minimized" : ""
           } ${
+            archiveMinimized ? "studio-workspace-archive-minimized" : ""
+          } ${
             canvasDockResizing || tagsSidebarResizing
               ? "studio-workspace-resizing"
               : ""
           }`}
           style={{ gridTemplateColumns: studioGridTemplateColumns }}
         >
-          <section className="archive-panel">
-            <ArchiveWorkspace
-              sidebarCollapsed={tagsCollapsed}
-              sidebarWidth={tagsSidebarWidth}
-              onStartSidebarResize={startTagsSidebarResize}
-              routeStyle={archiveRouteStyle}
-              sidebar={
-                <TagsSidebar
-                  items={sortedItems}
-                  tags={data.tags}
-                  canvases={data.canvases}
-                  thumbUrls={thumbUrls}
-                  setThumbUrls={setThumbUrls}
-                  onOpenItem={openItemDetails}
-                  collapsed={tagsCollapsed}
-                  onToggleCollapsed={() => setTagsCollapsed((current) => !current)}
-                  tagFilter={gridTagFilter}
-                  setTagFilter={setGridTagFilter}
-                />
-              }
-            >
-              <SelectionBar
-                count={selectedItemIds.length}
-                newBoardDialogOpen={selectionBoardDialogOpen}
-                newBoardTitle={selectionBoardTitleDraft}
-                tagDialogOpen={selectionTagDialogOpen}
-                tagDraft={selectionTagDraft}
-                onCancelNewBoard={() => {
-                  setSelectionBoardDialogOpen(false);
-                  setSelectionBoardTitleDraft("");
-                }}
-                onCancelTag={() => {
-                  setSelectionTagDialogOpen(false);
-                  setSelectionTagDraft("");
-                }}
-                onApplyTag={() => addTagToSelection(selectionTagDraft)}
-                onClear={clearSelection}
-                onCreateNewBoard={() =>
-                  openSelectedOnNewCanvas(selectionBoardTitleDraft)
-                }
-                onDeleteSelection={deleteSelectedItems}
-                onNewBoardTitleChange={setSelectionBoardTitleDraft}
-                onOpenNewBoard={() => {
-                  setSelectionBoardTitleDraft("");
-                  setSelectionTagDialogOpen(false);
-                  setSelectionTagDraft("");
-                  setSelectionBoardDialogOpen(true);
-                }}
-                onOpenTag={() => {
-                  setSelectionTagDraft("");
-                  setSelectionBoardDialogOpen(false);
-                  setSelectionBoardTitleDraft("");
-                  setSelectionTagDialogOpen(true);
-                }}
-                onTagDraftChange={setSelectionTagDraft}
-              />
-              <div className="archive-floating-actions">
-                <label className="archive-scale-control">
-                  <span>Size</span>
-                  <input
-                    type="range"
-                    min={ARCHIVE_UI_SCALE_MIN}
-                    max={ARCHIVE_UI_SCALE_MAX}
-                    step={ARCHIVE_UI_SCALE_STEP}
-                    value={archiveUiScale}
-                    aria-label="Archive item size"
-                    aria-valuetext={`${archiveUiScale}%`}
-                    onChange={(event) =>
-                      setArchiveUiScale(Number(event.currentTarget.value))
-                    }
-                  />
-                  <output>{archiveUiScale}%</output>
-                </label>
-                <div className="view-tabs archive-view-toggle" aria-label="Archive view">
+          <section
+            className={`archive-panel ${
+              archiveMinimized ? "archive-panel-minimized" : ""
+            }`}
+          >
+            {archiveMinimized ? (
+              <div className="archive-rail">
+                <div className="archive-rail-actions">
                   <button
-                    className={archiveView === "strip" ? "active" : ""}
+                    className="icon-button"
                     type="button"
-                    aria-label="Strip view"
-                    title="Strip view"
-                    onClick={() => setArchiveView("strip")}
+                    aria-label="Open archive panel"
+                    title="Open archive panel"
+                    onClick={showArchiveProminent}
                   >
                     <ButtonIcon icon={Rows3} />
                   </button>
-                  <button
-                    className={archiveView === "grid" ? "active" : ""}
-                    type="button"
-                    aria-label="Grid view"
-                    title="Grid view"
-                    onClick={() => setArchiveView("grid")}
-                  >
-                    <ButtonIcon icon={Grid3X3} />
-                  </button>
                 </div>
-                <button className="primary-action" type="button" onClick={handleOpenDialog}>
-                  <ButtonIcon icon={Upload} />
-                  {busy ? "Importing" : "Import"}
-                </button>
               </div>
-              {archiveView === "strip" ? (
-                <DailyStripView
-                  items={visibleArchiveItems}
-                  tags={data.tags}
-                  canvases={data.canvases}
-                  thumbUrls={thumbUrls}
-                  setThumbUrls={setThumbUrls}
-                  selectedItemIds={selectedItemIds}
-                  showDateGaps={gridTagFilter === "all"}
-                  onBackgroundClick={clearSelection}
-                  onDragStart={startArchiveItemDrag}
-                  onItemOpen={handleItemOpen}
-                  onEditItem={(itemId) => openItemDetails(itemId, "details")}
-                  onAddTag={addTagToItem}
-                  onRemoveTag={removeTagFromItem}
-                  onDeleteItem={deleteItem}
-                />
-              ) : (
-                <GridView
-                  items={sortedItems}
-                  tags={data.tags}
-                  canvases={data.canvases}
-                  thumbUrls={thumbUrls}
-                  setThumbUrls={setThumbUrls}
-                  tagFilter={gridTagFilter}
-                  setTagFilter={setGridTagFilter}
-                  selectedItemIds={selectedItemIds}
-                  onBackgroundClick={clearSelection}
-                  onDragStart={startArchiveItemDrag}
-                  onItemOpen={handleItemOpen}
-                  onEditItem={(itemId) => openItemDetails(itemId, "details")}
-                  onAddTag={addTagToItem}
-                  onRemoveTag={removeTagFromItem}
-                  onDeleteItem={deleteItem}
-                />
-              )}
-            </ArchiveWorkspace>
+            ) : (
+              <>
+                <ArchiveWorkspace
+                  sidebarCollapsed={tagsCollapsed}
+                  sidebarWidth={tagsSidebarWidth}
+                  onStartSidebarResize={startTagsSidebarResize}
+                  routeStyle={archiveRouteStyle}
+                  sidebar={
+                    <TagsSidebar
+                      items={sortedItems}
+                      tags={data.tags}
+                      canvases={data.canvases}
+                      thumbUrls={thumbUrls}
+                      setThumbUrls={setThumbUrls}
+                      onOpenItem={openItemDetails}
+                      collapsed={tagsCollapsed}
+                      onToggleCollapsed={() =>
+                        setTagsCollapsed((current) => !current)
+                      }
+                      tagFilter={gridTagFilter}
+                      setTagFilter={setGridTagFilter}
+                    />
+                  }
+                >
+                  <SelectionBar
+                    count={selectedItemIds.length}
+                    newBoardDialogOpen={selectionBoardDialogOpen}
+                    newBoardTitle={selectionBoardTitleDraft}
+                    tagDialogOpen={selectionTagDialogOpen}
+                    tagDraft={selectionTagDraft}
+                    onCancelNewBoard={() => {
+                      setSelectionBoardDialogOpen(false);
+                      setSelectionBoardTitleDraft("");
+                    }}
+                    onCancelTag={() => {
+                      setSelectionTagDialogOpen(false);
+                      setSelectionTagDraft("");
+                    }}
+                    onApplyTag={() => addTagToSelection(selectionTagDraft)}
+                    onClear={clearSelection}
+                    onCreateNewBoard={() =>
+                      openSelectedOnNewCanvas(selectionBoardTitleDraft)
+                    }
+                    onDeleteSelection={deleteSelectedItems}
+                    onNewBoardTitleChange={setSelectionBoardTitleDraft}
+                    onOpenNewBoard={() => {
+                      setSelectionBoardTitleDraft("");
+                      setSelectionTagDialogOpen(false);
+                      setSelectionTagDraft("");
+                      setSelectionBoardDialogOpen(true);
+                    }}
+                    onOpenTag={() => {
+                      setSelectionTagDraft("");
+                      setSelectionBoardDialogOpen(false);
+                      setSelectionBoardTitleDraft("");
+                      setSelectionTagDialogOpen(true);
+                    }}
+                    onTagDraftChange={setSelectionTagDraft}
+                  />
+                  <div className="archive-floating-actions">
+                    <label className="archive-scale-control">
+                      <span>Size</span>
+                      <input
+                        type="range"
+                        min={ARCHIVE_UI_SCALE_MIN}
+                        max={ARCHIVE_UI_SCALE_MAX}
+                        step={ARCHIVE_UI_SCALE_STEP}
+                        value={archiveUiScale}
+                        aria-label="Archive item size"
+                        aria-valuetext={`${archiveUiScale}%`}
+                        onChange={(event) =>
+                          setArchiveUiScale(Number(event.currentTarget.value))
+                        }
+                      />
+                      <output>{archiveUiScale}%</output>
+                    </label>
+                    <div
+                      className="view-tabs workspace-focus-toggle"
+                      aria-label="Workspace focus"
+                    >
+                      <button
+                        className={canvasMinimized ? "active" : ""}
+                        type="button"
+                        aria-label="Make archive prominent"
+                        aria-pressed={canvasMinimized}
+                        title="Make archive prominent"
+                        onClick={showArchiveProminent}
+                      >
+                        <ButtonIcon icon={Rows3} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Make boards prominent"
+                        aria-pressed={false}
+                        title="Make boards prominent"
+                        onClick={showBoardsProminent}
+                      >
+                        <ButtonIcon icon={PanelRightOpen} />
+                      </button>
+                    </div>
+                    <div className="view-tabs archive-view-toggle" aria-label="Archive view">
+                      <button
+                        className={archiveView === "strip" ? "active" : ""}
+                        type="button"
+                        aria-label="Strip view"
+                        title="Strip view"
+                        onClick={() => setArchiveView("strip")}
+                      >
+                        <ButtonIcon icon={Rows3} />
+                      </button>
+                      <button
+                        className={archiveView === "grid" ? "active" : ""}
+                        type="button"
+                        aria-label="Grid view"
+                        title="Grid view"
+                        onClick={() => setArchiveView("grid")}
+                      >
+                        <ButtonIcon icon={Grid3X3} />
+                      </button>
+                    </div>
+                    <button
+                      className="primary-action"
+                      type="button"
+                      onClick={handleOpenDialog}
+                    >
+                      <ButtonIcon icon={Upload} />
+                      {busy ? "Importing" : "Import"}
+                    </button>
+                  </div>
+                  {archiveView === "strip" ? (
+                    <DailyStripView
+                      items={visibleArchiveItems}
+                      tags={data.tags}
+                      canvases={data.canvases}
+                      thumbUrls={thumbUrls}
+                      setThumbUrls={setThumbUrls}
+                      selectedItemIds={selectedItemIds}
+                      showDateGaps={gridTagFilter === "all"}
+                      onBackgroundClick={clearSelection}
+                      onDragStart={startArchiveItemDrag}
+                      onItemOpen={handleItemOpen}
+                      onEditItem={(itemId) => openItemDetails(itemId, "details")}
+                      onAddTag={addTagToItem}
+                      onRemoveTag={removeTagFromItem}
+                      onDeleteItem={deleteItem}
+                    />
+                  ) : (
+                    <GridView
+                      items={sortedItems}
+                      tags={data.tags}
+                      canvases={data.canvases}
+                      thumbUrls={thumbUrls}
+                      setThumbUrls={setThumbUrls}
+                      tagFilter={gridTagFilter}
+                      setTagFilter={setGridTagFilter}
+                      selectedItemIds={selectedItemIds}
+                      onBackgroundClick={clearSelection}
+                      onDragStart={startArchiveItemDrag}
+                      onItemOpen={handleItemOpen}
+                      onEditItem={(itemId) => openItemDetails(itemId, "details")}
+                      onAddTag={addTagToItem}
+                      onRemoveTag={removeTagFromItem}
+                      onDeleteItem={deleteItem}
+                    />
+                  )}
+                </ArchiveWorkspace>
 
-            <footer
-              className={`archive-heatmap-footer ${
-                heatmapMinimized ? "archive-heatmap-footer-minimized" : ""
-              }`}
-            >
-              <ArchiveHeatmap
-                items={visibleArchiveItems}
-                minimized={heatmapMinimized}
-              />
-              <button
-                className="icon-button archive-heatmap-toggle"
-                type="button"
-                aria-label={heatmapMinimized ? "Show heatmap" : "Minimize heatmap"}
-                title={heatmapMinimized ? "Show heatmap" : "Minimize heatmap"}
-                onClick={() => setHeatmapMinimized((current) => !current)}
-              >
-                <ButtonIcon icon={heatmapMinimized ? ChevronUp : ChevronDown} />
-              </button>
-            </footer>
+                <footer
+                  className={`archive-heatmap-footer ${
+                    heatmapMinimized ? "archive-heatmap-footer-minimized" : ""
+                  }`}
+                >
+                  <ArchiveHeatmap
+                    items={visibleArchiveItems}
+                    minimized={heatmapMinimized}
+                  />
+                  <button
+                    className="icon-button archive-heatmap-toggle"
+                    type="button"
+                    aria-label={
+                      heatmapMinimized ? "Show heatmap" : "Minimize heatmap"
+                    }
+                    title={heatmapMinimized ? "Show heatmap" : "Minimize heatmap"}
+                    onClick={() => setHeatmapMinimized((current) => !current)}
+                  >
+                    <ButtonIcon icon={heatmapMinimized ? ChevronUp : ChevronDown} />
+                  </button>
+                </footer>
+              </>
+            )}
           </section>
 
           <div
             className={`canvas-resize-handle ${
-              canvasMinimized ? "canvas-resize-handle-hidden" : ""
+              dividerHidden ? "canvas-resize-handle-hidden" : ""
             }`}
             role="separator"
             aria-label="Resize open board panel"
             aria-orientation="vertical"
-            aria-hidden={canvasMinimized}
-            tabIndex={canvasMinimized ? -1 : 0}
+            aria-hidden={dividerHidden}
+            tabIndex={dividerHidden ? -1 : 0}
             onKeyDown={(event) => {
-              if (canvasMinimized) return;
+              if (dividerHidden) return;
               if (event.key === "ArrowLeft") {
                 event.preventDefault();
                 nudgeCanvasDockWidth(32);
@@ -993,7 +1077,7 @@ export function AppShell() {
               }
             }}
             onPointerDown={(event) => {
-              if (canvasMinimized) return;
+              if (dividerHidden) return;
               startCanvasDockResize(event);
             }}
           />
@@ -1010,7 +1094,7 @@ export function AppShell() {
                     type="button"
                     aria-label="Open board panel"
                     title="Open board panel"
-                    onClick={() => setCanvasMinimized(false)}
+                    onClick={showSplitWorkspace}
                   >
                     <ButtonIcon icon={PanelRightOpen} />
                   </button>
@@ -1024,7 +1108,7 @@ export function AppShell() {
                 setActiveCanvasId={setActiveCanvasId}
                 onOpenItem={openItemDetails}
                 onCreateBoard={createBoard}
-                onMinimize={() => setCanvasMinimized(true)}
+                onMinimize={showArchiveProminent}
                 thumbUrls={thumbUrls}
                 setThumbUrls={setThumbUrls}
                 commitData={commitData}

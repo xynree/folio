@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { makeCanvas, makeItem } from "../../test/fixtures";
 import { DetailDrawer } from "./DetailDrawer";
+import { describe, expect, it, vi } from "vitest";
 
 function renderDrawer(overrides = {}) {
   const props = {

@@ -3,10 +3,14 @@ import type {
   CanvasEdge,
   CanvasEdgeDirection,
   CanvasNote,
+  CanvasObjectSize,
+  CanvasPosition,
   CanvasReference,
   CanvasStroke,
   CanvasTextElement,
+  CanvasTextSize,
 } from "../../types";
+import { eraseStrokePathAtPoint } from "./canvasGeometry";
 import type { CanvasObjectKind } from "./canvasTypes";
 
 export function removeEdgesForObject(
@@ -72,6 +76,53 @@ export function moveCanvasObject(
   };
 }
 
+export function resizeCanvasObject(
+  canvas: Canvas,
+  kind: CanvasObjectKind,
+  objectId: string,
+  size: CanvasObjectSize,
+): Canvas {
+  if (kind === "item") {
+    const currentPosition = canvas.positions[objectId] ?? { x: 0, y: 0 };
+    return {
+      ...canvas,
+      positions: {
+        ...canvas.positions,
+        [objectId]: {
+          ...currentPosition,
+          width: size.width,
+          height: size.height,
+        },
+      },
+    };
+  }
+
+  if (kind === "reference") {
+    return {
+      ...canvas,
+      references: canvas.references.map((reference) =>
+        reference.id === objectId ? { ...reference, ...size } : reference,
+      ),
+    };
+  }
+
+  if (kind === "text") {
+    return {
+      ...canvas,
+      texts: (canvas.texts ?? []).map((textElement) =>
+        textElement.id === objectId ? { ...textElement, ...size } : textElement,
+      ),
+    };
+  }
+
+  return {
+    ...canvas,
+    notes: canvas.notes.map((note) =>
+      note.id === objectId ? { ...note, ...size } : note,
+    ),
+  };
+}
+
 export function updateCanvasNoteText(
   canvas: Canvas,
   noteId: string,
@@ -112,6 +163,19 @@ export function updateCanvasTextElementText(
     ...canvas,
     texts: (canvas.texts ?? []).map((textElement) =>
       textElement.id === textElementId ? { ...textElement, text } : textElement,
+    ),
+  };
+}
+
+export function updateCanvasTextElementSize(
+  canvas: Canvas,
+  textElementId: string,
+  size: CanvasTextSize,
+): Canvas {
+  return {
+    ...canvas,
+    texts: (canvas.texts ?? []).map((textElement) =>
+      textElement.id === textElementId ? { ...textElement, size } : textElement,
     ),
   };
 }
@@ -164,6 +228,31 @@ export function removeCanvasStrokes(
     ...canvas,
     strokes: (canvas.strokes ?? []).filter((stroke) => !strokeIds.has(stroke.id)),
   };
+}
+
+export function eraseCanvasStrokesAtPoint(
+  canvas: Canvas,
+  point: CanvasPosition,
+  createStrokeId: () => string,
+): Canvas {
+  if (!canvas.strokes?.length) return canvas;
+
+  let changed = false;
+  const strokes = canvas.strokes.flatMap((stroke) => {
+    const remainingPaths = eraseStrokePathAtPoint(stroke.path, point);
+    if (remainingPaths.length === 1 && remainingPaths[0] === stroke.path) {
+      return [stroke];
+    }
+
+    changed = true;
+    return remainingPaths.map((path) => ({
+      ...stroke,
+      id: createStrokeId(),
+      path,
+    }));
+  });
+
+  return changed ? { ...canvas, strokes } : canvas;
 }
 
 export function updateCanvasEdgeLabel(

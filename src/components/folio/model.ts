@@ -113,11 +113,15 @@ export function createCanvas(
   title?: string,
   description?: string,
 ): Canvas {
+  const createdAt = new Date().toISOString();
+
   return {
     id: createId("canvas"),
     title: title?.trim() || `Board ${index + 1}`,
     description: description?.trim() ?? "",
     color: CANVAS_COLORS[index % CANVAS_COLORS.length],
+    createdAt,
+    updatedAt: createdAt,
     itemIds: [],
     positions: {},
     notes: [],
@@ -125,6 +129,17 @@ export function createCanvas(
     references: [],
     strokes: [],
     texts: [],
+  };
+}
+
+export function markCanvasSaved(
+  canvas: Canvas,
+  savedAt = new Date().toISOString(),
+): Canvas {
+  return {
+    ...canvas,
+    createdAt: canvas.createdAt ?? canvas.updatedAt ?? savedAt,
+    updatedAt: savedAt,
   };
 }
 
