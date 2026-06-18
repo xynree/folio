@@ -60,11 +60,11 @@ import {
   addItemToCanvas,
   addItemsToCanvas,
   assignBoardToProject,
-  basename,
   createCanvas,
   createId,
   formatCount,
   getGaps,
+  itemDisplayTitle,
   markCanvasSaved,
   mergeImportedItemsIntoProject,
   mergeItems,
@@ -847,7 +847,7 @@ export function AppShell() {
       const item = dataRef.current.items.find((candidate) => candidate.id === itemId);
       if (!item) return;
 
-      const confirmed = window.confirm(`Delete "${item.title || basename(item.path)}"?`);
+      const confirmed = window.confirm(`Delete "${itemDisplayTitle(item)}"?`);
       if (!confirmed) return;
 
       setBusy(true);

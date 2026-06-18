@@ -7,7 +7,7 @@ import type {
   CanvasTextElement,
   FolioItem,
 } from "../../types";
-import { basename } from "../folio/model";
+import { itemDisplayTitle } from "../folio/model";
 import {
   canvasKindForItem,
   positionForCanvasItem,
@@ -27,10 +27,6 @@ export type CanvasObjectView = {
   connectable: boolean;
   selectable: boolean;
 };
-
-function itemObjectTitle(item: FolioItem): string {
-  return item.title || basename(item.path);
-}
 
 export function canvasObjectViews({
   canvas,
@@ -53,7 +49,7 @@ export function canvasObjectViews({
     id: item.id,
     kind: canvasKindForItem(item),
     geometry: positionForCanvasItem(item, index, canvas, dragPreview),
-    title: itemObjectTitle(item),
+    title: itemDisplayTitle(item),
     connectable: true,
     selectable: true,
   }));

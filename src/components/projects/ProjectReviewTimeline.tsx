@@ -1,7 +1,7 @@
 import React from "react";
 import type { FolioItem, ThumbnailUrls } from "../../types";
 import { ITEM_STAGE_LABELS } from "../folio/constants";
-import { basename } from "../folio/model";
+import { itemDisplayTitle } from "../folio/model";
 import type { ItemDetailsOpenHandler } from "../folio/types";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
 import type { ProjectTimelineEntry, ProjectTimelineGroup } from "./projectReview";
@@ -16,10 +16,6 @@ function kindLabel(entry: ProjectTimelineEntry): string {
   if (entry.kind === "note") return "Note";
   if (entry.kind === "relationship") return "Relationship";
   return "Image";
-}
-
-function itemTitle(item: FolioItem): string {
-  return item.title || basename(item.path);
 }
 
 export function buildTimelineRows(
@@ -225,7 +221,7 @@ function TimelineEntry({
                 key={item.id}
                 role="button"
                 tabIndex={0}
-                aria-label={`Edit ${itemTitle(item)}`}
+                aria-label={`Edit ${itemDisplayTitle(item)}`}
                 onDoubleClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -240,7 +236,7 @@ function TimelineEntry({
                   thumbUrls={thumbUrls}
                   setThumbUrls={setThumbUrls}
                 />
-                <figcaption>{itemTitle(item)}</figcaption>
+                <figcaption>{itemDisplayTitle(item)}</figcaption>
               </figure>
             ))}
           </div>

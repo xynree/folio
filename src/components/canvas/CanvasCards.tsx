@@ -21,7 +21,7 @@ import type {
   ThumbnailUrls,
 } from "../../types";
 import { CANVAS_WORLD_ORIGIN } from "../folio/constants";
-import { basename } from "../folio/model";
+import { fileExtension, itemDisplayTitle } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
 import { sizeForCanvasObject } from "./canvasGeometry";
@@ -56,12 +56,6 @@ function objectCardStyle(
     }px)`,
     width: size.width,
   };
-}
-
-function fileExtension(filePath: string): string {
-  const filename = basename(filePath);
-  const index = filename.lastIndexOf(".");
-  return index >= 0 ? filename.slice(index + 1).toUpperCase() : "FILE";
 }
 
 function ConnectionHandles({
@@ -134,7 +128,7 @@ export function CanvasItemCard({
   onResizePointerDown: ResizePointerDownHandler;
   onClickCapture: (event: React.MouseEvent) => void;
 }) {
-  const label = item.title || basename(item.path);
+  const label = itemDisplayTitle(item);
   if (kind === "document") {
     return (
       <div
@@ -204,7 +198,7 @@ export function CanvasItemCard({
       <button
         className="icon-button canvas-card-remove-button"
         type="button"
-        aria-label={`Remove ${item.title || basename(item.path)} from board`}
+        aria-label={`Remove ${itemDisplayTitle(item)} from board`}
         title="Remove from board"
         onClick={(event) => {
           event.stopPropagation();

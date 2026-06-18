@@ -3,14 +3,12 @@ import { Tag as TagIcon } from "lucide-react";
 import type { Canvas, FolioItem, Tag, ThumbnailUrls } from "../../types";
 import type { GridTagFilter, ItemOpenHandler } from "../folio/types";
 import { parseTimestamp } from "../folio/dates";
-import { basename, canvasColorsForItem } from "../folio/model";
+import { canvasColorsForItem, itemDisplayTitle } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { EmptyState } from "../shared/EmptyState";
 import { ItemCard } from "./ItemCard";
 
 type GridSortMode = "recent" | "oldest" | "title";
-
-const itemLabel = (item: FolioItem) => item.title || basename(item.path);
 
 export function GridView({
   items,
@@ -54,7 +52,7 @@ export function GridView({
     nextItems.sort((a, b) => {
       if (sortMode === "title") {
         return (
-          itemLabel(a).localeCompare(itemLabel(b), undefined, {
+          itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), undefined, {
             sensitivity: "base",
           }) || b.date.localeCompare(a.date)
         );
@@ -67,7 +65,7 @@ export function GridView({
 
       return (
         dateSort ||
-        itemLabel(a).localeCompare(itemLabel(b), undefined, {
+        itemDisplayTitle(a).localeCompare(itemDisplayTitle(b), undefined, {
           sensitivity: "base",
         })
       );

@@ -172,17 +172,12 @@ export function getGaps(items: FolioItem[]): number {
   return buildDateRange(items).filter((date) => !groups.has(date)).length;
 }
 
-export function basename(filePath: string): string {
-  return filePath.split(/[\\/]/).pop() ?? filePath;
-}
-
-export function formatCount(
-  count: number,
-  singular: string,
-  plural = `${singular}s`,
-) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
+export {
+  basename,
+  fileExtension,
+  formatCount,
+  itemDisplayTitle,
+} from "./strings";
 
 export function createCanvas(
   index: number,

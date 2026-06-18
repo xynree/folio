@@ -22,10 +22,10 @@ import type { DataUpdater, ItemDetailsOpenHandler } from "../folio/types";
 import {
   addItemToCanvas,
   addItemsToCanvas,
-  basename,
   clampNumber,
   createId,
   formatCount,
+  itemDisplayTitle,
   markCanvasSaved,
   mergeImportedItemsIntoProject,
   mergeItems,
@@ -308,9 +308,7 @@ export function CanvasView({
     return [...items].sort((first, second) => {
       const byDate = second.date.localeCompare(first.date);
       if (byDate !== 0) return byDate;
-      return (first.title || basename(first.path)).localeCompare(
-        second.title || basename(second.path),
-      );
+      return itemDisplayTitle(first).localeCompare(itemDisplayTitle(second));
     });
   }, [activeProject, data.items, projectImageIdSet]);
   const activeCanvasItemIds = useMemo(
@@ -1536,7 +1534,7 @@ export function CanvasView({
                     }}
                   >
                   {projectImages.map((item) => {
-                    const itemTitle = item.title || basename(item.path);
+                    const itemTitle = itemDisplayTitle(item);
                     const alreadyAdded = activeCanvasItemIds.has(item.id);
                     const itemKind = canvasKindForItem(item);
                     const actionLabel = alreadyAdded
