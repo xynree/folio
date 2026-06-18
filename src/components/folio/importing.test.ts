@@ -38,7 +38,9 @@ describe("folio importing helpers", () => {
   });
 
   it("rethrows non-legacy import failures", async () => {
-    vi.mocked(window.folio.importToFolio).mockRejectedValue(new Error("Disk full"));
+    vi.mocked(window.folio.importToFolio).mockRejectedValue(
+      new Error("Disk full"),
+    );
 
     await expect(chooseAndImportItems()).rejects.toThrow("Disk full");
   });
@@ -58,13 +60,23 @@ describe("clipboardImageExtension", () => {
   });
 
   it("falls back to the MIME type when there is no extension", () => {
-    expect(clipboardImageExtension({ name: "clip", type: "image/png" } as File)).toBe(".png");
-    expect(clipboardImageExtension({ name: "clip", type: "image/jpeg" } as File)).toBe(".jpg");
-    expect(clipboardImageExtension({ name: "clip", type: "image/webp" } as File)).toBe(".webp");
-    expect(clipboardImageExtension({ name: "clip", type: "image/gif" } as File)).toBe(".gif");
+    expect(
+      clipboardImageExtension({ name: "clip", type: "image/png" } as File),
+    ).toBe(".png");
+    expect(
+      clipboardImageExtension({ name: "clip", type: "image/jpeg" } as File),
+    ).toBe(".jpg");
+    expect(
+      clipboardImageExtension({ name: "clip", type: "image/webp" } as File),
+    ).toBe(".webp");
+    expect(
+      clipboardImageExtension({ name: "clip", type: "image/gif" } as File),
+    ).toBe(".gif");
   });
 
   it("defaults to .png for unknown types", () => {
-    expect(clipboardImageExtension({ name: "clip", type: "image/bmp" } as File)).toBe(".png");
+    expect(
+      clipboardImageExtension({ name: "clip", type: "image/bmp" } as File),
+    ).toBe(".png");
   });
 });

@@ -38,8 +38,7 @@ describe("useTagsSidebarResize", () => {
   it("tracks pointer movement within the clamped range and restores styles", () => {
     const { result } = renderHook(() => useTagsSidebarResize(false));
     const workspace = document.createElement("div");
-    workspace.getBoundingClientRect = () =>
-      ({ left: 100 }) as DOMRect;
+    workspace.getBoundingClientRect = () => ({ left: 100 }) as DOMRect;
     result.current.workspaceRef.current = workspace as unknown as HTMLElement;
 
     act(() => {

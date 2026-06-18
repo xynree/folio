@@ -82,36 +82,39 @@ export function useItemTags({
       if (!trimmed) return;
 
       let taggedCount = 0;
-      commitData((current) => {
-        const selectedSet = new Set(selectedItemIds);
-        const validSelectedIds = new Set(
-          current.items
-            .filter((item) => selectedSet.has(item.id))
-            .map((item) => item.id),
-        );
-        taggedCount = validSelectedIds.size;
-        if (!taggedCount) return current;
+      commitData(
+        (current) => {
+          const selectedSet = new Set(selectedItemIds);
+          const validSelectedIds = new Set(
+            current.items
+              .filter((item) => selectedSet.has(item.id))
+              .map((item) => item.id),
+          );
+          taggedCount = validSelectedIds.size;
+          if (!taggedCount) return current;
 
-        const existingTag = current.tags.find(
-          (tag) => tag.text.toLowerCase() === trimmed.toLowerCase(),
-        );
-        const tag = existingTag ?? { id: createId("tag"), text: trimmed };
+          const existingTag = current.tags.find(
+            (tag) => tag.text.toLowerCase() === trimmed.toLowerCase(),
+          );
+          const tag = existingTag ?? { id: createId("tag"), text: trimmed };
 
-        return {
-          ...current,
-          tags: existingTag ? current.tags : [...current.tags, tag],
-          items: current.items.map((item) =>
-            validSelectedIds.has(item.id)
-              ? {
-                  ...item,
-                  tagIds: item.tagIds.includes(tag.id)
-                    ? item.tagIds
-                    : [...item.tagIds, tag.id],
-                }
-              : item,
-          ),
-        };
-      }, `${formatCount(taggedCount || selectedItemIds.length, "item")} tagged`);
+          return {
+            ...current,
+            tags: existingTag ? current.tags : [...current.tags, tag],
+            items: current.items.map((item) =>
+              validSelectedIds.has(item.id)
+                ? {
+                    ...item,
+                    tagIds: item.tagIds.includes(tag.id)
+                      ? item.tagIds
+                      : [...item.tagIds, tag.id],
+                  }
+                : item,
+            ),
+          };
+        },
+        `${formatCount(taggedCount || selectedItemIds.length, "item")} tagged`,
+      );
 
       if (taggedCount) {
         onSelectionTagged();
@@ -122,33 +125,30 @@ export function useItemTags({
 
   const removeTagFromItem = useCallback(
     (itemId: string, tagText: string) => {
-      commitData(
-        (current) => {
-          const tag = current.tags.find(
-            (candidate) => candidate.text === tagText,
-          );
-          if (!tag) return current;
+      commitData((current) => {
+        const tag = current.tags.find(
+          (candidate) => candidate.text === tagText,
+        );
+        if (!tag) return current;
 
-          const items = current.items.map((item) =>
-            item.id === itemId
-              ? {
-                  ...item,
-                  tagIds: item.tagIds.filter((tagId) => tagId !== tag.id),
-                }
-              : item,
-          );
-          const usedTagIds = new Set(items.flatMap((item) => item.tagIds));
+        const items = current.items.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                tagIds: item.tagIds.filter((tagId) => tagId !== tag.id),
+              }
+            : item,
+        );
+        const usedTagIds = new Set(items.flatMap((item) => item.tagIds));
 
-          return {
-            ...current,
-            items,
-            tags: current.tags.filter((candidate) =>
-              usedTagIds.has(candidate.id),
-            ),
-          };
-        },
-        "Tag removed",
-      );
+        return {
+          ...current,
+          items,
+          tags: current.tags.filter((candidate) =>
+            usedTagIds.has(candidate.id),
+          ),
+        };
+      }, "Tag removed");
     },
     [commitData],
   );

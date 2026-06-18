@@ -96,9 +96,9 @@ describe("folio model helpers", () => {
       "2026-06-15T12:00:00.000Z",
     );
 
-    expect(next.items.find((entry) => entry.id === "new-image")?.projectId).toBe(
-      "project-1",
-    );
+    expect(
+      next.items.find((entry) => entry.id === "new-image")?.projectId,
+    ).toBe("project-1");
     expect(next.projects[0].imageIds).toEqual(["alpha", "new-image"]);
     expect(next.projects[0].updatedAt).toBe("2026-06-15T12:00:00.000Z");
   });
@@ -189,7 +189,9 @@ describe("normalizeFolioData", () => {
 describe("assignBoardToProject", () => {
   it("returns projects unchanged when there is no project id", () => {
     const projects = [makeProject("p1")];
-    expect(assignBoardToProject(projects, null, "board-x", "now")).toBe(projects);
+    expect(assignBoardToProject(projects, null, "board-x", "now")).toBe(
+      projects,
+    );
   });
 
   it("moves the board to the front and de-duplicates it", () => {
@@ -201,7 +203,12 @@ describe("assignBoardToProject", () => {
 
   it("only updates the matching project", () => {
     const projects = [makeProject("p1"), makeProject("p2", { boardIds: [] })];
-    const next = assignBoardToProject(projects, "p2", "new-board", "2027-01-01");
+    const next = assignBoardToProject(
+      projects,
+      "p2",
+      "new-board",
+      "2027-01-01",
+    );
     expect(next[0]).toBe(projects[0]);
     expect(next[1].boardIds).toEqual(["new-board"]);
   });

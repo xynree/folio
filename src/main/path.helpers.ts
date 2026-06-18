@@ -52,7 +52,9 @@ export function extractCommandErrorMessage(error: unknown): string {
       : "";
   const message =
     stderr || (error instanceof Error ? error.message : String(error));
-  const executionError = message.match(/execution error: (.*?)(?: \(-?\d+\))?$/);
+  const executionError = message.match(
+    /execution error: (.*?)(?: \(-?\d+\))?$/,
+  );
 
   return executionError?.[1]?.trim() ?? message.trim();
 }

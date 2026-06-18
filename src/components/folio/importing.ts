@@ -18,8 +18,7 @@ function messageForError(error: unknown) {
 function canFallBackToLegacyImport(error: unknown, handlerName: string) {
   const message = messageForError(error).toLowerCase();
   return (
-    message.includes("no handler registered") &&
-    message.includes(handlerName)
+    message.includes("no handler registered") && message.includes(handlerName)
   );
 }
 

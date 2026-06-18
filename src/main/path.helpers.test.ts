@@ -26,9 +26,9 @@ describe("isPathInsideDirectory", () => {
 describe("isPathWithinRoot", () => {
   it("accepts the root and nested paths", () => {
     expect(isPathWithinRoot("/root", "/root")).toBe(true);
-    expect(isPathWithinRoot(path.join("/root", "images", "a.png"), "/root")).toBe(
-      true,
-    );
+    expect(
+      isPathWithinRoot(path.join("/root", "images", "a.png"), "/root"),
+    ).toBe(true);
   });
 
   it("rejects siblings that share a name prefix", () => {

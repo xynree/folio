@@ -11,12 +11,7 @@ import type { Canvas } from "../types";
 describe("validateFolioSchema", () => {
   it("accepts a well-formed data file", () => {
     expect(() =>
-      validateFolioSchema(
-        "folio.json",
-        { version: 1, items: [] },
-        "items",
-        1,
-      ),
+      validateFolioSchema("folio.json", { version: 1, items: [] }, "items", 1),
     ).not.toThrow();
   });
 
@@ -66,7 +61,10 @@ describe("removeLegacyCanvasReferences", () => {
       ...makeCanvas("board-1"),
       references: ["x"],
     } as Canvas & { references?: unknown };
-    const result = removeLegacyCanvasReferences([legacy, makeCanvas("board-2")]);
+    const result = removeLegacyCanvasReferences([
+      legacy,
+      makeCanvas("board-2"),
+    ]);
     expect(result.changed).toBe(true);
     expect("references" in result.canvases[0]).toBe(false);
   });

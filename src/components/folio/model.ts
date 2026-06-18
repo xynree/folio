@@ -1,4 +1,11 @@
-import type { Canvas, CanvasPosition, FolioData, FolioItem, Project, Tag } from "../../types";
+import type {
+  Canvas,
+  CanvasPosition,
+  FolioData,
+  FolioItem,
+  Project,
+  Tag,
+} from "../../types";
 import { CANVAS_COLORS, IMAGE_FILE_PATTERN } from "./constants";
 
 export function createId(prefix: string) {
@@ -32,7 +39,10 @@ export function assignBoardToProject(
     project.id === projectId
       ? {
           ...project,
-          boardIds: [boardId, ...project.boardIds.filter((id) => id !== boardId)],
+          boardIds: [
+            boardId,
+            ...project.boardIds.filter((id) => id !== boardId),
+          ],
           updatedAt: savedAt,
         }
       : project,
@@ -73,7 +83,9 @@ export function mergeImportedItemsIntoProject(
       project.id === projectId
         ? {
             ...project,
-            imageIds: Array.from(new Set([...project.imageIds, ...importedIds])),
+            imageIds: Array.from(
+              new Set([...project.imageIds, ...importedIds]),
+            ),
             updatedAt: savedAt,
           }
         : project,
@@ -246,7 +258,9 @@ export function addItemsToCanvas(
 
 export function tagTextsForItem(item: FolioItem, tags: Tag[]) {
   const byId = new Map(tags.map((tag) => [tag.id, tag.text]));
-  return item.tagIds.map((tagId) => byId.get(tagId)).filter(Boolean) as string[];
+  return item.tagIds
+    .map((tagId) => byId.get(tagId))
+    .filter(Boolean) as string[];
 }
 
 export function canvasColorsForItem(
@@ -255,10 +269,16 @@ export function canvasColorsForItem(
 ): string[] {
   return canvases
     .filter((canvas) => canvas.itemIds.includes(itemId))
-    .map((canvas, index) => canvas.color ?? CANVAS_COLORS[index % CANVAS_COLORS.length]);
+    .map(
+      (canvas, index) =>
+        canvas.color ?? CANVAS_COLORS[index % CANVAS_COLORS.length],
+    );
 }
 
 export function itemCanUseDirectPreview(item: FolioItem): boolean {
-  return !item.missing && ["sketch", "anim"].includes(item.type)
-    && IMAGE_FILE_PATTERN.test(item.path);
+  return (
+    !item.missing &&
+    ["sketch", "anim"].includes(item.type) &&
+    IMAGE_FILE_PATTERN.test(item.path)
+  );
 }
