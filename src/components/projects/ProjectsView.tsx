@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
 import type { FolioData, FolioItem, Project, ThumbnailUrls } from "../../types";
+import { parseTimestamp } from "../folio/dates";
 import { formatCount } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
@@ -8,8 +9,7 @@ import { LazyThumbnail } from "../shared/LazyThumbnail";
 const PROJECT_PREVIEW_LIMIT = 3;
 
 function projectTime(project: Project): number {
-  const time = Date.parse(project.updatedAt || project.createdAt);
-  return Number.isNaN(time) ? 0 : time;
+  return parseTimestamp(project.updatedAt || project.createdAt);
 }
 
 function projectSortWeight(project: Project): number {

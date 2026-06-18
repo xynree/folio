@@ -2,17 +2,13 @@ import React, { useMemo, useState } from "react";
 import { Tag as TagIcon } from "lucide-react";
 import type { Canvas, FolioItem, Tag, ThumbnailUrls } from "../../types";
 import type { GridTagFilter, ItemOpenHandler } from "../folio/types";
+import { parseTimestamp } from "../folio/dates";
 import { basename, canvasColorsForItem } from "../folio/model";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { EmptyState } from "../shared/EmptyState";
 import { ItemCard } from "./ItemCard";
 
 type GridSortMode = "recent" | "oldest" | "title";
-
-const itemTime = (item: FolioItem) => {
-  const time = Date.parse(item.date);
-  return Number.isNaN(time) ? 0 : time;
-};
 
 const itemLabel = (item: FolioItem) => item.title || basename(item.path);
 
@@ -66,8 +62,8 @@ export function GridView({
 
       const dateSort =
         sortMode === "recent"
-          ? itemTime(b) - itemTime(a)
-          : itemTime(a) - itemTime(b);
+          ? parseTimestamp(b.date) - parseTimestamp(a.date)
+          : parseTimestamp(a.date) - parseTimestamp(b.date);
 
       return (
         dateSort ||

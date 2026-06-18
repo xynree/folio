@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef } from "react";
 import type { FolioItem } from "../../types";
+import { addDays } from "../folio/dates";
 import {
   dateFromKey,
   dateKeyFromDate,
@@ -25,12 +26,6 @@ const MONTH_LABELS = [
   "Nov",
   "Dec",
 ];
-
-function addDays(date: Date, days: number) {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
 
 function latestHeatmapDate(items: FolioItem[]) {
   const todayKey = dateKeyFromDate(new Date());

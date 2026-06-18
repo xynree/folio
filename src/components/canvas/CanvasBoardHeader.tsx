@@ -20,24 +20,10 @@ import {
   Undo2,
 } from "lucide-react";
 import type { Canvas } from "../../types";
+import { formatBoardTimestamp } from "../folio/dates";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { BoardEditDialog } from "./BoardEditDialog";
 import type { CanvasTool } from "./canvasTypes";
-
-function formatBoardTimestamp(value?: string) {
-  if (!value) return "Unknown";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown";
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
 
 type CanvasBoardHeaderProps = {
   activeCanvas: Canvas;

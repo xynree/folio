@@ -1,31 +1,11 @@
 import React, { useMemo } from "react";
 import { Plus } from "lucide-react";
 import type { Canvas, FolioItem, Project, ThumbnailUrls } from "../../types";
+import { formatReviewTimestamp, formatShortDate } from "../folio/dates";
 import type { ItemDetailsOpenHandler } from "../folio/types";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { buildProjectReview } from "./projectReview";
 import { ProjectReviewTimeline } from "./ProjectReviewTimeline";
-
-function formatShortDate(value: string | null): string {
-  if (!value) return "None";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
-}
-
-function formatReviewTimestamp(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Unknown date";
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
-}
 
 export function ProjectReviewView({
   project,
