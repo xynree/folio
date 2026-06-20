@@ -63,7 +63,9 @@ export function ProjectsView({
 
   return (
     <main className="projects-home">
-      <section className="projects-header">
+      <div className="projects-titlebar-drag-area" aria-hidden="true" />
+      <div className="projects-home-scroll">
+        <section className="projects-header">
         <div>
           <p>Projects</p>
           <h1>Studio workspace</h1>
@@ -157,6 +159,7 @@ export function ProjectsView({
           <p>{formatCount(data.items?.length ?? 0, "loose archive item")} available outside projects.</p>
         </section>
       )}
+      </div>
     </main>
   );
 }

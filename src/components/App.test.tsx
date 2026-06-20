@@ -348,7 +348,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.queryByLabelText("Open references folder")).toBeNull();
   });
 
-  it("loads archive data, thumbnails, status counts, and opens boards from the sidebar", async () => {
+  it("loads archive data, thumbnails, and opens boards from the sidebar", async () => {
     setupFolio();
     const user = userEvent.setup();
 
@@ -468,9 +468,6 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     );
     expect(screen.queryByText(/^Archive$/)).toBeNull();
     expect(screen.queryByText(/visible item/i)).toBeNull();
-    expect(screen.getAllByText("3 items").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("1 canvas").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("2 tags").length).toBeGreaterThan(0);
 
     await user.click(screen.getByLabelText(/show tags/i));
     expect(screen.getByLabelText(/hide tags/i)).not.toBeNull();
@@ -1013,7 +1010,6 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     await waitFor(() => {
       expect(gridTitles()).toEqual(["Alpha"]);
     });
-    expect(screen.getAllByText("1 item").length).toBeGreaterThan(0);
     expect(screen.queryByTitle("Marked as Work")).toBeNull();
   });
 

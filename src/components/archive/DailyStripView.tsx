@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import type { Canvas, FolioItem, Tag, ThumbnailUrls } from "../../types";
 import type { ItemOpenHandler } from "../folio/types";
 import {
-  buildDateRange,
   canvasColorsForItem,
   formatCount,
   formatDateLabel,
@@ -19,7 +18,6 @@ export function DailyStripView({
   setThumbUrls,
   selectedItemIds,
   workItemIds = [],
-  showDateGaps,
   onBackgroundClick,
   onDragStart,
   onItemOpen,
@@ -32,7 +30,6 @@ export function DailyStripView({
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   selectedItemIds: string[];
   workItemIds?: string[];
-  showDateGaps: boolean;
   onBackgroundClick: () => void;
   onDragStart: (itemId: string, event: React.DragEvent<HTMLElement>) => void;
   onItemOpen: ItemOpenHandler;
@@ -41,11 +38,8 @@ export function DailyStripView({
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const groups = useMemo(() => groupItemsByDate(items), [items]);
   const dates = useMemo(
-    () =>
-      showDateGaps
-        ? buildDateRange(items)
-        : Array.from(groups.keys()).sort((a, b) => b.localeCompare(a)),
-    [groups, items, showDateGaps],
+    () => Array.from(groups.keys()).sort((a, b) => b.localeCompare(a)),
+    [groups],
   );
   const visualOrderedItems = useMemo(
     () => dates.flatMap((date) => groups.get(date) ?? []),
@@ -81,7 +75,7 @@ export function DailyStripView({
         const dayItems = groups.get(date) ?? [];
         return (
           <article
-            className={`day-row ${dayItems.length ? "" : "day-row-empty"}`}
+            className="day-row"
             key={date}
             onMouseDown={(event) => {
               if (event.currentTarget === event.target) onBackgroundClick();
@@ -89,40 +83,34 @@ export function DailyStripView({
           >
             <div className="day-meta">
               <strong>{formatDateLabel(date)}</strong>
-              {dayItems.length ? (
-                <span>{formatCount(dayItems.length, "item")}</span>
-              ) : null}
+              <span>{formatCount(dayItems.length, "item")}</span>
             </div>
 
-            {dayItems.length ? (
-              <div
-                className="strip-items"
-                onMouseDown={(event) => {
-                  if (event.currentTarget === event.target) onBackgroundClick();
-                }}
-              >
-                {dayItems.map((item) => (
-                  <ItemCard
-                    compact
-                    item={item}
-                    tags={tags}
-                    canvasColors={canvasColorsForItem(item.id, canvases)}
-                    key={item.id}
-                    thumbUrls={thumbUrls}
-                    setThumbUrls={setThumbUrls}
-                    isSelected={selectedSet.has(item.id)}
-                    isWork={workItemSet.has(item.id)}
-                    onDragStart={onDragStart}
-                    onOpen={(itemId, event) =>
-                      onItemOpen(itemId, event, visualOrderedItems, true)
-                    }
-                    onEdit={onEditItem}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="gap-line" aria-label="No items for this date" />
-            )}
+            <div
+              className="strip-items"
+              onMouseDown={(event) => {
+                if (event.currentTarget === event.target) onBackgroundClick();
+              }}
+            >
+              {dayItems.map((item) => (
+                <ItemCard
+                  compact
+                  item={item}
+                  tags={tags}
+                  canvasColors={canvasColorsForItem(item.id, canvases)}
+                  key={item.id}
+                  thumbUrls={thumbUrls}
+                  setThumbUrls={setThumbUrls}
+                  isSelected={selectedSet.has(item.id)}
+                  isWork={workItemSet.has(item.id)}
+                  onDragStart={onDragStart}
+                  onOpen={(itemId, event) =>
+                    onItemOpen(itemId, event, visualOrderedItems, true)
+                  }
+                  onEdit={onEditItem}
+                />
+              ))}
+            </div>
           </article>
         );
       })}

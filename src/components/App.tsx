@@ -63,7 +63,6 @@ import {
   createCanvas,
   createId,
   formatCount,
-  getGaps,
   itemDisplayTitle,
   markCanvasSaved,
   mergeImportedItemsIntoProject,
@@ -72,7 +71,6 @@ import {
 } from "./folio/model";
 import { ReconciliationNotice } from "./layout/ReconciliationNotice";
 import { SelectionBar } from "./layout/SelectionBar";
-import { StatusBar } from "./layout/StatusBar";
 import { ProjectReviewEditorPage } from "./projects/ProjectReviewEditorPage";
 import { ProjectReviewView } from "./projects/ProjectReviewView";
 import { ProjectsView } from "./projects/ProjectsView";
@@ -1188,7 +1186,6 @@ export function AppShell() {
                             ? activeProject?.workItemIds ?? []
                             : []
                         }
-                        showDateGaps={gridTagFilter === "all"}
                         onBackgroundClick={clearSelection}
                         onDragStart={startArchiveItemDrag}
                         onItemOpen={handleItemOpen}
@@ -1258,13 +1255,6 @@ export function AppShell() {
           onOpenProject={openProject}
         />
       )}
-
-      <StatusBar
-        itemCount={activeProject ? projectItems.length : data.items.length}
-        canvasCount={activeProject ? projectCanvases.length : data.canvases.length}
-        tagCount={data.tags.length}
-        gapCount={getGaps(projectItems)}
-      />
 
       <DetailDrawer
         item={selectedItem}

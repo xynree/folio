@@ -3,18 +3,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { makeItem } from "../../test/fixtures";
 import { ReconciliationNotice } from "./ReconciliationNotice";
 import { SelectionBar } from "./SelectionBar";
-import { StatusBar } from "./StatusBar";
 
 describe("layout components", () => {
-  it("renders status counts", () => {
-    render(<StatusBar itemCount={2} canvasCount={1} tagCount={3} gapCount={0} />);
-
-    expect(screen.getByText("2 items")).not.toBeNull();
-    expect(screen.getByText("1 canvas")).not.toBeNull();
-    expect(screen.getByText("3 tags")).not.toBeNull();
-    expect(screen.getByText("0 gaps")).not.toBeNull();
-  });
-
   it("hides selection controls when no items are selected", () => {
     const { container } = render(
       <SelectionBar
