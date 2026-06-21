@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { FolioData, FolioItem, ReconciliationResult } from "../types";
 import {
@@ -269,6 +269,46 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     expect(await screen.findByRole("button", { name: /strip/i })).not.toBeNull();
     expect(screen.getByRole("button", { name: /^projects$/i })).not.toBeNull();
+  });
+
+  it("restores the open project workspace after a refresh", async () => {
+    setupFolio();
+
+    fireEvent.click(await screen.findByRole("button", { name: /open project/i }));
+    expect(await screen.findByRole("button", { name: /strip/i })).not.toBeNull();
+
+    // Simulate a refresh by remounting a fresh AppShell against the same data.
+    cleanup();
+    render(<AppShell />);
+
+    // The workspace is restored instead of returning to the Projects home.
+    expect(await screen.findByRole("button", { name: /strip/i })).not.toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: /studio workspace/i }),
+    ).toBeNull();
+  });
+
+  it("restores the open board canvas after a refresh", async () => {
+    setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await openBoardBrowser(user);
+    await user.click(screen.getByRole("button", { name: /^open board 1,/i }));
+
+    await waitFor(() => {
+      expect(document.querySelector(".canvas-surface")).not.toBeNull();
+    });
+
+    // Simulate a refresh by remounting a fresh AppShell against the same data.
+    cleanup();
+    render(<AppShell />);
+
+    // The board canvas is restored instead of bouncing to the board browser.
+    await waitFor(() => {
+      expect(document.querySelector(".canvas-surface")).not.toBeNull();
+    });
+    expect(document.querySelector(".canvas-board-browser")).toBeNull();
   });
 
   it("shows Works on project tiles before falling back to All Images", async () => {

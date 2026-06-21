@@ -83,13 +83,41 @@ const ARCHIVE_UI_SCALE_MAX = 200;
 const ARCHIVE_UI_SCALE_STEP = 5;
 type ProjectSurface = "images" | "works" | "boards" | "review";
 
+const VIEW_STATE_STORAGE_KEY = "folio:view-state";
+
+type PersistedViewState = {
+  archiveView: ArchiveViewMode;
+  activeProjectId: string | null;
+  projectSurface: ProjectSurface;
+  activeReviewId: string | null;
+  activeCanvasId: string | null;
+  boardBrowserOpen: boolean;
+};
+
+function readPersistedViewState(): Partial<PersistedViewState> {
+  try {
+    const raw = sessionStorage.getItem(VIEW_STATE_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Partial<PersistedViewState>) : {};
+  } catch {
+    return {};
+  }
+}
+
 export function AppShell() {
+  const persistedViewRef = useRef<Partial<PersistedViewState> | null>(null);
+  if (persistedViewRef.current === null) {
+    persistedViewRef.current = readPersistedViewState();
+  }
+  const persistedView = persistedViewRef.current;
+
   const [data, setData] = useState<FolioData>(EMPTY_DATA);
   const dataRef = useRef<FolioData>(EMPTY_DATA);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [archiveView, setArchiveView] = useState<ArchiveViewMode>("strip");
+  const [archiveView, setArchiveView] = useState<ArchiveViewMode>(
+    persistedView.archiveView ?? "strip",
+  );
   const [archiveUiScale, setArchiveUiScale] = useState(100);
   const [heatmapMinimized, setHeatmapMinimized] = useState(false);
   const [tagsCollapsed, setTagsCollapsed] = useState(true);
@@ -103,10 +131,33 @@ export function AppShell() {
   const [selectionTagDialogOpen, setSelectionTagDialogOpen] = useState(false);
   const [selectionTagDraft, setSelectionTagDraft] = useState("");
   const [lastSelectedItemId, setLastSelectedItemId] = useState<string | null>(null);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [projectSurface, setProjectSurface] = useState<ProjectSurface>("images");
-  const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
-  const [activeCanvasId, setActiveCanvasId] = useState<string | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(
+    persistedView.activeProjectId ?? null,
+  );
+  const [projectSurface, setProjectSurface] = useState<ProjectSurface>(
+    persistedView.projectSurface ?? "images",
+  );
+  const [activeReviewId, setActiveReviewId] = useState<string | null>(
+    persistedView.activeReviewId ?? null,
+  );
+  const [activeCanvasId, setActiveCanvasId] = useState<string | null>(
+    persistedView.activeCanvasId ?? null,
+  );
+  const [canvasBrowserOpen, setCanvasBrowserOpen] = useState<boolean>(
+    persistedView.boardBrowserOpen ?? true,
+  );
+  // Restore the board-vs-canvas view only on the first board mount after a page
+  // load. In-session navigation between surfaces keeps the existing behavior.
+  const restoredBoardBrowserOpenRef = useRef<boolean | null>(
+    persistedView.projectSurface === "boards" &&
+      typeof persistedView.boardBrowserOpen === "boolean"
+      ? persistedView.boardBrowserOpen
+      : null,
+  );
+  const handleCanvasBrowserOpenChange = useCallback((open: boolean) => {
+    restoredBoardBrowserOpenRef.current = null;
+    setCanvasBrowserOpen(open);
+  }, []);
   const [canvasDetailRequestId, setCanvasDetailRequestId] = useState(0);
   const [reconciliation, setReconciliation] =
     useState<ReconciliationResult | null>(null);
@@ -204,6 +255,43 @@ export function AppShell() {
         if (cancelled) return;
         putData(folioData);
         setReconciliation(reconciliationResult);
+
+        // Drop any restored view that points at data which no longer exists.
+        const restored = persistedViewRef.current ?? {};
+        if (restored.activeProjectId) {
+          const project = (folioData.projects ?? []).find(
+            (candidate) => candidate.id === restored.activeProjectId,
+          );
+          if (!project) {
+            setActiveProjectId(null);
+            setProjectSurface("images");
+            setActiveReviewId(null);
+            setActiveCanvasId(null);
+            restoredBoardBrowserOpenRef.current = null;
+          } else {
+            if (
+              restored.activeReviewId &&
+              !project.reviews.some(
+                (review) => review.id === restored.activeReviewId,
+              )
+            ) {
+              setActiveReviewId(null);
+            }
+            if (
+              restored.activeCanvasId &&
+              !(folioData.canvases ?? []).some(
+                (canvas) =>
+                  canvas.id === restored.activeCanvasId &&
+                  (canvas.projectId === project.id ||
+                    project.boardIds.includes(canvas.id)),
+              )
+            ) {
+              setActiveCanvasId(null);
+              setCanvasBrowserOpen(true);
+              restoredBoardBrowserOpenRef.current = null;
+            }
+          }
+        }
       } catch (error) {
         console.error(error);
         if (!cancelled) setToast("Folio data could not be loaded");
@@ -217,6 +305,29 @@ export function AppShell() {
       unsubscribe();
     };
   }, [putData]);
+
+  useEffect(() => {
+    const snapshot: PersistedViewState = {
+      archiveView,
+      activeProjectId,
+      projectSurface,
+      activeReviewId,
+      activeCanvasId,
+      boardBrowserOpen: canvasBrowserOpen,
+    };
+    try {
+      sessionStorage.setItem(VIEW_STATE_STORAGE_KEY, JSON.stringify(snapshot));
+    } catch {
+      // Ignore storage write failures (e.g. quota or restricted mode).
+    }
+  }, [
+    archiveView,
+    activeProjectId,
+    projectSurface,
+    activeReviewId,
+    activeCanvasId,
+    canvasBrowserOpen,
+  ]);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -1031,6 +1142,8 @@ export function AppShell() {
                 activeCanvasId={activeCanvasId}
                 activeProjectId={activeProjectId}
                 canvasDetailRequestId={canvasDetailRequestId}
+                initialBoardBrowserOpen={restoredBoardBrowserOpenRef.current}
+                onBoardBrowserOpenChange={handleCanvasBrowserOpenChange}
                 setActiveCanvasId={setActiveCanvasId}
                 onOpenItem={openItemDetails}
                 onCreateBoard={createBoard}

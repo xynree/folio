@@ -97,6 +97,8 @@ export function CanvasView({
   activeCanvasId,
   activeProjectId,
   canvasDetailRequestId,
+  initialBoardBrowserOpen,
+  onBoardBrowserOpenChange,
   setActiveCanvasId,
   onOpenItem,
   onCreateBoard,
@@ -110,6 +112,8 @@ export function CanvasView({
   activeCanvasId: string | null;
   activeProjectId?: string | null;
   canvasDetailRequestId: number;
+  initialBoardBrowserOpen?: boolean | null;
+  onBoardBrowserOpenChange?: (open: boolean) => void;
   setActiveCanvasId: React.Dispatch<React.SetStateAction<string | null>>;
   onOpenItem: ItemDetailsOpenHandler;
   onCreateBoard: (templateId?: CanvasTemplateId) => void;
@@ -155,8 +159,10 @@ export function CanvasView({
   const [projectImagePickerOpen, setProjectImagePickerOpen] = useState(false);
   const [projectImageColumns, setProjectImageColumns] = useState(2);
   const [linkPromptOpen, setLinkPromptOpen] = useState(false);
-  const [boardBrowserOpen, setBoardBrowserOpen] = useState(
-    () => canvasDetailRequestId === 0,
+  const [boardBrowserOpen, setBoardBrowserOpen] = useState(() =>
+    typeof initialBoardBrowserOpen === "boolean"
+      ? initialBoardBrowserOpen
+      : canvasDetailRequestId === 0,
   );
   const [boardMenuCanvasId, setBoardMenuCanvasId] = useState<string | null>(null);
   const [browserEditCanvasId, setBrowserEditCanvasId] = useState<string | null>(
@@ -240,6 +246,10 @@ export function CanvasView({
       setActiveCanvasId(activeCanvas.id);
     }
   }, [activeCanvas, activeCanvasId, setActiveCanvasId]);
+
+  useEffect(() => {
+    onBoardBrowserOpenChange?.(boardBrowserOpen);
+  }, [boardBrowserOpen, onBoardBrowserOpenChange]);
 
   useEffect(() => {
     setBoardTitleDraft(activeCanvas?.title ?? "");
