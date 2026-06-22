@@ -18,6 +18,8 @@ const electronMocks = vi.hoisted(() => ({
   showOpenDialog: vi.fn(),
   showItemInFolder: vi.fn(),
   trashItem: vi.fn(),
+  relaunch: vi.fn(),
+  exit: vi.fn(),
 }));
 
 const chokidarMocks = vi.hoisted(() => {
@@ -29,10 +31,12 @@ const chokidarMocks = vi.hoisted(() => {
     watch: vi.fn(),
   };
 
-  state.watcher.on.mockImplementation((eventName: string, callback: WatchCallback) => {
-    state.events[eventName] = callback;
-    return state.watcher;
-  });
+  state.watcher.on.mockImplementation(
+    (eventName: string, callback: WatchCallback) => {
+      state.events[eventName] = callback;
+      return state.watcher;
+    },
+  );
   state.watch.mockReturnValue(state.watcher);
 
   return state;
@@ -42,6 +46,8 @@ vi.mock("electron", () => ({
   app: {
     getPath: vi.fn(() => electronMocks.homePath),
     getAppPath: vi.fn(() => ""),
+    relaunch: electronMocks.relaunch,
+    exit: electronMocks.exit,
   },
   BrowserWindow: vi.fn(),
   dialog: {
@@ -92,11 +98,19 @@ async function writeRawFolioFiles(dotFolio: string, data: FolioData) {
   );
   await fs.writeFile(
     path.join(dotFolio, "canvases.json"),
-    JSON.stringify({ version: SCHEMA_VERSION, canvases: data.canvases }, null, 2),
+    JSON.stringify(
+      { version: SCHEMA_VERSION, canvases: data.canvases },
+      null,
+      2,
+    ),
   );
   await fs.writeFile(
     path.join(dotFolio, "projects.json"),
-    JSON.stringify({ version: SCHEMA_VERSION, projects: data.projects }, null, 2),
+    JSON.stringify(
+      { version: SCHEMA_VERSION, projects: data.projects },
+      null,
+      2,
+    ),
   );
 }
 
@@ -162,11 +176,14 @@ describe("FolioManager project Works", () => {
 
     expect(promotedData.projects[0].workItemIds).toEqual(["alpha"]);
     expect(promotedData.projects[0].workUpdatedAt).toEqual(expect.any(String));
-    expect(promotedData.items.find((item) => item.id === "alpha")?.stage)
-      .toBeUndefined();
+    expect(
+      promotedData.items.find((item) => item.id === "alpha")?.stage,
+    ).toBeUndefined();
 
     const worksDir = path.join(projectFolder, "works");
-    await expect(fs.readdir(worksDir)).resolves.toEqual(["alpha-work-alpha.png"]);
+    await expect(fs.readdir(worksDir)).resolves.toEqual([
+      "alpha-work-alpha.png",
+    ]);
     await expect(
       fs.readFile(path.join(worksDir, "alpha-work-alpha.png"), "utf-8"),
     ).resolves.toBe("image bytes");
@@ -175,7 +192,9 @@ describe("FolioManager project Works", () => {
       await fs.readFile(path.join(dotFolio, "projects.json"), "utf-8"),
     ) as { projects: Array<{ workItemIds: string[]; workUpdatedAt?: string }> };
     expect(persistedProjects.projects[0].workItemIds).toEqual(["alpha"]);
-    expect(persistedProjects.projects[0].workUpdatedAt).toEqual(expect.any(String));
+    expect(persistedProjects.projects[0].workUpdatedAt).toEqual(
+      expect.any(String),
+    );
 
     const unmarkedData = await manager.setProjectWorkItems("project-1", []);
 
@@ -255,7 +274,9 @@ describe("FolioManager project Works", () => {
     const data = await manager.loadData();
 
     expect(data.items[0].path).toBe("projects/color-study/images/alpha.png");
-    expect(data.items[1].path).toBe("projects/color-study/documents/field-note.txt");
+    expect(data.items[1].path).toBe(
+      "projects/color-study/documents/field-note.txt",
+    );
     expect("references" in data.canvases[0]).toBe(false);
     await expect(
       fs.readFile(
@@ -265,13 +286,25 @@ describe("FolioManager project Works", () => {
     ).resolves.toBe("image bytes");
     await expect(
       fs.readFile(
-        path.join(folioRoot, "projects", "color-study", "documents", "field-note.txt"),
+        path.join(
+          folioRoot,
+          "projects",
+          "color-study",
+          "documents",
+          "field-note.txt",
+        ),
         "utf-8",
       ),
     ).resolves.toBe("note bytes");
     await expect(
       fs.readFile(
-        path.join(folioRoot, "projects", "color-study", "works", "alpha-alpha.png"),
+        path.join(
+          folioRoot,
+          "projects",
+          "color-study",
+          "works",
+          "alpha-alpha.png",
+        ),
         "utf-8",
       ),
     ).resolves.toBe("image bytes");
@@ -303,12 +336,47 @@ describe("FolioManager project Works", () => {
 
   it("registers IPC handlers and serves safe folio protocol files", async () => {
     const { folioRoot } = await makeTempFolioHome();
-    const imagePath = path.join(folioRoot, "projects", "color-study", "images", "alpha.png");
-    const webpPath = path.join(folioRoot, "projects", "color-study", "images", "alpha.webp");
-    const gifPath = path.join(folioRoot, "projects", "color-study", "images", "alpha.gif");
-    const jpgPath = path.join(folioRoot, "projects", "color-study", "images", "alpha.jpg");
-    const txtPath = path.join(folioRoot, "projects", "color-study", "images", "alpha.txt");
-    const thumbPath = path.join(folioRoot, ".folio", "thumbs", "alpha-small.svg");
+    const imagePath = path.join(
+      folioRoot,
+      "projects",
+      "color-study",
+      "images",
+      "alpha.png",
+    );
+    const webpPath = path.join(
+      folioRoot,
+      "projects",
+      "color-study",
+      "images",
+      "alpha.webp",
+    );
+    const gifPath = path.join(
+      folioRoot,
+      "projects",
+      "color-study",
+      "images",
+      "alpha.gif",
+    );
+    const jpgPath = path.join(
+      folioRoot,
+      "projects",
+      "color-study",
+      "images",
+      "alpha.jpg",
+    );
+    const txtPath = path.join(
+      folioRoot,
+      "projects",
+      "color-study",
+      "images",
+      "alpha.txt",
+    );
+    const thumbPath = path.join(
+      folioRoot,
+      ".folio",
+      "thumbs",
+      "alpha-small.svg",
+    );
     await fs.mkdir(path.dirname(imagePath), { recursive: true });
     await fs.mkdir(path.dirname(thumbPath), { recursive: true });
     await fs.writeFile(imagePath, "image bytes");
@@ -336,9 +404,9 @@ describe("FolioManager project Works", () => {
       expect.any(Function),
     );
 
-    const protocolHandler = electronMocks.protocolHandle.mock.calls.at(-1)?.[1] as (
-      request: { url: string },
-    ) => Promise<Response>;
+    const protocolHandler = electronMocks.protocolHandle.mock.calls.at(
+      -1,
+    )?.[1] as (request: { url: string }) => Promise<Response>;
     const response = await protocolHandler({
       url: "folio://file/projects%2Fcolor-study%2Fimages%2Falpha.png",
     });
@@ -367,7 +435,9 @@ describe("FolioManager project Works", () => {
     expect(webpResponse.headers.get("content-type")).toBe("image/webp");
     expect(gifResponse.headers.get("content-type")).toBe("image/gif");
     expect(jpgResponse.headers.get("content-type")).toBe("image/jpeg");
-    expect(txtResponse.headers.get("content-type")).toBe("application/octet-stream");
+    expect(txtResponse.headers.get("content-type")).toBe(
+      "application/octet-stream",
+    );
     expect(thumbResponse.headers.get("content-type")).toBe("image/svg+xml");
     expect(unsafeResponse.status).toBe(404);
   });
@@ -468,13 +538,25 @@ describe("FolioManager project Works", () => {
     });
     await expect(
       fs.readFile(
-        path.join(folioRoot, "projects", "color-study", "images", "paint-study.png"),
+        path.join(
+          folioRoot,
+          "projects",
+          "color-study",
+          "images",
+          "paint-study.png",
+        ),
         "utf-8",
       ),
     ).resolves.toBe("image bytes");
     await expect(
       fs.readFile(
-        path.join(folioRoot, "projects", "color-study", "documents", "process-note.md"),
+        path.join(
+          folioRoot,
+          "projects",
+          "color-study",
+          "documents",
+          "process-note.md",
+        ),
         "utf-8",
       ),
     ).resolves.toBe("# Process");
@@ -736,8 +818,12 @@ describe("FolioManager project Works", () => {
       expect(mainWindow.webContents.send).toHaveBeenCalledWith(
         "folio:files-added",
         expect.arrayContaining([
-          expect.objectContaining({ path: "projects/color-study/images/new-file.png" }),
-          expect.objectContaining({ path: "projects/color-study/documents/new-note.md" }),
+          expect.objectContaining({
+            path: "projects/color-study/images/new-file.png",
+          }),
+          expect.objectContaining({
+            path: "projects/color-study/documents/new-note.md",
+          }),
         ]),
       );
 
@@ -760,7 +846,9 @@ describe("FolioManager project Works", () => {
   it("persists direct metadata saves and strips legacy canvas references", async () => {
     const { dotFolio } = await makeTempFolioHome();
     const manager = new FolioManager();
-    await manager.saveFolioData(makeData({ items: [], canvases: [], projects: [] }));
+    await manager.saveFolioData(
+      makeData({ items: [], canvases: [], projects: [] }),
+    );
 
     await manager.saveItems([
       makeItem("alpha", {
@@ -847,5 +935,105 @@ describe("FolioManager project Works", () => {
         detail: "Access denied",
       }),
     );
+  });
+});
+
+describe("FolioManager storage location", () => {
+  beforeEach(() => {
+    electronMocks.relaunch.mockClear();
+    electronMocks.exit.mockClear();
+    electronMocks.showItemInFolder.mockClear();
+  });
+
+  it("reports storage settings for the active Documents location", async () => {
+    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "folio-storage-"));
+    electronMocks.homePath = tempHome;
+    await fs.mkdir(
+      path.join(tempHome, "Library", "Mobile Documents", "com~apple~CloudDocs"),
+      { recursive: true },
+    );
+
+    const manager = new FolioManager();
+    const settings = await manager.getStorageSettings();
+
+    expect(settings.location).toBe("documents");
+    expect(settings.iCloudAvailable).toBe(true);
+    expect(settings.documentsPath).toBe(
+      path.join(tempHome, "Documents", "Folio"),
+    );
+
+    await fs.rm(tempHome, { recursive: true, force: true });
+  });
+
+  it("targets the opposite location for backups", async () => {
+    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "folio-storage-"));
+    electronMocks.homePath = tempHome;
+
+    const manager = new FolioManager();
+    const status = await manager.getBackupStatus();
+
+    // A Documents source backs up to iCloud Drive.
+    expect(status.target).toBe("icloud");
+    expect(status.backupPath).toBe(
+      path.join(
+        tempHome,
+        "Library",
+        "Mobile Documents",
+        "com~apple~CloudDocs",
+        "Folio Backup",
+      ),
+    );
+
+    await fs.rm(tempHome, { recursive: true, force: true });
+  });
+
+  it("does nothing when switching to the current location", async () => {
+    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "folio-storage-"));
+    electronMocks.homePath = tempHome;
+
+    const manager = new FolioManager();
+    await manager.setStorageLocation("documents");
+
+    expect(electronMocks.relaunch).not.toHaveBeenCalled();
+    expect(electronMocks.exit).not.toHaveBeenCalled();
+
+    await fs.rm(tempHome, { recursive: true, force: true });
+  });
+
+  it("switches location, reveals the folder, and relaunches", async () => {
+    const tempHome = await fs.mkdtemp(path.join(os.tmpdir(), "folio-storage-"));
+    electronMocks.homePath = tempHome;
+    await fs.mkdir(
+      path.join(tempHome, "Library", "Mobile Documents", "com~apple~CloudDocs"),
+      { recursive: true },
+    );
+    const folioRoot = path.join(tempHome, "Documents", "Folio");
+    await fs.mkdir(path.join(folioRoot, ".folio"), { recursive: true });
+    await fs.writeFile(
+      path.join(folioRoot, ".folio", "folio.json"),
+      JSON.stringify({ version: SCHEMA_VERSION, items: [] }),
+    );
+
+    const manager = new FolioManager();
+    await manager.setStorageLocation("icloud");
+
+    const iCloudRoot = path.join(
+      tempHome,
+      "Library",
+      "Mobile Documents",
+      "com~apple~CloudDocs",
+      "Folio",
+    );
+    expect(
+      await fs
+        .access(path.join(iCloudRoot, ".folio", "folio.json"))
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
+    expect(electronMocks.showItemInFolder).toHaveBeenCalledWith(iCloudRoot);
+    expect(electronMocks.relaunch).toHaveBeenCalled();
+    expect(electronMocks.exit).toHaveBeenCalledWith(0);
+
+    await fs.rm(tempHome, { recursive: true, force: true });
   });
 });

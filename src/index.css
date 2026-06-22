@@ -223,6 +223,13 @@ button svg {
   letter-spacing: 0;
 }
 
+.projects-header-actions {
+  display: flex;
+  align-items: end;
+  gap: var(--space-10);
+  -webkit-app-region: no-drag;
+}
+
 .projects-create-form {
   display: flex;
   align-items: end;
@@ -251,6 +258,120 @@ button svg {
   border: 1px solid #cacaca;
   border-radius: var(--radius-sm);
   font: inherit;
+}
+
+.settings-menu {
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.settings-menu-trigger {
+  height: 34px;
+  min-width: 34px;
+  width: 34px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-mid);
+  cursor: pointer;
+}
+
+.settings-menu-trigger:hover {
+  color: var(--color-ink);
+  border-color: #cacaca;
+}
+
+.settings-menu-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: var(--space-8);
+  width: 280px;
+  padding: 14px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+}
+
+.settings-menu-section-title {
+  color: var(--color-text-muted);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.settings-menu-status {
+  margin: 0;
+  color: var(--color-text-mid);
+  font-size: var(--text-base);
+}
+
+.settings-menu-action {
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.settings-menu-action:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.settings-menu-hint {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.settings-menu-divider {
+  height: 1px;
+  margin: 2px 0;
+  background: var(--color-border);
+}
+
+.settings-menu-location-options {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-menu-location-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-mid);
+  cursor: pointer;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  text-align: left;
+}
+
+.settings-menu-location-option.is-current {
+  color: var(--color-ink);
+  border-color: var(--color-text-mid);
+  background: var(--color-surface-sunken);
+}
+
+.settings-menu-location-option:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.settings-menu-location-note {
+  margin-left: auto;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-normal);
+  text-transform: uppercase;
 }
 
 .projects-grid {
@@ -1159,7 +1280,8 @@ button svg {
   backdrop-filter: blur(12px);
   color: #404040;
   font-size: var(--text-md);
-  animation: selection-drop-in var(--transition-medium) var(--ease-pop) backwards;
+  animation: selection-drop-in var(--transition-medium) var(--ease-pop)
+    backwards;
   transform: translateX(-50%);
   -webkit-app-region: no-drag;
 }
@@ -4263,7 +4385,8 @@ button svg {
   width: 520px;
   min-height: 180px;
   padding: 0;
-  border: 2px solid color-mix(in srgb, var(--section-color) 58%, var(--color-surface));
+  border: 2px solid
+    color-mix(in srgb, var(--section-color) 58%, var(--color-surface));
   background: color-mix(in srgb, var(--section-color) 8%, transparent);
   box-shadow: none;
 }
@@ -4275,8 +4398,13 @@ button svg {
   gap: var(--space-6);
   min-height: 36px;
   padding: 5px 7px;
-  border-bottom: 1px solid color-mix(in srgb, var(--section-color) 38%, var(--color-surface));
-  background: color-mix(in srgb, var(--section-color) 14%, var(--color-surface));
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--section-color) 38%, var(--color-surface));
+  background: color-mix(
+    in srgb,
+    var(--section-color) 14%,
+    var(--color-surface)
+  );
 }
 
 .canvas-section-header input {

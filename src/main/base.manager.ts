@@ -9,6 +9,8 @@ import { nanoid } from "nanoid";
 import { computeHash, sanitizeFileBaseName } from "../helpers";
 import { SCHEMA_VERSION } from "../constants";
 import {
+  BackupResult,
+  BackupStatus,
   Canvas,
   FolioData,
   FolioItem,
@@ -17,11 +19,22 @@ import {
   ProjectStatus,
   ReconciliationFile,
   ReconciliationResult,
+  RestoreResult,
+  StorageLocation,
+  StorageSettings,
   Tag,
   ThumbnailUrls,
 } from "../types";
 import { ArchiveManager } from "./archive.manager";
+import { BackupManager } from "./backup.manager";
 import { fetchLinkMetadata } from "./linkMetadata";
+import { SettingsStore } from "./settings.store";
+import { StorageLocationManager } from "./storageLocation.manager";
+import {
+  getBackupDirForLocation,
+  getStorageRootForLocation,
+  STORAGE_SETTINGS_FILE_NAME,
+} from "./storageLocation.helpers";
 import { FolioStorage } from "./storage.manager";
 import {
   extractCommandErrorMessage,
@@ -56,6 +69,13 @@ interface CreateProjectInput {
   status?: ProjectStatus;
 }
 
+/** Construction overrides for {@link FolioManager}; falls back to Electron's app paths when omitted. */
+export interface FolioManagerOptions {
+  homeDir?: string;
+  userDataDir?: string;
+  storageLocation?: StorageLocation;
+}
+
 /**
  * The core engine of the main process.
  * Manages in-memory data, file operations, reconciliation, watcher events, and IPC.
@@ -76,6 +96,11 @@ export interface FolioManagerInterface {
     workItemIds: string[],
   ): Promise<FolioData>;
   deleteItems(itemIds: string[]): Promise<FolioData>;
+  getBackupStatus(): Promise<BackupStatus>;
+  backupToICloud(): Promise<BackupResult>;
+  restoreFromICloud(): Promise<RestoreResult>;
+  getStorageSettings(): Promise<StorageSettings>;
+  setStorageLocation(location: StorageLocation): Promise<void>;
   startWatcher(mainWindow: BrowserWindow): void;
 }
 
@@ -102,12 +127,23 @@ export class FolioManager implements FolioManagerInterface {
   private readonly tagsPath: string;
   private readonly canvasesPath: string;
   private readonly projectsPath: string;
+  private readonly homeDir: string;
+  private readonly storageLocation: StorageLocation;
 
   private archiveManager: ArchiveManager;
   private storageManager = FolioStorage.getInstance();
+  private backupManager: BackupManager;
+  private storageLocationManager: StorageLocationManager;
 
-  constructor() {
-    this.folioRoot = path.join(app.getPath("home"), "Documents", "Folio");
+  constructor(options: FolioManagerOptions = {}) {
+    this.homeDir = options.homeDir ?? app.getPath("home");
+    this.storageLocation = options.storageLocation ?? "documents";
+    const userDataDir = options.userDataDir ?? app.getPath("userData");
+
+    this.folioRoot = getStorageRootForLocation(
+      this.storageLocation,
+      this.homeDir,
+    );
     this.dotFolio = path.join(this.folioRoot, ".folio");
     this.dbPath = path.join(this.dotFolio, "folio.json");
     this.tagsPath = path.join(this.dotFolio, "tags.json");
@@ -115,6 +151,31 @@ export class FolioManager implements FolioManagerInterface {
     this.projectsPath = path.join(this.dotFolio, "projects.json");
 
     this.archiveManager = new ArchiveManager(this.folioRoot, this.dbPath);
+
+    const backupDir = getBackupDirForLocation(
+      this.storageLocation,
+      this.homeDir,
+    );
+    const backupTarget: StorageLocation =
+      this.storageLocation === "documents" ? "icloud" : "documents";
+    const backupUnavailableMessage =
+      backupTarget === "icloud"
+        ? "iCloud Drive isn't available on this Mac. Turn on iCloud Drive in System Settings and try again."
+        : "The backup location in Documents isn't available right now.";
+    this.backupManager = new BackupManager(
+      this.folioRoot,
+      backupDir,
+      this.homeDir,
+      backupUnavailableMessage,
+    );
+
+    const settingsStore = new SettingsStore(
+      path.join(userDataDir, STORAGE_SETTINGS_FILE_NAME),
+    );
+    this.storageLocationManager = new StorageLocationManager(
+      this.homeDir,
+      settingsStore,
+    );
   }
 
   registerHandlers() {
@@ -166,6 +227,18 @@ export class FolioManager implements FolioManagerInterface {
     );
     ipcMain.handle("folio:fetch-link-metadata", (_: unknown, url: string) =>
       fetchLinkMetadata(url),
+    );
+
+    ipcMain.handle("folio:get-backup-status", () => this.getBackupStatus());
+    ipcMain.handle("folio:backup-to-icloud", () => this.backupToICloud());
+    ipcMain.handle("folio:restore-from-icloud", () => this.restoreFromICloud());
+    ipcMain.handle("folio:get-storage-settings", () =>
+      this.getStorageSettings(),
+    );
+    ipcMain.handle(
+      "folio:set-storage-location",
+      (_: unknown, location: StorageLocation) =>
+        this.setStorageLocation(location),
     );
 
     // Compatibility with the earlier prototype bridge.
@@ -792,6 +865,48 @@ export class FolioManager implements FolioManagerInterface {
     }
 
     shell.showItemInFolder(absolutePath);
+  }
+
+  async getBackupStatus(): Promise<BackupStatus> {
+    const status = await this.backupManager.getStatus();
+    return {
+      ...status,
+      target: this.storageLocation === "documents" ? "icloud" : "documents",
+    };
+  }
+
+  backupToICloud(): Promise<BackupResult> {
+    return this.backupManager.backup();
+  }
+
+  async restoreFromICloud(): Promise<RestoreResult> {
+    const result = await this.backupManager.restore();
+    shell.showItemInFolder(result.restoredPath);
+    return result;
+  }
+
+  getStorageSettings(): Promise<StorageSettings> {
+    return this.storageLocationManager.getSettings(this.storageLocation);
+  }
+
+  /**
+   * Moves the source of truth to {@link location} and relaunches so every manager re-resolves against
+   * the new root. The previous folder is left in place as a safety copy.
+   */
+  async setStorageLocation(location: StorageLocation): Promise<void> {
+    if (location === this.storageLocation) return;
+
+    await this.storageLocationManager.switchTo(
+      this.folioRoot,
+      this.storageLocation,
+      location,
+    );
+
+    // Surface the destination in Finder before the relaunch so the move is visible to the user.
+    shell.showItemInFolder(getStorageRootForLocation(location, this.homeDir));
+
+    app.relaunch();
+    app.exit(0);
   }
 
   private scheduleWatcherFlush(mainWindow: BrowserWindow) {

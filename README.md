@@ -68,6 +68,12 @@ The app manages a folder at `~/Documents/Folio`:
 
 Each project owns its own `images/`, `documents/`, `works/`, `boards/`, and `reviews/` folders. `.folio/` stores app metadata and a regenerable thumbnail cache. Legacy `items/` and root-level media folders are migrated into the owning project at launch when Folio can match them to metadata.
 
+## Storage Location And Backups
+
+By default Folio lives in `~/Documents/Folio`. From the settings menu (gear icon in the Projects header) you can switch the source of truth to iCloud Drive, where Folio lives in `iCloud Drive/Folio`. Switching copies your current folder to the new location, leaves the original in place as a safety copy, and relaunches the app. The chosen location is remembered in `folio-settings.json` in Electron's user-data directory.
+
+Backups are written to the opposite location from your live folder: a Documents source backs up to `iCloud Drive/Folio Backup`, and an iCloud source backs up to `~/Documents/Folio Backup`. A backup is a single overwriting copy (the regenerable thumbnail cache is skipped). Restoring copies the latest backup into a new timestamped folder in `~/Documents` and reveals it in Finder, leaving your current data untouched.
+
 ## Project Organization
 
 ```text

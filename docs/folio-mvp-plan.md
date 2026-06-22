@@ -663,7 +663,7 @@ These ideas should not block the project workspace and reference graph MVP, but 
 - [ ] Keep single-user local-first as the default product shape.
 - [ ] Design cloud sync only after conflict rules are specified for JSON metadata, moved files, and duplicate imports.
 - [ ] Consider Git-like metadata history for `.folio` changes before adding multi-device sync.
-- [ ] Add explicit backup/export workflow before any networked sync.
+- [x] Add explicit backup/export workflow before any networked sync. (Backup to the opposite location plus non-destructive restore, with a configurable Documents/iCloud Drive source of truth.)
 - [ ] Keep readable file layout as a non-negotiable constraint.
 
 ### 7.3 Collaboration and sharing

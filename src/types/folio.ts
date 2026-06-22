@@ -92,3 +92,42 @@ export interface ReconciliationResult {
 }
 
 export type ThumbnailUrls = Record<string, string>;
+
+/** Where the live Folio folder (the source of truth) is stored. */
+export type StorageLocation = "documents" | "icloud";
+
+/** Current storage-location configuration surfaced to the renderer. */
+export interface StorageSettings {
+  /** The active source of truth. */
+  location: StorageLocation;
+  /** True when an iCloud Drive folder is present on this Mac. */
+  iCloudAvailable: boolean;
+  /** Absolute path of the Folio folder when stored in Documents. */
+  documentsPath: string;
+  /** Absolute path of the Folio folder when stored in iCloud Drive. */
+  iCloudPath: string;
+}
+
+/** Snapshot of the iCloud Drive backup state surfaced to the renderer. */
+export interface BackupStatus {
+  /** True when the backup target folder can be written to right now. */
+  available: boolean;
+  /** Where backups are written, expressed as a storage location. */
+  target: StorageLocation;
+  /** Absolute path of the backup folder, regardless of whether it exists yet. */
+  backupPath: string;
+  /** ISO timestamp of the most recent backup, or null when no backup exists. */
+  lastBackupAt: string | null;
+}
+
+/** Result of writing a backup. */
+export interface BackupResult {
+  backupPath: string;
+  createdAt: string;
+}
+
+/** Result of restoring a backup into a fresh local folder. */
+export interface RestoreResult {
+  restoredPath: string;
+  restoredAt: string;
+}

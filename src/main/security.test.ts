@@ -11,14 +11,26 @@ describe("renderer content security policy", () => {
     ).not.toContain("unsafe-eval");
   });
 
-  it("allows the Vite dev websocket without broad script permissions", () => {
+  it("allows the Vite dev websocket and inline dev scripts", () => {
     const policy = buildRendererContentSecurityPolicy("http://localhost:5173");
 
-    expect(policy).toContain("script-src 'self' http://localhost:5173");
+    expect(policy).toContain(
+      "script-src 'self' http://localhost:5173 'unsafe-inline'",
+    );
     expect(policy).toContain(
       "connect-src 'self' folio: http://localhost:5173 ws://localhost:5173",
     );
     expect(policy).toContain("object-src 'none'");
+  });
+
+  it("keeps production script-src strict without inline scripts", () => {
+    const policy = buildRendererContentSecurityPolicy();
+    const scriptDirective = policy
+      .split(";")
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith("script-src"));
+
+    expect(scriptDirective).toBe("script-src 'self'");
   });
 
   it("sets a CSP header without preserving an insecure existing one", () => {
@@ -36,7 +48,9 @@ describe("renderer content security policy", () => {
       details: {
         responseHeaders: Record<string, string[]>;
       },
-      callback: (result: { responseHeaders?: Record<string, string[] | string> }) => void,
+      callback: (result: {
+        responseHeaders?: Record<string, string[] | string>;
+      }) => void,
     ) => void;
     const callback = vi.fn();
 
@@ -51,9 +65,7 @@ describe("renderer content security policy", () => {
 
     expect(callback).toHaveBeenCalledWith({
       responseHeaders: expect.objectContaining({
-        "Content-Security-Policy": [
-          expect.not.stringContaining("unsafe-eval"),
-        ],
+        "Content-Security-Policy": [expect.not.stringContaining("unsafe-eval")],
       }),
     });
     expect(

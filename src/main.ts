@@ -4,6 +4,11 @@ import started from "electron-squirrel-startup";
 import { initialize } from "./main/initialize";
 import { FolioManager } from "./main/base.manager";
 import { installRendererContentSecurityPolicy } from "./main/security";
+import { SettingsStore } from "./main/settings.store";
+import {
+  getStorageRootForLocation,
+  STORAGE_SETTINGS_FILE_NAME,
+} from "./main/storageLocation.helpers";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -51,15 +56,26 @@ const createWindow = () => {
   return mainWindow;
 };
 
-const manager = new FolioManager();
+let manager: FolioManager;
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on("ready", async () => {
   try {
+    // Resolve where the Folio source of truth lives before touching the filesystem.
+    const homeDir = app.getPath("home");
+    const userDataDir = app.getPath("userData");
+    const settingsStore = new SettingsStore(
+      path.join(userDataDir, STORAGE_SETTINGS_FILE_NAME),
+    );
+    const storageLocation = await settingsStore.readLocation();
+    const folioRoot = getStorageRootForLocation(storageLocation, homeDir);
+
     // Ensure folder structure and database are ready before creating the window
-    await initialize(app);
+    await initialize(app, folioRoot);
+
+    manager = new FolioManager({ homeDir, userDataDir, storageLocation });
 
     // Register window.folio IPC handlers
     manager.registerHandlers();

@@ -1366,6 +1366,7 @@ export function AppShell() {
           setThumbUrls={setThumbUrls}
           onCreateProject={createProjectFromHome}
           onOpenProject={openProject}
+          onToast={setToast}
         />
       )}
 

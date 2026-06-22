@@ -57,6 +57,8 @@ Important product constraints remain:
 
 The main process owns all disk access. `src/main/base.manager.ts` registers IPC handlers, manages app launch preparation, watches Folio folders, handles import dialogs, and coordinates saves. `src/main/archive.manager.ts` handles lower-level media operations: copying files, computing hashes, deduplicating imports, and generating thumbnails. `src/main/storage.manager.ts` owns split JSON reads and atomic writes.
 
+The Folio root is resolved at launch from a saved storage location (`documents` or `icloud`). `src/main/settings.store.ts` persists the choice in `folio-settings.json` in Electron's user-data directory, outside the Folio folder, since the Folio folder's own location is what is being configured. `src/main/storageLocation.manager.ts` switches the source of truth between `~/Documents/Folio` and `iCloud Drive/Folio`: it copies the live folder into a fresh destination (or adopts an existing one), leaves the original in place as a safety copy, and saves the new choice; `base.manager.ts` then relaunches so every manager re-resolves against the new root. `src/main/backup.manager.ts` mirrors the live folder into a single overwriting backup at the opposite location and restores backups into a new timestamped folder under `~/Documents`. Pure path and timestamp helpers live in `src/main/storageLocation.helpers.ts` and `src/main/backup.helpers.ts`.
+
 The main process also registers the `folio://` protocol:
 
 - `folio://thumb/<filename>` serves files from `.folio/thumbs/`.
@@ -81,6 +83,11 @@ window.folio.getReconciliationResult();
 window.folio.openInFinder(filePath);
 window.folio.getPathForFile(file);
 window.folio.onFilesAdded(callback);
+window.folio.getStorageSettings();
+window.folio.setStorageLocation(location);
+window.folio.getBackupStatus();
+window.folio.backupToICloud();
+window.folio.restoreFromICloud();
 ```
 
 The renderer cannot import `fs`, call Electron APIs directly, or walk arbitrary files. Anything that touches disk must go through this bridge.
@@ -215,13 +222,7 @@ Project semantics:
 Proposed item additions:
 
 ```ts
-type ItemStage =
-  | "sketch"
-  | "wip"
-  | "process"
-  | "final"
-  | "note"
-  | "other";
+type ItemStage = "sketch" | "wip" | "process" | "final" | "note" | "other";
 
 interface FolioItem {
   // existing fields...
@@ -507,7 +508,6 @@ interface CanvasNote {
   createdAt?: string;
   updatedAt?: string;
 }
-
 ```
 
 The project timeline does not duplicate source data. It sorts and groups existing records into a presentation model, then routes edits back to the owning project, item, note, edge, or canvas.

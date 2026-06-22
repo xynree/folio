@@ -1,10 +1,15 @@
 import type {
+  BackupResult,
+  BackupStatus,
   FolioData,
   FolioItem,
   ImportSource,
   LinkMetadata,
   ProjectStatus,
   ReconciliationResult,
+  RestoreResult,
+  StorageLocation,
+  StorageSettings,
   ThumbnailUrls,
 } from "./index";
 
@@ -38,6 +43,11 @@ export interface FolioApi {
   getReconciliationResult: () => Promise<ReconciliationResult>;
   openInFinder: (filePath: string) => Promise<void>;
   fetchLinkMetadata: (url: string) => Promise<LinkMetadata>;
+  getBackupStatus: () => Promise<BackupStatus>;
+  backupToICloud: () => Promise<BackupResult>;
+  restoreFromICloud: () => Promise<RestoreResult>;
+  getStorageSettings: () => Promise<StorageSettings>;
+  setStorageLocation: (location: StorageLocation) => Promise<void>;
   getPathForFile: (file: File) => string;
   /** Subscribe to files-added events pushed from the main process. Returns an unsubscribe function. */
   onFilesAdded: (callback: (items: FolioItem[]) => void) => () => void;

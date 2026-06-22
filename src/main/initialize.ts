@@ -6,9 +6,12 @@ import { FolioItem, Tag, Canvas, Project } from "../types";
 /**
  * Initializes the local filesystem structure and standard schema.
  * This runs on every boot to ensure the environment is correct.
+ *
+ * @param folioRoot Absolute path of the active Folio folder (Documents or iCloud Drive).
  */
-export async function initialize(app: Electron.App) {
-  const FOLIO_ROOT = path.join(app.getPath("home"), "Documents", "Folio");
+export async function initialize(app: Electron.App, folioRoot?: string) {
+  const FOLIO_ROOT =
+    folioRoot ?? path.join(app.getPath("home"), "Documents", "Folio");
   const DOT_FOLIO = path.join(FOLIO_ROOT, ".folio");
 
   // 1. Create the base Folio folder and all required subdirectories.

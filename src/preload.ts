@@ -1,11 +1,16 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
+  BackupResult,
+  BackupStatus,
   FolioData,
   FolioItem,
   ImportSource,
   LinkMetadata,
   ProjectStatus,
   ReconciliationResult,
+  RestoreResult,
+  StorageLocation,
+  StorageSettings,
   ThumbnailUrls,
 } from "./types";
 
@@ -69,6 +74,21 @@ const folioApi = {
 
   fetchLinkMetadata: (url: string): Promise<LinkMetadata> =>
     ipcRenderer.invoke("folio:fetch-link-metadata", url),
+
+  getBackupStatus: (): Promise<BackupStatus> =>
+    ipcRenderer.invoke("folio:get-backup-status"),
+
+  backupToICloud: (): Promise<BackupResult> =>
+    ipcRenderer.invoke("folio:backup-to-icloud"),
+
+  restoreFromICloud: (): Promise<RestoreResult> =>
+    ipcRenderer.invoke("folio:restore-from-icloud"),
+
+  getStorageSettings: (): Promise<StorageSettings> =>
+    ipcRenderer.invoke("folio:get-storage-settings"),
+
+  setStorageLocation: (location: StorageLocation): Promise<void> =>
+    ipcRenderer.invoke("folio:set-storage-location", location),
 
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
 

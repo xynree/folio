@@ -19,7 +19,11 @@ function devServerSources(devServerUrl?: string) {
     const websocketProtocol = url.protocol === "https:" ? "wss:" : "ws:";
     return {
       connect: [url.origin, `${websocketProtocol}//${url.host}`],
-      script: [url.origin],
+      // Vite's dev client injects small inline scripts (HMR runtime and error
+      // overlay), so inline scripts must be permitted while the dev server is in
+      // use. This is dev-only: production builds resolve no dev server URL and
+      // keep the strict script-src below.
+      script: [url.origin, "'unsafe-inline'"],
     };
   } catch {
     return {
@@ -50,7 +54,11 @@ export function buildRendererContentSecurityPolicy(devServerUrl?: string) {
     .join("; ");
 }
 
-function withHeader(headers: HeaderMap | undefined, name: string, value: string) {
+function withHeader(
+  headers: HeaderMap | undefined,
+  name: string,
+  value: string,
+) {
   const nextHeaders: HeaderMap = { ...(headers ?? {}) };
   Object.keys(nextHeaders).forEach((key) => {
     if (key.toLowerCase() === name.toLowerCase()) {

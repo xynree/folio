@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import type { FolioData, FolioItem, Project, ThumbnailUrls } from "../../types";
 import { parseTimestamp } from "../folio/dates";
 import { formatCount } from "../folio/model";
+import { SettingsMenu } from "../layout/SettingsMenu";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
 
@@ -35,6 +36,7 @@ export function ProjectsView({
   setThumbUrls,
   onCreateProject,
   onOpenProject,
+  onToast,
 }: {
   data: FolioData;
   busy: boolean;
@@ -42,6 +44,7 @@ export function ProjectsView({
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   onCreateProject: (title: string) => Promise<void>;
   onOpenProject: (projectId: string) => void;
+  onToast: (message: string) => void;
 }) {
   const [titleDraft, setTitleDraft] = useState("");
   const projects = useMemo(
@@ -70,24 +73,27 @@ export function ProjectsView({
           <p>Projects</p>
           <h1>Studio workspace</h1>
         </div>
-        <form className="projects-create-form" onSubmit={createProject}>
-          <label>
-            <span>Project name</span>
-            <input
-              value={titleDraft}
-              placeholder="New project"
-              onChange={(event) => setTitleDraft(event.currentTarget.value)}
-            />
-          </label>
-          <button
-            className="primary-action"
-            type="submit"
-            disabled={busy || !titleDraft.trim()}
-          >
-            <ButtonIcon icon={Plus} />
-            Create
-          </button>
-        </form>
+        <div className="projects-header-actions">
+          <form className="projects-create-form" onSubmit={createProject}>
+            <label>
+              <span>Project name</span>
+              <input
+                value={titleDraft}
+                placeholder="New project"
+                onChange={(event) => setTitleDraft(event.currentTarget.value)}
+              />
+            </label>
+            <button
+              className="primary-action"
+              type="submit"
+              disabled={busy || !titleDraft.trim()}
+            >
+              <ButtonIcon icon={Plus} />
+              Create
+            </button>
+          </form>
+          <SettingsMenu onToast={onToast} />
+        </div>
       </section>
 
       {projects.length ? (

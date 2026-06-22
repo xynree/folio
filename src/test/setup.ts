@@ -81,6 +81,30 @@ const folioMock: FolioApi = {
   getReconciliationResult: vi.fn(),
   openInFinder: vi.fn(),
   fetchLinkMetadata: vi.fn(async (url: string) => ({ url })),
+  getBackupStatus: vi.fn(async () => ({
+    available: true,
+    target: "icloud" as const,
+    backupPath:
+      "/Users/test/Library/Mobile Documents/com~apple~CloudDocs/Folio Backup",
+    lastBackupAt: null,
+  })),
+  backupToICloud: vi.fn(async () => ({
+    backupPath:
+      "/Users/test/Library/Mobile Documents/com~apple~CloudDocs/Folio Backup",
+    createdAt: new Date().toISOString(),
+  })),
+  restoreFromICloud: vi.fn(async () => ({
+    restoredPath: "/Users/test/Documents/Folio Restored 2026-06-20 14-30-00",
+    restoredAt: new Date().toISOString(),
+  })),
+  getStorageSettings: vi.fn(async () => ({
+    location: "documents" as const,
+    iCloudAvailable: true,
+    documentsPath: "/Users/test/Documents/Folio",
+    iCloudPath:
+      "/Users/test/Library/Mobile Documents/com~apple~CloudDocs/Folio",
+  })),
+  setStorageLocation: vi.fn(async () => undefined),
   getPathForFile: vi.fn(),
   onFilesAdded: vi.fn(),
 };
