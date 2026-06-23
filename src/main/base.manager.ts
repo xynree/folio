@@ -44,6 +44,7 @@ import {
 } from "./path.helpers";
 import {
   removeLegacyCanvasReferences,
+  repairBrokenLinks,
   repairLegacyOutputStages,
   stripLegacyCanvasReferences,
 } from "./schema.helpers";
@@ -375,6 +376,24 @@ export class FolioManager implements FolioManagerInterface {
     if (migratedProjects || removedLegacyCanvasReferences) {
       this.db.setCanvases(this.canvases);
       if (migratedProjects) this.db.setProjects(this.projects);
+    }
+
+    const brokenLinks = repairBrokenLinks({
+      items: this.archiveManager.getItems(),
+      projects: this.projects,
+      canvases: this.canvases,
+    });
+    if (brokenLinks.changed) {
+      this.archiveManager.setItems(brokenLinks.items);
+      this.projects = brokenLinks.projects;
+      this.canvases = brokenLinks.canvases;
+      await this.archiveManager.save(SCHEMA_VERSION);
+      this.db.setFolioData({
+        items: brokenLinks.items,
+        tags: this.tags,
+        canvases: brokenLinks.canvases,
+        projects: brokenLinks.projects,
+      });
     }
 
     return {

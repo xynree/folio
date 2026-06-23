@@ -29,10 +29,11 @@ Folio is a local-first Electron app for collecting visual work, organizing it in
 
 Folio uses the standard Electron split:
 
-- `src/main.ts` starts Electron, creates the BrowserWindow, registers custom protocols, and delegates archive work to main-process managers.
+- `src/main.ts` starts Electron, creates the BrowserWindow, registers custom protocols, and delegates work to main-process managers.
 - `src/main/base.manager.ts` owns the main IPC surface, launch reconciliation, file watcher, Photos import picker flow, and high-level data saves.
 - `src/main/archive.manager.ts` handles file imports, hashes, thumbnails, and archive path helpers.
-- `src/main/storage.manager.ts` performs the split JSON reads and atomic writes.
+- `src/main/database/` is the SQLite layer. `FolioDB` opens `.folio/folio.db` with `better-sqlite3`, applies the schema from `schema.sql`, and exposes synchronous `get*`, `upsert*`, and `set*` methods for every entity. `converters.ts` translates between flat SQLite row shapes and the TypeScript domain types used by the rest of the app.
+- `src/main/storage.manager.ts` provides atomic file-copy helpers used by the backup and export paths (not live app data, which lives in SQLite).
 - `src/preload.ts` exposes a typed `window.folio` API with `contextIsolation` enabled and `nodeIntegration` disabled.
 - `src/components/` contains the React renderer UI.
 - `src/types/` contains the shared data contracts used by both main and renderer code.
@@ -58,15 +59,12 @@ The app manages a folder at `~/Documents/Folio`:
       boards/
         <board-id>/
   .folio/
-    folio.json
-    tags.json
-    canvases.json
-    projects.json
+    folio.db          ← SQLite database (items, tags, projects, canvases)
     thumbs/
       <item-id>-small.jpg
 ```
 
-Each project owns its own `images/`, `documents/`, `works/`, `boards/`, and `reviews/` folders. `.folio/` stores app metadata and a regenerable thumbnail cache. Legacy `items/` and root-level media folders are migrated into the owning project at launch when Folio can match them to metadata.
+Each project owns its own `images/`, `documents/`, `works/`, `boards/`, and `reviews/` folders. `.folio/folio.db` stores all app metadata as a single SQLite file, replacing the previous split JSON files. The thumbnail cache is fully regenerable. Legacy `items/` and root-level media folders are migrated into the owning project at launch when Folio can match them to metadata.
 
 ## Storage Location And Backups
 

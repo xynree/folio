@@ -55,7 +55,48 @@ Important product constraints remain:
 
 ### Main Process
 
-The main process owns all disk access. `src/main/base.manager.ts` registers IPC handlers, manages app launch preparation, watches Folio folders, handles import dialogs, and coordinates saves. `src/main/archive.manager.ts` handles lower-level media operations: copying files, computing hashes, deduplicating imports, and generating thumbnails. `src/main/storage.manager.ts` owns split JSON reads and atomic writes.
+The main process owns all disk access. `src/main/base.manager.ts` registers IPC handlers, manages app launch preparation, watches Folio folders, handles import dialogs, and coordinates saves. `src/main/archive.manager.ts` handles lower-level media operations: copying files, computing hashes, deduplicating imports, and generating thumbnails. `src/main/storage.manager.ts` provides atomic file-copy helpers used by the backup and export paths; live app data now lives in SQLite rather than the split JSON files this module previously managed.
+
+### Database
+
+App metadata is stored in a single SQLite file at `.folio/folio.db`, accessed exclusively by the main process through `FolioDB` (`src/main/database/index.ts`). It uses `better-sqlite3`, which is synchronous — safe on Electron's main thread and avoids async complexity.
+
+On first open, `FolioDB` applies `schema.sql` via `db.exec()`. All DDL uses `CREATE TABLE IF NOT EXISTS` so re-running against an existing database is a no-op. Two pragmas are set at open time: `journal_mode = WAL` (safe for concurrent reads) and `foreign_keys = ON`.
+
+The schema has five tables:
+
+| Table | Stores |
+|---|---|
+| `meta` | Schema version and app-level key/value pairs |
+| `items` | Archive items and project media (`FolioItem`) |
+| `tags` | User-defined labels (`Tag`) |
+| `projects` | Projects (`Project`) |
+| `canvases` | Canvas boards and all spatial data (`Canvas`) |
+
+Arrays and nested objects (`tagIds`, `itemIds`, `positions`, `notes`, `edges`, etc.) are stored as JSON strings. `converters.ts` serializes them to strings on write and parses them back on read, so the rest of the app always works with plain TypeScript objects.
+
+`FolioDB` exposes two write patterns per entity:
+
+- `upsert*` — inserts or updates a single record; used for reactive single-item edits.
+- `set*` — upserts all records and deletes any that are no longer present, in a single transaction; used for full-data saves from the renderer.
+
+**IPC data flow:**
+
+```
+Renderer → window.folio.getFolioData()
+  → preload: ipcRenderer.invoke("folio:get-folio-data")
+  → FolioManager IPC handler
+  → FolioDB.getItems() / getTags() / getProjects() / getCanvases()
+  → SELECT * FROM … (synchronous)
+  → converters parse JSON columns into typed domain objects
+  → FolioData returned to renderer
+
+Renderer → window.folio.saveFolioData(data)
+  → FolioManager IPC handler
+  → FolioDB.setItems() / setTags() / setProjects() / setCanvases()
+  → UPSERT all + DELETE removed, each in a transaction
+  → converters serialize domain objects back to JSON strings
+```
 
 The Folio root is resolved at launch from a saved storage location (`documents` or `icloud`). `src/main/settings.store.ts` persists the choice in `folio-settings.json` in Electron's user-data directory, outside the Folio folder, since the Folio folder's own location is what is being configured. `src/main/storageLocation.manager.ts` switches the source of truth between `~/Documents/Folio` and `iCloud Drive/Folio`: it copies the live folder into a fresh destination (or adopts an existing one), leaves the original in place as a safety copy, and saves the new choice; `base.manager.ts` then relaunches so every manager re-resolves against the new root. `src/main/backup.manager.ts` mirrors the live folder into a single overwriting backup at the opposite location and restores backups into a new timestamped folder under `~/Documents`. Pure path and timestamp helpers live in `src/main/storageLocation.helpers.ts` and `src/main/backup.helpers.ts`.
 
@@ -113,14 +154,11 @@ Folio creates and manages `~/Documents/Folio`. Project folders are the canonical
       boards/
         <board-id>/
   .folio/
-    projects.json
-    folio.json
-    tags.json
-    canvases.json
+    folio.db          ← SQLite database (items, tags, projects, canvases)
     thumbs/
 ```
 
-The visible folders are normal user files. `.folio/` is the app's bookkeeping directory. The thumbnail cache is fully regenerable. Project `images/` contains all images imported into the project, including images dropped directly onto boards. Project `works/` is the user-accessible representation of images promoted into Works; implementation may use copies, links, or generated exports, but canonical work membership remains in metadata so it can be reconciled. Legacy `items/`, root-level `images/`, and root-level `works/` folders are migration sources only.
+The visible folders are normal user files. `.folio/` is the app's bookkeeping directory. `folio.db` is the single source of truth for all app metadata; it replaces the previous split JSON files (`folio.json`, `tags.json`, `canvases.json`, `projects.json`). The thumbnail cache is fully regenerable. Project `images/` contains all images imported into the project, including images dropped directly onto boards. Project `works/` is the user-accessible representation of images promoted into Works; canonical work membership is stored in `folio.db` so it can be reconciled. Legacy `items/`, root-level `images/`, and root-level `works/` folders are migration sources only.
 
 ## Data Model
 
