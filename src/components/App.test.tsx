@@ -439,10 +439,10 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     ).toBe(projectActionSidebar);
     expect(
       screen
-        .getAllByText("Studio Archive")
+        .getAllByDisplayValue("Studio Archive")
         .some(
           (element) =>
-            element.closest(".project-action-sidebar") === projectActionSidebar,
+            element.closest(".project-topbar") !== null,
         ),
     ).toBe(true);
     expect(

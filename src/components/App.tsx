@@ -14,6 +14,7 @@ import {
   FolderOpen,
   Grid3X3,
   Images,
+  Info,
   NotebookPen,
   PanelsTopLeft,
   Rows3,
@@ -771,6 +772,20 @@ export function AppShell() {
     );
   }, [importFilePaths, reconciliation]);
 
+  const patchProject = useCallback(
+    (projectId: string, patch: { title?: string; description?: string }) => {
+      commitData((current) => ({
+        ...current,
+        projects: current.projects.map((project) =>
+          project.id === projectId
+            ? { ...project, ...patch, updatedAt: new Date().toISOString() }
+            : project,
+        ),
+      }));
+    },
+    [commitData],
+  );
+
   const { patchItem, addTagToItem, addTagToSelection, removeTagFromItem } =
     useItemTags({
       commitData,
@@ -1019,6 +1034,42 @@ export function AppShell() {
       <main className="app-main">
         <div className="workspace-panel-mode-bar" aria-hidden="true" />
         <div className="project-workspace-shell">
+          <div className="project-topbar">
+            <div className="project-topbar-center">
+              <input
+                className="project-topbar-title-input"
+                aria-label="Project name"
+                value={activeProject.title}
+                size={Math.max(4, activeProject.title.length)}
+                onChange={(event) =>
+                  patchProject(activeProject.id, { title: event.target.value })
+                }
+              />
+              <div className="project-topbar-info">
+                <button
+                  className="project-topbar-info-button"
+                  type="button"
+                  aria-label="Project description"
+                  tabIndex={-1}
+                >
+                  <ButtonIcon icon={Info} size={12} />
+                </button>
+                <div className="project-topbar-tooltip">
+                  <textarea
+                    className="project-topbar-description-input"
+                    aria-label="Project description"
+                    placeholder="No description yet. Click to add one…"
+                    rows={3}
+                    value={activeProject.description ?? ""}
+                    onChange={(event) =>
+                      patchProject(activeProject.id, { description: event.target.value })
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <aside className="project-action-sidebar" aria-label="Project action bar">
             <div className="project-action-sidebar-header">
               <button
@@ -1029,7 +1080,6 @@ export function AppShell() {
                 <ButtonIcon icon={ArrowLeft} />
                 Projects
               </button>
-              <strong className="project-sidebar-title">{activeProject.title}</strong>
             </div>
 
             <section
