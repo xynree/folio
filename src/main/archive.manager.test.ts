@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { nativeImage } from "electron";
 import { ArchiveManager } from "./archive.manager";
+import { FolioDB } from "./database";
 import { makeItem } from "../test/fixtures";
 
 vi.mock("electron", () => ({
@@ -31,11 +32,11 @@ describe("ArchiveManager project imports", () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-project-"));
     const dotFolio = path.join(tempDir, ".folio");
     await fs.mkdir(dotFolio, { recursive: true });
-    const dbPath = path.join(dotFolio, "folio.json");
+    const db = new FolioDB(path.join(dotFolio, "folio.db"));
     const sourcePath = path.join(tempDir, "Source Image.PNG");
     await fs.writeFile(sourcePath, "image bytes");
 
-    const manager = new ArchiveManager(tempDir, dbPath);
+    const manager = new ArchiveManager(tempDir, db);
     manager.setItems([]);
 
     const imported = await manager.copyToProject(
@@ -61,9 +62,9 @@ describe("ArchiveManager project imports", () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-project-"));
     const dotFolio = path.join(tempDir, ".folio");
     await fs.mkdir(dotFolio, { recursive: true });
-    const dbPath = path.join(dotFolio, "folio.json");
+    const db = new FolioDB(path.join(dotFolio, "folio.db"));
 
-    const manager = new ArchiveManager(tempDir, dbPath);
+    const manager = new ArchiveManager(tempDir, db);
     manager.setItems([]);
 
     const imported = await manager.importProjectItems(
@@ -112,11 +113,11 @@ describe("ArchiveManager project imports", () => {
     const imagesDir = path.join(tempDir, "projects", "color-study", "images");
     await fs.mkdir(dotFolio, { recursive: true });
     await fs.mkdir(imagesDir, { recursive: true });
-    const dbPath = path.join(dotFolio, "folio.json");
+    const db = new FolioDB(path.join(dotFolio, "folio.db"));
     const imagePath = path.join(imagesDir, "tracked.png");
     await fs.writeFile(imagePath, "image bytes");
 
-    const manager = new ArchiveManager(tempDir, dbPath);
+    const manager = new ArchiveManager(tempDir, db);
     manager.setItems([
       {
         id: "tracked",
@@ -151,11 +152,11 @@ describe("ArchiveManager project imports", () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-project-"));
     const dotFolio = path.join(tempDir, ".folio");
     await fs.mkdir(dotFolio, { recursive: true });
-    const dbPath = path.join(dotFolio, "folio.json");
+    const db = new FolioDB(path.join(dotFolio, "folio.db"));
     const sourcePath = path.join(tempDir, "Source Image.PNG");
     await fs.writeFile(sourcePath, "image bytes");
 
-    const manager = new ArchiveManager(tempDir, dbPath);
+    const manager = new ArchiveManager(tempDir, db);
     manager.setItems([]);
 
     const archiveItems = await manager.copyToFolio([sourcePath]);
@@ -185,9 +186,9 @@ describe("ArchiveManager project imports", () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-project-"));
     const dotFolio = path.join(tempDir, ".folio");
     await fs.mkdir(dotFolio, { recursive: true });
-    const dbPath = path.join(dotFolio, "folio.json");
+    const db = new FolioDB(path.join(dotFolio, "folio.db"));
 
-    const manager = new ArchiveManager(tempDir, dbPath);
+    const manager = new ArchiveManager(tempDir, db);
     manager.setItems([]);
 
     const imported = await manager.importItems([
@@ -214,8 +215,8 @@ describe("ArchiveManager project imports", () => {
 
   it("keeps path helpers rooted in the readable Folio folder", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-project-"));
-    const dbPath = path.join(tempDir, ".folio", "folio.json");
-    const manager = new ArchiveManager(tempDir, dbPath);
+    const db = new FolioDB(path.join(tempDir, ".folio", "folio.db"));
+    const manager = new ArchiveManager(tempDir, db);
 
     const archivePath = path.join(tempDir, "items", "2026", "alpha.png");
     const projectPath = path.join(tempDir, "projects", "color-study", "images", "alpha.png");
@@ -243,11 +244,11 @@ describe("ArchiveManager project imports", () => {
     const documentsDir = path.join(tempDir, "projects", "color-study", "documents");
     await fs.mkdir(dotFolio, { recursive: true });
     await fs.mkdir(documentsDir, { recursive: true });
-    const dbPath = path.join(dotFolio, "folio.json");
+    const db = new FolioDB(path.join(dotFolio, "folio.db"));
     const notePath = path.join(documentsDir, "note.txt");
     await fs.writeFile(notePath, "notes");
 
-    const manager = new ArchiveManager(tempDir, dbPath);
+    const manager = new ArchiveManager(tempDir, db);
     manager.setItems([
       makeItem("note", {
         path: "projects/color-study/documents/note.txt",
@@ -259,24 +260,22 @@ describe("ArchiveManager project imports", () => {
 
     const thumbnails = await manager.ensureThumbnails(["missing", "note"]);
 
-    expect(manager.getItems()[0].missing).toBe(false);
+    expect(manager.getItems()[0].missing).toBeFalsy();
     expect(thumbnails).toEqual({
       note: "folio://thumb/note-small.svg",
     });
     await expect(
       fs.readFile(path.join(dotFolio, "thumbs", "note-small.svg"), "utf-8"),
     ).resolves.toContain("Text");
-    const persisted = JSON.parse(await fs.readFile(dbPath, "utf-8")) as {
-      items: Array<{ missing?: boolean }>;
-    };
-    expect(persisted.items[0].missing).toBe(false);
+    const persistedItems = db.getItems();
+    expect(persistedItems[0].missing).toBeFalsy();
   });
 
   it("repairs missing media dimensions when Electron can read image size", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-project-"));
     const imagesDir = path.join(tempDir, "projects", "color-study", "images");
     await fs.mkdir(imagesDir, { recursive: true });
-    const dbPath = path.join(tempDir, ".folio", "folio.json");
+    const db = new FolioDB(path.join(tempDir, ".folio", "folio.db"));
     const imagePath = path.join(imagesDir, "alpha.png");
     await fs.writeFile(imagePath, "image bytes");
     vi.mocked(nativeImage.createFromPath).mockReturnValue({
@@ -284,7 +283,7 @@ describe("ArchiveManager project imports", () => {
       isEmpty: () => false,
     } as Electron.NativeImage);
 
-    const manager = new ArchiveManager(tempDir, dbPath);
+    const manager = new ArchiveManager(tempDir, db);
     manager.setItems([
       makeItem("alpha", {
         path: "projects/color-study/images/alpha.png",
@@ -314,9 +313,9 @@ describe("ArchiveManager project imports", () => {
     await fs.writeFile(legacyPath, "image bytes");
     const legacyNotePath = path.join(tempDir, "items", "2026", "06_june", "note.txt");
     await fs.writeFile(legacyNotePath, "note bytes");
-    const dbPath = path.join(tempDir, ".folio", "folio.json");
+    const db = new FolioDB(path.join(tempDir, ".folio", "folio.db"));
 
-    const manager = new ArchiveManager(tempDir, dbPath);
+    const manager = new ArchiveManager(tempDir, db);
     manager.setItems([
       makeItem("alpha", {
         path: "items/2026/06_june/alpha.PNG",

@@ -6,6 +6,7 @@ import { formatCount } from "../folio/model";
 import { SettingsMenu } from "../layout/SettingsMenu";
 import { ButtonIcon } from "../shared/ButtonIcon";
 import { LazyThumbnail } from "../shared/LazyThumbnail";
+import { CreateProjectDialog } from "./CreateProjectDialog";
 
 const PROJECT_PREVIEW_LIMIT = 3;
 
@@ -42,11 +43,11 @@ export function ProjectsView({
   busy: boolean;
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
-  onCreateProject: (title: string) => Promise<void>;
+  onCreateProject: (title: string, description: string) => Promise<void>;
   onOpenProject: (projectId: string) => void;
   onToast: (message: string) => void;
 }) {
-  const [titleDraft, setTitleDraft] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
   const projects = useMemo(
     () => sortedProjects(data.projects ?? []),
     [data.projects],
@@ -56,12 +57,9 @@ export function ProjectsView({
     [data.items],
   );
 
-  const createProject = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const title = titleDraft.trim();
-    if (!title) return;
-    await onCreateProject(title);
-    setTitleDraft("");
+  const createProject = async (title: string, description: string) => {
+    await onCreateProject(title, description);
+    setCreateOpen(false);
   };
 
   return (
@@ -74,24 +72,15 @@ export function ProjectsView({
           <h1>Studio workspace</h1>
         </div>
         <div className="projects-header-actions">
-          <form className="projects-create-form" onSubmit={createProject}>
-            <label>
-              <span>Project name</span>
-              <input
-                value={titleDraft}
-                placeholder="New project"
-                onChange={(event) => setTitleDraft(event.currentTarget.value)}
-              />
-            </label>
-            <button
-              className="primary-action"
-              type="submit"
-              disabled={busy || !titleDraft.trim()}
-            >
-              <ButtonIcon icon={Plus} />
-              Create
-            </button>
-          </form>
+          <button
+            className="primary-action"
+            type="button"
+            disabled={busy}
+            onClick={() => setCreateOpen(true)}
+          >
+            <ButtonIcon icon={Plus} />
+            Create
+          </button>
           <SettingsMenu onToast={onToast} />
         </div>
       </section>
@@ -166,6 +155,13 @@ export function ProjectsView({
         </section>
       )}
       </div>
+      {createOpen ? (
+        <CreateProjectDialog
+          busy={busy}
+          onClose={() => setCreateOpen(false)}
+          onCreate={createProject}
+        />
+      ) : null}
     </main>
   );
 }

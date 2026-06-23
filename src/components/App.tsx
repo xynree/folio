@@ -500,10 +500,13 @@ export function AppShell() {
     });
 
   const createProjectFromHome = useCallback(
-    async (title: string) => {
+    async (title: string, description: string) => {
       setBusy(true);
       try {
-        const nextData = await window.folio.createProject({ title });
+        const nextData = await window.folio.createProject({
+          title,
+          description,
+        });
         putData(nextData);
         setToast("Project created");
       } catch (error) {

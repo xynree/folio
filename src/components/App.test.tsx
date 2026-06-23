@@ -355,12 +355,20 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     const user = userEvent.setup();
 
     await screen.findByRole("heading", { name: /studio workspace/i });
-    await user.type(screen.getByLabelText("Project name"), "Color Studies");
     await user.click(screen.getByRole("button", { name: /create/i }));
+
+    const dialog = await screen.findByRole("dialog", { name: /create project/i });
+    await user.type(screen.getByLabelText("Project name"), "Color Studies");
+    await user.type(
+      screen.getByLabelText("Description"),
+      "Daily color exploration",
+    );
+    await user.click(within(dialog).getByRole("button", { name: /create/i }));
 
     await waitFor(() => {
       expect(window.folio.createProject).toHaveBeenCalledWith({
         title: "Color Studies",
+        description: "Daily color exploration",
       });
       expect(app.data.projects[0].title).toBe("Color Studies");
     });

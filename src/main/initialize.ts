@@ -1,11 +1,13 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { SCHEMA_VERSION } from "../constants";
-import { FolioItem, Tag, Canvas, Project } from "../types";
+import type { Canvas, FolioItem, Project, Tag } from "../types";
+import { DB_FILE_NAME, FolioDB } from "./database";
 
 /**
- * Initializes the local filesystem structure and standard schema.
- * This runs on every boot to ensure the environment is correct.
+ * Initializes the local filesystem structure and SQLite database.
+ * On first run after the JSON-to-SQLite migration, any existing JSON metadata
+ * files are imported into the new database and left in place as read-only
+ * archives (not deleted, in case the user needs them for recovery).
  *
  * @param folioRoot Absolute path of the active Folio folder (Documents or iCloud Drive).
  */
@@ -21,36 +23,72 @@ export async function initialize(app: Electron.App, folioRoot?: string) {
     DOT_FOLIO,
     path.join(DOT_FOLIO, "thumbs"),
   ];
-
   for (const dir of dirs) {
     await fs.mkdir(dir, { recursive: true });
   }
 
-  // 2. Check for data files. Seed them with default empty schemas if missing.
-  const files = [
-    {
-      path: path.join(DOT_FOLIO, "folio.json"),
-      default: { version: SCHEMA_VERSION, items: [] as FolioItem[] },
-    },
-    {
-      path: path.join(DOT_FOLIO, "tags.json"),
-      default: { version: SCHEMA_VERSION, tags: [] as Tag[] },
-    },
-    {
-      path: path.join(DOT_FOLIO, "canvases.json"),
-      default: { version: SCHEMA_VERSION, canvases: [] as Canvas[] },
-    },
-    {
-      path: path.join(DOT_FOLIO, "projects.json"),
-      default: { version: SCHEMA_VERSION, projects: [] as Project[] },
-    },
-  ];
+  // 2. Open (or create) the SQLite database. The FolioDB constructor creates
+  //    all tables via CREATE TABLE IF NOT EXISTS, so this is safe on every boot.
+  const db = new FolioDB(path.join(DOT_FOLIO, DB_FILE_NAME));
 
-  for (const file of files) {
-    try {
-      await fs.access(file.path);
-    } catch {
-      await fs.writeFile(file.path, JSON.stringify(file.default, null, 2));
+  // 3. One-time migration: if the DB is empty and legacy JSON files exist,
+  //    read them and seed the database. The JSON files are left in place.
+  if (db.isEmpty()) {
+    const legacyData = await readLegacyJsonData(DOT_FOLIO);
+    if (legacyData !== null) {
+      db.importFromFolioData(legacyData);
     }
   }
+
+  db.close();
 }
+
+// ---------------------------------------------------------------------------
+// Legacy JSON reader — used only during the one-time migration
+// ---------------------------------------------------------------------------
+
+interface LegacyFolioJson {
+  items?: FolioItem[];
+}
+interface LegacyTagsJson {
+  tags?: Tag[];
+}
+interface LegacyCanvasesJson {
+  canvases?: Canvas[];
+}
+interface LegacyProjectsJson {
+  projects?: Project[];
+}
+
+async function tryReadJson<T>(filePath: string): Promise<T | null> {
+  try {
+    return JSON.parse(await fs.readFile(filePath, "utf-8")) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function readLegacyJsonData(dotFolio: string): Promise<{
+  items: FolioItem[];
+  tags: Tag[];
+  canvases: Canvas[];
+  projects: Project[];
+} | null> {
+  const [folioJson, tagsJson, canvasesJson, projectsJson] = await Promise.all([
+    tryReadJson<LegacyFolioJson>(path.join(dotFolio, "folio.json")),
+    tryReadJson<LegacyTagsJson>(path.join(dotFolio, "tags.json")),
+    tryReadJson<LegacyCanvasesJson>(path.join(dotFolio, "canvases.json")),
+    tryReadJson<LegacyProjectsJson>(path.join(dotFolio, "projects.json")),
+  ]);
+
+  // If none of the JSON files exist, there is nothing to migrate.
+  if (!folioJson && !tagsJson && !canvasesJson && !projectsJson) return null;
+
+  return {
+    items: folioJson?.items ?? [],
+    tags: tagsJson?.tags ?? [],
+    canvases: canvasesJson?.canvases ?? [],
+    projects: projectsJson?.projects ?? [],
+  };
+}
+

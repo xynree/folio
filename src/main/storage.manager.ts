@@ -1,15 +1,21 @@
 import fs from "node:fs/promises";
-import { FolioItem, Tag, Canvas, Project } from "../types";
+
+// ---------------------------------------------------------------------------
+// File save strategies — used by ArchiveManager for copying media files
+// ---------------------------------------------------------------------------
 
 /**
- * Strategy interface for saving different types of data.
+ * Strategy interface for saving a value to a destination path.
  */
 export interface SaveStrategy<T> {
   save(filePath: string, data: T): Promise<void>;
 }
 
 /**
- * Standard strategy for saving JSON data atomically.
+ * Writes any value as pretty-printed JSON through a temporary file so that a
+ * crash mid-write never leaves the destination in a partially written state.
+ * Kept here for use in backup/export paths (not for live app data, which now
+ * lives in SQLite).
  */
 export class JsonSaveStrategy<T> implements SaveStrategy<T> {
   async save(filePath: string, data: T): Promise<void> {
@@ -20,13 +26,16 @@ export class JsonSaveStrategy<T> implements SaveStrategy<T> {
 }
 
 /**
- * Strategy for saving raw files or copying from existing paths.
+ * Source descriptor for the {@link FileSaveStrategy}.
  */
 export interface FileSaveSource {
   kind: "path" | "buffer";
   source: string | Buffer | Uint8Array | ArrayBuffer;
 }
 
+/**
+ * Copies a file from an existing path or writes a raw buffer to disk.
+ */
 export class FileSaveStrategy implements SaveStrategy<FileSaveSource> {
   async save(destPath: string, data: FileSaveSource): Promise<void> {
     if (data.kind === "path") {
@@ -41,18 +50,20 @@ export class FileSaveStrategy implements SaveStrategy<FileSaveSource> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// FolioStorage — thin singleton used by ArchiveManager for file operations
+// ---------------------------------------------------------------------------
+
 /**
- * FolioStorage handles the low-level persistence of all application data,
- * using different strategies for JSON metadata and binary file content.
+ * Handles filesystem-level file copy and buffer write operations.
+ * Metadata persistence (items, tags, canvases, projects) is now owned by
+ * {@link FolioDB} in `database.ts`.
  */
 export class FolioStorage {
   private static instance: FolioStorage;
-  private jsonStrategy = new JsonSaveStrategy<Record<string, unknown>>();
-  private fileStrategy = new FileSaveStrategy();
+  private readonly fileStrategy = new FileSaveStrategy();
 
-  private constructor() {
-    // Private constructor for singleton pattern
-  }
+  private constructor() {}
 
   public static getInstance(): FolioStorage {
     if (!FolioStorage.instance) {
@@ -61,65 +72,8 @@ export class FolioStorage {
     return FolioStorage.instance;
   }
 
-  /**
-   * Saves items with the version header.
-   */
-  async saveItems(
-    filePath: string,
-    items: FolioItem[],
-    version: number,
-  ): Promise<void> {
-    await this.jsonStrategy.save(filePath, { version, items });
-  }
-
-  /**
-   * Saves tags with the version header.
-   */
-  async saveTags(
-    filePath: string,
-    tags: Tag[],
-    version: number,
-  ): Promise<void> {
-    await this.jsonStrategy.save(filePath, { version, tags });
-  }
-
-  /**
-   * Saves canvases with the version header.
-   */
-  async saveCanvases(
-    filePath: string,
-    canvases: Canvas[],
-    version: number,
-  ): Promise<void> {
-    await this.jsonStrategy.save(filePath, { version, canvases });
-  }
-
-  /**
-   * Saves projects with the version header.
-   */
-  async saveProjects(
-    filePath: string,
-    projects: Project[],
-    version: number,
-  ): Promise<void> {
-    await this.jsonStrategy.save(filePath, { version, projects });
-  }
-
-  /**
-   * Saves or copies a file.
-   */
   async saveFile(destPath: string, source: FileSaveSource): Promise<void> {
     await this.fileStrategy.save(destPath, source);
   }
-
-  /**
-   * Saves arbitrary content (generic strategy usage).
-   */
-  async saveCustom<T>(
-    filePath: string,
-    data: T,
-    strategy: SaveStrategy<T>,
-  ): Promise<void> {
-    await strategy.save(filePath, data);
-  }
 }
+

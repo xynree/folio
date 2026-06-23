@@ -23,6 +23,7 @@ import {
   readImageDimensionsForFile,
   type MediaDimensions,
 } from "./media.helpers";
+import type { FolioDB } from "./database";
 import { FolioStorage } from "./storage.manager";
 
 interface ImportResult {
@@ -53,7 +54,7 @@ export class ArchiveManager {
 
   constructor(
     private folioRoot: string,
-    private dbPath: string,
+    private db: FolioDB,
   ) {}
 
   public getItems(): FolioItem[] {
@@ -312,7 +313,7 @@ export class ArchiveManager {
    * Saves the current items to disk.
    */
   async save(version: number): Promise<void> {
-    await this.store.saveItems(this.dbPath, this.items, version);
+    this.db.setItems(this.items);
   }
 
   private async importFilePaths(

@@ -35,7 +35,7 @@ import {
   getStorageRootForLocation,
   STORAGE_SETTINGS_FILE_NAME,
 } from "./storageLocation.helpers";
-import { FolioStorage } from "./storage.manager";
+import { DB_FILE_NAME, FolioDB } from "./database";
 import {
   extractCommandErrorMessage,
   getMimeType,
@@ -46,7 +46,6 @@ import {
   removeLegacyCanvasReferences,
   repairLegacyOutputStages,
   stripLegacyCanvasReferences,
-  validateFolioSchema,
 } from "./schema.helpers";
 
 const execFileAsync = promisify(execFile);
@@ -115,7 +114,6 @@ export class FolioManager implements FolioManagerInterface {
   private canvases: Canvas[] = [];
   private tags: Tag[] = [];
   private projects: Project[] = [];
-  private version: number = SCHEMA_VERSION;
   private reconciliationResult: ReconciliationResult =
     emptyReconciliationResult();
   private pendingWatcherAdds = new Set<string>();
@@ -123,15 +121,11 @@ export class FolioManager implements FolioManagerInterface {
 
   private readonly folioRoot: string;
   private readonly dotFolio: string;
-  private readonly dbPath: string;
-  private readonly tagsPath: string;
-  private readonly canvasesPath: string;
-  private readonly projectsPath: string;
   private readonly homeDir: string;
   private readonly storageLocation: StorageLocation;
 
   private archiveManager: ArchiveManager;
-  private storageManager = FolioStorage.getInstance();
+  private db: FolioDB;
   private backupManager: BackupManager;
   private storageLocationManager: StorageLocationManager;
 
@@ -145,12 +139,9 @@ export class FolioManager implements FolioManagerInterface {
       this.homeDir,
     );
     this.dotFolio = path.join(this.folioRoot, ".folio");
-    this.dbPath = path.join(this.dotFolio, "folio.json");
-    this.tagsPath = path.join(this.dotFolio, "tags.json");
-    this.canvasesPath = path.join(this.dotFolio, "canvases.json");
-    this.projectsPath = path.join(this.dotFolio, "projects.json");
 
-    this.archiveManager = new ArchiveManager(this.folioRoot, this.dbPath);
+    this.db = new FolioDB(path.join(this.dotFolio, DB_FILE_NAME));
+    this.archiveManager = new ArchiveManager(this.folioRoot, this.db);
 
     const backupDir = getBackupDirForLocation(
       this.storageLocation,
@@ -344,44 +335,18 @@ export class FolioManager implements FolioManagerInterface {
 
       if (!item || item.missing) return;
       item.missing = true;
-      await this.archiveManager.save(this.version);
+      await this.archiveManager.save(SCHEMA_VERSION);
       mainWindow.webContents.send("folio:files-added", [item]);
     });
   }
 
   async loadData(): Promise<FolioData> {
-    const [rawFolio, rawTags, rawCanvases, rawProjects] = await Promise.all([
-      fs.readFile(this.dbPath, "utf-8"),
-      fs.readFile(this.tagsPath, "utf-8"),
-      fs.readFile(this.canvasesPath, "utf-8"),
-      fs.readFile(this.projectsPath, "utf-8"),
-    ]);
+    const stored = this.db.getFolioData();
 
-    const folioBase = JSON.parse(rawFolio);
-    const tagsBase = JSON.parse(rawTags);
-    const canvasesBase = JSON.parse(rawCanvases);
-    const projectsBase = JSON.parse(rawProjects);
-
-    validateFolioSchema("folio.json", folioBase, "items", SCHEMA_VERSION);
-    validateFolioSchema("tags.json", tagsBase, "tags", SCHEMA_VERSION);
-    validateFolioSchema(
-      "canvases.json",
-      canvasesBase,
-      "canvases",
-      SCHEMA_VERSION,
-    );
-    validateFolioSchema(
-      "projects.json",
-      projectsBase,
-      "projects",
-      SCHEMA_VERSION,
-    );
-
-    this.version = SCHEMA_VERSION;
-    this.archiveManager.setItems(folioBase.items);
-    this.tags = tagsBase.tags;
-    this.canvases = canvasesBase.canvases;
-    this.projects = projectsBase.projects;
+    this.archiveManager.setItems(stored.items);
+    this.tags = stored.tags;
+    this.canvases = stored.canvases;
+    this.projects = stored.projects;
 
     await this.ensureMediaDirectories();
     const repairedLegacyOutputStages = repairLegacyOutputStages(
@@ -404,24 +369,12 @@ export class FolioManager implements FolioManagerInterface {
       repairedMissingFlags ||
       repairedMediaDimensions
     ) {
-      await this.archiveManager.save(this.version);
+      await this.archiveManager.save(SCHEMA_VERSION);
     }
 
     if (migratedProjects || removedLegacyCanvasReferences) {
-      await Promise.all([
-        this.storageManager.saveCanvases(
-          this.canvasesPath,
-          this.canvases,
-          this.version,
-        ),
-        migratedProjects
-          ? this.storageManager.saveProjects(
-              this.projectsPath,
-              this.projects,
-              this.version,
-            )
-          : Promise.resolve(),
-      ]);
+      this.db.setCanvases(this.canvases);
+      if (migratedProjects) this.db.setProjects(this.projects);
     }
 
     return {
@@ -434,7 +387,6 @@ export class FolioManager implements FolioManagerInterface {
   }
 
   async saveFolioData(data: FolioData): Promise<void> {
-    this.version = SCHEMA_VERSION;
     this.archiveManager.setItems(
       data.items.map((item) => {
         const legacyStage = item.stage as string | undefined;
@@ -463,20 +415,12 @@ export class FolioManager implements FolioManagerInterface {
       this.projects.map((project) => this.syncProjectWorksFolder(project)),
     );
 
-    await Promise.all([
-      this.archiveManager.save(this.version),
-      this.storageManager.saveTags(this.tagsPath, this.tags, this.version),
-      this.storageManager.saveCanvases(
-        this.canvasesPath,
-        this.canvases,
-        this.version,
-      ),
-      this.storageManager.saveProjects(
-        this.projectsPath,
-        this.projects,
-        this.version,
-      ),
-    ]);
+    this.db.setFolioData({
+      items: this.archiveManager.getItems(),
+      tags: this.tags,
+      canvases: this.canvases,
+      projects: this.projects,
+    });
   }
 
   async createProject(input: CreateProjectInput): Promise<FolioData> {
@@ -500,11 +444,7 @@ export class FolioManager implements FolioManagerInterface {
     await this.ensureMediaDirectories();
     await this.ensureProjectDirectories(project);
     this.projects = [project, ...this.projects];
-    await this.storageManager.saveProjects(
-      this.projectsPath,
-      this.projects,
-      this.version,
-    );
+    this.db.upsertProject(project);
 
     return this.currentData();
   }
@@ -528,13 +468,9 @@ export class FolioManager implements FolioManagerInterface {
     );
 
     await Promise.all([
-      this.archiveManager.save(this.version),
-      this.storageManager.saveProjects(
-        this.projectsPath,
-        this.projects,
-        this.version,
-      ),
+      this.archiveManager.save(SCHEMA_VERSION),
     ]);
+    this.db.setProjects(this.projects);
   }
 
   private getProjectOrThrow(projectId: string): Project {
@@ -561,23 +497,19 @@ export class FolioManager implements FolioManagerInterface {
 
   async saveItems(items: FolioItem[]): Promise<void> {
     this.archiveManager.setItems(items);
-    await this.archiveManager.save(this.version);
+    await this.archiveManager.save(SCHEMA_VERSION);
   }
 
   async saveCanvases(canvases: Canvas[]): Promise<void> {
     this.canvases = canvases.map((canvas) =>
       stripLegacyCanvasReferences(canvas),
     );
-    await this.storageManager.saveCanvases(
-      this.canvasesPath,
-      this.canvases,
-      this.version,
-    );
+    this.db.setCanvases(this.canvases);
   }
 
   async saveTags(tags: Tag[]): Promise<void> {
     this.tags = tags;
-    await this.storageManager.saveTags(this.tagsPath, this.tags, this.version);
+    this.db.setTags(this.tags);
   }
 
   async copyToFolio(filePaths: string[]): Promise<FolioItem[]> {
@@ -673,11 +605,7 @@ export class FolioManager implements FolioManagerInterface {
 
     const updatedProject = this.getProjectOrThrow(projectId);
     await this.syncProjectWorksFolder(updatedProject);
-    await this.storageManager.saveProjects(
-      this.projectsPath,
-      this.projects,
-      this.version,
-    );
+    this.db.setProjects(this.projects);
 
     return this.currentData();
   }
@@ -944,7 +872,7 @@ export class FolioManager implements FolioManagerInterface {
         project.folderPath,
       );
       if (result.changed) {
-        await this.archiveManager.save(this.version);
+        await this.archiveManager.save(SCHEMA_VERSION);
       }
       if (result.items.length) {
         addedItems.push(...result.items);
@@ -1017,7 +945,7 @@ export class FolioManager implements FolioManagerInterface {
     );
 
     if (changed) {
-      await this.archiveManager.save(this.version);
+      await this.archiveManager.save(SCHEMA_VERSION);
     }
 
     return {
@@ -1395,11 +1323,7 @@ export class FolioManager implements FolioManagerInterface {
 
     this.projects = [defaultProject];
     await this.ensureProjectDirectories(defaultProject);
-    await this.storageManager.saveProjects(
-      this.projectsPath,
-      this.projects,
-      this.version,
-    );
+    this.db.upsertProject(defaultProject);
     return defaultProject;
   }
 

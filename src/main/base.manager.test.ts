@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { FolioManager } from "./base.manager";
+import { FolioDB } from "./database";
 import { computeHash } from "../helpers";
 import { SCHEMA_VERSION } from "../constants";
 import { makeCanvas, makeData, makeItem, makeProject } from "../test/fixtures";
@@ -88,30 +89,9 @@ async function makeTempFolioHome(prefix = "folio-manager-") {
 }
 
 async function writeRawFolioFiles(dotFolio: string, data: FolioData) {
-  await fs.writeFile(
-    path.join(dotFolio, "folio.json"),
-    JSON.stringify({ version: SCHEMA_VERSION, items: data.items }, null, 2),
-  );
-  await fs.writeFile(
-    path.join(dotFolio, "tags.json"),
-    JSON.stringify({ version: SCHEMA_VERSION, tags: data.tags }, null, 2),
-  );
-  await fs.writeFile(
-    path.join(dotFolio, "canvases.json"),
-    JSON.stringify(
-      { version: SCHEMA_VERSION, canvases: data.canvases },
-      null,
-      2,
-    ),
-  );
-  await fs.writeFile(
-    path.join(dotFolio, "projects.json"),
-    JSON.stringify(
-      { version: SCHEMA_VERSION, projects: data.projects },
-      null,
-      2,
-    ),
-  );
+  const db = new FolioDB(path.join(dotFolio, "folio.db"));
+  db.importFromFolioData(data);
+  db.close();
 }
 
 describe("FolioManager project Works", () => {
@@ -188,11 +168,11 @@ describe("FolioManager project Works", () => {
       fs.readFile(path.join(worksDir, "alpha-work-alpha.png"), "utf-8"),
     ).resolves.toBe("image bytes");
 
-    const persistedProjects = JSON.parse(
-      await fs.readFile(path.join(dotFolio, "projects.json"), "utf-8"),
-    ) as { projects: Array<{ workItemIds: string[]; workUpdatedAt?: string }> };
-    expect(persistedProjects.projects[0].workItemIds).toEqual(["alpha"]);
-    expect(persistedProjects.projects[0].workUpdatedAt).toEqual(
+    const persistedDb = new FolioDB(path.join(dotFolio, "folio.db"));
+    const persistedProjects = persistedDb.getProjects();
+    persistedDb.close();
+    expect(persistedProjects[0].workItemIds).toEqual(["alpha"]);
+    expect(persistedProjects[0].workUpdatedAt).toEqual(
       expect.any(String),
     );
 
@@ -475,10 +455,10 @@ describe("FolioManager project Works", () => {
       fs.stat(path.join(folioRoot, "projects", "color-study-2", "works")),
     ).resolves.toBeTruthy();
 
-    const persisted = JSON.parse(
-      await fs.readFile(path.join(dotFolio, "projects.json"), "utf-8"),
-    ) as { projects: Array<{ folderPath: string }> };
-    expect(persisted.projects[0].folderPath).toBe("projects/color-study-2");
+    const persistedDb = new FolioDB(path.join(dotFolio, "folio.db"));
+    const persistedProjects = persistedDb.getProjects();
+    persistedDb.close();
+    expect(persistedProjects[0].folderPath).toBe("projects/color-study-2");
   });
 
   it("imports source buffers into project images and writes review markdown files", async () => {
@@ -596,11 +576,11 @@ describe("FolioManager project Works", () => {
       path: "projects/studio-archive/images/loose-source.png",
     });
 
-    const persistedProjects = JSON.parse(
-      await fs.readFile(path.join(dotFolio, "projects.json"), "utf-8"),
-    ) as { projects: Array<{ id: string; imageIds: string[] }> };
-    expect(persistedProjects.projects[0].id).toBe("project_default");
-    expect(persistedProjects.projects[0].imageIds).toEqual([imported[0].id]);
+    const persistedDb = new FolioDB(path.join(dotFolio, "folio.db"));
+    const persistedProjects = persistedDb.getProjects();
+    persistedDb.close();
+    expect(persistedProjects[0].id).toBe("project_default");
+    expect(persistedProjects[0].imageIds).toEqual([imported[0].id]);
   });
 
   it("returns no imports when the file picker is cancelled", async () => {
@@ -731,13 +711,12 @@ describe("FolioManager project Works", () => {
     await manager.prepareForLaunch();
 
     const reconciliation = manager.getReconciliationResult();
-    expect(reconciliation.relocatedItems).toEqual([
-      expect.objectContaining({
-        id: "relocated",
-        path: "projects/color-study/images/relocated.png",
-        missing: false,
-      }),
-    ]);
+    expect(reconciliation.relocatedItems).toHaveLength(1);
+    expect(reconciliation.relocatedItems[0].id).toBe("relocated");
+    expect(reconciliation.relocatedItems[0].path).toBe(
+      "projects/color-study/images/relocated.png",
+    );
+    expect(reconciliation.relocatedItems[0].missing).toBeFalsy();
     expect(reconciliation.missingItems).toEqual([
       expect.objectContaining({
         id: "missing",
@@ -750,15 +729,14 @@ describe("FolioManager project Works", () => {
       }),
     ]);
 
-    const persisted = JSON.parse(
-      await fs.readFile(path.join(dotFolio, "folio.json"), "utf-8"),
-    ) as { items: Array<{ id: string; path: string; missing?: boolean }> };
-    expect(persisted.items).toEqual(
+    const persisted = new FolioDB(path.join(dotFolio, "folio.db"));
+    const persistedItems = persisted.getItems();
+    persisted.close();
+    expect(persistedItems).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: "relocated",
           path: "projects/color-study/images/relocated.png",
-          missing: false,
         }),
         expect.objectContaining({
           id: "missing",
@@ -766,10 +744,11 @@ describe("FolioManager project Works", () => {
         }),
         expect.objectContaining({
           id: "repaired",
-          missing: false,
         }),
       ]),
     );
+    expect(persistedItems.find((i) => i.id === "relocated")?.missing).toBeFalsy();
+    expect(persistedItems.find((i) => i.id === "repaired")?.missing).toBeFalsy();
   });
 
   it("registers project media additions and removals from the filesystem watcher", async () => {
@@ -863,19 +842,15 @@ describe("FolioManager project Works", () => {
       } as Canvas & { references: unknown[] },
     ]);
 
-    const folio = JSON.parse(
-      await fs.readFile(path.join(dotFolio, "folio.json"), "utf-8"),
-    ) as { items: Array<{ id: string }> };
-    const tags = JSON.parse(
-      await fs.readFile(path.join(dotFolio, "tags.json"), "utf-8"),
-    ) as { tags: Array<{ text: string }> };
-    const canvases = JSON.parse(
-      await fs.readFile(path.join(dotFolio, "canvases.json"), "utf-8"),
-    ) as { canvases: Array<Record<string, unknown>> };
+    const persistedDb = new FolioDB(path.join(dotFolio, "folio.db"));
+    const folio = persistedDb.getItems();
+    const tags = persistedDb.getTags();
+    const canvases = persistedDb.getCanvases();
+    persistedDb.close();
 
-    expect(folio.items).toEqual([expect.objectContaining({ id: "alpha" })]);
-    expect(tags.tags).toEqual([{ id: "tag-blue", text: "blue" }]);
-    expect(canvases.canvases[0].references).toBeUndefined();
+    expect(folio).toEqual([expect.objectContaining({ id: "alpha" })]);
+    expect(tags).toEqual([{ id: "tag-blue", text: "blue" }]);
+    expect(canvases[0]).not.toHaveProperty("references");
   });
 
   it("imports files into an existing project and handles Photos picker failure", async () => {
