@@ -40,6 +40,7 @@ const PLACEHOLDER_SVG_BY_TYPE: Record<ItemType, string> = {
 };
 const THUMBNAIL_JPEG_QUALITY = 72;
 const THUMBNAIL_SIZE = 320;
+const THUMBNAIL_VARIANT = "fit";
 const IMAGES_DIR_NAME = "images";
 const DOCUMENTS_DIR_NAME = "documents";
 
@@ -608,10 +609,19 @@ export class ArchiveManager {
     }
 
     try {
-      const thumb = await nativeImage.createThumbnailFromPath(sourcePath, {
-        width: THUMBNAIL_SIZE,
-        height: THUMBNAIL_SIZE,
-      });
+      const image = nativeImage.createFromPath(sourcePath);
+      if (image.isEmpty()) {
+        const placeholderPath = this.getPlaceholderPath(item);
+        await this.writePlaceholderThumbnail(item, placeholderPath);
+        return placeholderPath;
+      }
+
+      const sourceSize = image.getSize();
+      const thumb = image.resize(
+        sourceSize.width >= sourceSize.height
+          ? { width: THUMBNAIL_SIZE, quality: "best" }
+          : { height: THUMBNAIL_SIZE, quality: "best" },
+      );
 
       if (thumb.isEmpty()) {
         const placeholderPath = this.getPlaceholderPath(item);
@@ -644,7 +654,7 @@ export class ArchiveManager {
     if (!["sketch", "anim"].includes(item.type)) {
       return path.join(thumbsDir, `${item.id}-small.svg`);
     }
-    return path.join(thumbsDir, `${item.id}-small.jpg`);
+    return path.join(thumbsDir, `${item.id}-${THUMBNAIL_VARIANT}-small.jpg`);
   }
 
   private getPlaceholderPath(item: FolioItem): string {
