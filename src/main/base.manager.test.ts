@@ -1012,3 +1012,115 @@ describe("FolioManager storage location", () => {
     await fs.rm(tempHome, { recursive: true, force: true });
   });
 });
+
+describe("FolioManager project notes", () => {
+  beforeEach(() => {
+    chokidarMocks.events = {};
+    chokidarMocks.watch.mockClear();
+    chokidarMocks.watcher.on.mockClear();
+    electronMocks.ipcHandle.mockClear();
+  });
+
+  async function setupManagerWithProject() {
+    const { folioRoot } = await makeTempFolioHome("folio-notes-");
+    const manager = new FolioManager();
+    await manager.saveFolioData(
+      makeData({
+        items: [],
+        canvases: [],
+        projects: [
+          makeProject("project-1", {
+            title: "Color Study",
+            folderPath: "projects/color-study",
+            imageIds: [],
+            workItemIds: [],
+            boardIds: [],
+          }),
+        ],
+        notes: [],
+      }),
+    );
+    return { manager, folioRoot };
+  }
+
+  it("creates a note with a Markdown file on disk and metadata in the DB", async () => {
+    const { manager, folioRoot } = await setupManagerWithProject();
+
+    const note = await manager.createNote("project-1", "Research");
+
+    expect(note.title).toBe("Research");
+    expect(note.projectId).toBe("project-1");
+    expect(note.path.startsWith("projects/color-study/notes/")).toBe(true);
+
+    const fileContent = await fs.readFile(
+      path.join(folioRoot, note.path),
+      "utf-8",
+    );
+    expect(fileContent).toBe("# Research\n\n");
+
+    const data = await manager.loadData();
+    expect(data.notes).toHaveLength(1);
+    expect(data.notes[0].id).toBe(note.id);
+  });
+
+  it("reads and writes note content and refreshes the derived title", async () => {
+    const { manager } = await setupManagerWithProject();
+    const note = await manager.createNote("project-1", "Draft");
+
+    expect(await manager.readNoteContent(note.id)).toBe("# Draft\n\n");
+
+    const updated = await manager.writeNoteContent(
+      note.id,
+      "# Renamed heading\n\nbody",
+    );
+    expect(updated.title).toBe("Renamed heading");
+    expect(await manager.readNoteContent(note.id)).toBe(
+      "# Renamed heading\n\nbody",
+    );
+  });
+
+  it("deletes the note file and removes its metadata", async () => {
+    const { manager, folioRoot } = await setupManagerWithProject();
+    const note = await manager.createNote("project-1", "Temp");
+    const absolutePath = path.join(folioRoot, note.path);
+
+    expect(
+      await fs
+        .access(absolutePath)
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(true);
+
+    const data = await manager.deleteNote(note.id);
+
+    expect(data.notes).toHaveLength(0);
+    expect(
+      await fs
+        .access(absolutePath)
+        .then(() => true)
+        .catch(() => false),
+    ).toBe(false);
+  });
+
+  it("rejects reading or writing an unknown note", async () => {
+    const { manager } = await setupManagerWithProject();
+
+    await expect(manager.readNoteContent("missing")).rejects.toThrow(
+      "Note missing was not found.",
+    );
+    await expect(
+      manager.writeNoteContent("missing", "content"),
+    ).rejects.toThrow("Note missing was not found.");
+  });
+
+  it("persists notes across saveFolioData round-trips", async () => {
+    const { manager } = await setupManagerWithProject();
+    const note = await manager.createNote("project-1", "Persisted");
+
+    const loaded = await manager.loadData();
+    await manager.saveFolioData(loaded);
+
+    const reloaded = await manager.loadData();
+    expect(reloaded.notes.map((entry) => entry.id)).toContain(note.id);
+  });
+});

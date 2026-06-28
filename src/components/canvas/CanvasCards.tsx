@@ -18,6 +18,7 @@ import type {
   CanvasTextElement,
   CanvasTextSize,
   FolioItem,
+  Note,
   ThumbnailUrls,
 } from "../../types";
 import { CANVAS_WORLD_ORIGIN } from "../folio/constants";
@@ -203,6 +204,74 @@ export function CanvasItemCard({
         onClick={(event) => {
           event.stopPropagation();
           onRemove(item.id);
+        }}
+      >
+        <ButtonIcon icon={X} />
+      </button>
+      <ResizeCorner label={label} onPointerDown={onResizePointerDown} />
+      <ConnectionHandles
+        label={label}
+        onConnectorPointerDown={onConnectorPointerDown}
+      />
+    </div>
+  );
+}
+
+export function CanvasProjectNoteCard({
+  note,
+  position,
+  isMatched = false,
+  isSelected = false,
+  onOpen,
+  onRemove,
+  onConnectorPointerDown,
+  onPointerDown,
+  onResizePointerDown,
+  onClickCapture,
+}: {
+  note: Note;
+  position: CanvasObjectGeometry;
+  isMatched?: boolean;
+  isSelected?: boolean;
+  onOpen: (noteId: string) => void;
+  onRemove: (noteId: string) => void;
+  onConnectorPointerDown: ConnectorPointerDownHandler;
+  onPointerDown: (event: React.PointerEvent) => void;
+  onResizePointerDown: ResizePointerDownHandler;
+  onClickCapture: (event: React.MouseEvent) => void;
+}) {
+  const label = note.title.trim() || "Untitled note";
+  return (
+    <div
+      className={`canvas-document-card canvas-project-note-card ${
+        isSelected ? "canvas-object-selected" : ""
+      } ${isMatched ? "canvas-object-search-match" : ""}`}
+      data-canvas-object-id={note.id}
+      data-canvas-object-kind="project-note"
+      style={objectCardStyle("project-note", position)}
+      onPointerDown={onPointerDown}
+      onClickCapture={onClickCapture}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpen(note.id);
+      }}
+    >
+      <div className="canvas-document-icon">
+        <ButtonIcon icon={FileText} />
+      </div>
+      <div className="canvas-document-copy">
+        <strong>{label}</strong>
+        <span>Note</span>
+      </div>
+      <button
+        className="icon-button canvas-card-remove-button"
+        type="button"
+        aria-label={`Remove ${label} from board`}
+        title="Remove from board"
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove(note.id);
         }}
       >
         <ButtonIcon icon={X} />

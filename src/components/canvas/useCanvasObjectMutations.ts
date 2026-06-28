@@ -13,6 +13,7 @@ import {
   deleteCanvasSection,
   deleteCanvasTextElement,
   removeItemFromCanvas,
+  removeNoteFromCanvas,
   updateCanvasLink,
   updateCanvasNoteSize,
   updateCanvasNoteText,
@@ -64,6 +65,18 @@ export function useCanvasObjectMutations({
       updateCanvas(
         activeCanvas.id,
         (canvas) => removeItemFromCanvas(canvas, itemId),
+        "Removed",
+      );
+    },
+    [activeCanvas, updateCanvas],
+  );
+
+  const removeProjectNote = useCallback(
+    (noteId: string) => {
+      if (!activeCanvas) return;
+      updateCanvas(
+        activeCanvas.id,
+        (canvas) => removeNoteFromCanvas(canvas, noteId),
         "Removed",
       );
     },
@@ -191,6 +204,7 @@ export function useCanvasObjectMutations({
   return {
     addNote,
     removeItem,
+    removeProjectNote,
     updateNote,
     updateNoteSize,
     updateLink,

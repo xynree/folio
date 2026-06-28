@@ -90,14 +90,15 @@ describe("ProjectReviewEditorPage", () => {
     ).not.toBeNull();
   });
 
-  it("toggles the markdown editor fullscreen command", () => {
+  it("does not render a fullscreen toggle in the markdown toolbar", () => {
     renderEditor();
 
-    fireEvent.click(screen.getByRole("button", { name: /maximize editor/i }));
-    expect(screen.getByRole("button", { name: /minimize editor/i })).not.toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /minimize editor/i }));
-    expect(screen.getByRole("button", { name: /maximize editor/i })).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /maximize editor/i }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /minimize editor/i }),
+    ).toBeNull();
   });
 
   it("saves title changes on blur and confirms deletion", async () => {

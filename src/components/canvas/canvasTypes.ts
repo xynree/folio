@@ -10,6 +10,7 @@ export type CanvasObjectKind =
   | "item"
   | "document"
   | "note"
+  | "project-note"
   | "text"
   | "link"
   | "section";

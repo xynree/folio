@@ -38,6 +38,18 @@ export function removeItemFromCanvas(canvas: Canvas, itemId: string): Canvas {
   };
 }
 
+export function removeNoteFromCanvas(canvas: Canvas, noteId: string): Canvas {
+  const positions = { ...canvas.positions };
+  delete positions[noteId];
+
+  return {
+    ...canvas,
+    noteIds: (canvas.noteIds ?? []).filter((id) => id !== noteId),
+    positions,
+    edges: removeEdgesForObject(canvas.edges ?? [], noteId),
+  };
+}
+
 function updateTimestamp<T extends { updatedAt?: string }>(object: T): T {
   return { ...object, updatedAt: new Date().toISOString() };
 }
@@ -48,7 +60,7 @@ export function moveCanvasObject(
   objectId: string,
   position: Canvas["positions"][string],
 ): Canvas {
-  if (kind === "item" || kind === "document") {
+  if (kind === "item" || kind === "document" || kind === "project-note") {
     return {
       ...canvas,
       positions: {
@@ -103,7 +115,7 @@ export function resizeCanvasObject(
   objectId: string,
   size: CanvasObjectSize,
 ): Canvas {
-  if (kind === "item" || kind === "document") {
+  if (kind === "item" || kind === "document" || kind === "project-note") {
     const currentPosition = canvas.positions[objectId] ?? { x: 0, y: 0 };
     return {
       ...canvas,
@@ -338,6 +350,7 @@ export function deleteCanvasObject(
   if (kind === "item" || kind === "document") {
     return removeItemFromCanvas(canvas, objectId);
   }
+  if (kind === "project-note") return removeNoteFromCanvas(canvas, objectId);
   if (kind === "note") return deleteCanvasNote(canvas, objectId);
   if (kind === "text") return deleteCanvasTextElement(canvas, objectId);
   if (kind === "link") return deleteCanvasLink(canvas, objectId);

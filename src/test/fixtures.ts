@@ -2,6 +2,7 @@ import type {
   Canvas,
   FolioData,
   FolioItem,
+  Note,
   Project,
   ReconciliationResult,
 } from "../types";
@@ -62,6 +63,18 @@ export function makeProject(
   };
 }
 
+export function makeNote(id: string, overrides: Partial<Note> = {}): Note {
+  return {
+    id,
+    title: id,
+    path: `projects/studio-archive/notes/${id}.md`,
+    projectId: "project-1",
+    createdAt: "2026-06-15T08:00:00.000Z",
+    updatedAt: "2026-06-15T09:00:00.000Z",
+    ...overrides,
+  };
+}
+
 export function makeData(overrides: Partial<FolioData> = {}): FolioData {
   const baseData: FolioData = {
     version: 1,
@@ -94,6 +107,7 @@ export function makeData(overrides: Partial<FolioData> = {}): FolioData {
       }),
     ],
     projects: [makeProject("project-1")],
+    notes: [],
   };
 
   const data = {

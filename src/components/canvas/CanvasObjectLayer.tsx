@@ -8,6 +8,7 @@ import type {
   CanvasTextElement,
   CanvasTextSize,
   FolioItem,
+  Note,
   ThumbnailUrls,
 } from "../../types";
 import type { ItemDetailsOpenHandler } from "../folio/types";
@@ -15,6 +16,7 @@ import {
   CanvasItemCard,
   CanvasLinkCard,
   CanvasNoteCard,
+  CanvasProjectNoteCard,
   CanvasSectionFrame,
   CanvasTextCard,
 } from "./CanvasCards";
@@ -55,6 +57,7 @@ type SelectObjectHandler = (
 
 type CanvasObjectLayerProps = {
   activeItems: FolioItem[];
+  activeProjectNotes?: Note[];
   activeLinks?: CanvasLink[];
   activeNotes: CanvasNote[];
   activeSections?: CanvasSection[];
@@ -65,6 +68,7 @@ type CanvasObjectLayerProps = {
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
   positionForLink: (link: CanvasLink) => CanvasObjectGeometry;
   positionForItem: (item: FolioItem, index: number) => CanvasObjectGeometry;
+  positionForProjectNote?: (note: Note, index: number) => CanvasObjectGeometry;
   positionForNote: (note: CanvasNote) => CanvasObjectGeometry;
   positionForSection: (section: CanvasSection) => CanvasObjectGeometry;
   positionForText: (textElement: CanvasTextElement) => CanvasObjectGeometry;
@@ -73,7 +77,9 @@ type CanvasObjectLayerProps = {
   onDeleteSection: (sectionId: string) => void;
   onDeleteTextElement: (textElementId: string) => void;
   onOpenItem: ItemDetailsOpenHandler;
+  onOpenProjectNote?: (noteId: string) => void;
   onRemoveItem: (itemId: string) => void;
+  onRemoveProjectNote?: (noteId: string) => void;
   onSelectObject?: SelectObjectHandler;
   onStartConnectorDrag: StartConnectorDragHandler;
   onStartDrag: StartObjectDragHandler;
@@ -98,6 +104,7 @@ type CanvasObjectLayerProps = {
 
 export function CanvasObjectLayer({
   activeItems,
+  activeProjectNotes = [],
   activeLinks = [],
   activeNotes,
   activeSections = [],
@@ -108,6 +115,7 @@ export function CanvasObjectLayer({
   setThumbUrls,
   positionForLink,
   positionForItem,
+  positionForProjectNote,
   positionForNote,
   positionForSection,
   positionForText,
@@ -116,7 +124,9 @@ export function CanvasObjectLayer({
   onDeleteSection,
   onDeleteTextElement,
   onOpenItem,
+  onOpenProjectNote,
   onRemoveItem,
+  onRemoveProjectNote,
   onSelectObject,
   onStartConnectorDrag,
   onStartDrag,
@@ -215,6 +225,40 @@ export function CanvasObjectLayer({
             }
             onClickCapture={(event) =>
               onSuppressClickAfterDrag(event, "link", link.id)
+            }
+          />
+        );
+      })}
+
+      {activeProjectNotes.map((note, index) => {
+        const position = positionForProjectNote
+          ? positionForProjectNote(note, index)
+          : { x: 0, y: 0 };
+        return (
+          <CanvasProjectNoteCard
+            key={note.id}
+            note={note}
+            position={position}
+            isMatched={matchedObjectKeys.has(
+              objectKey("project-note", note.id),
+            )}
+            isSelected={selectedObjectKeys.has(
+              objectKey("project-note", note.id),
+            )}
+            onOpen={(noteId) => onOpenProjectNote?.(noteId)}
+            onRemove={(noteId) => onRemoveProjectNote?.(noteId)}
+            onConnectorPointerDown={(event, side) =>
+              onStartConnectorDrag(event, note.id, side)
+            }
+            onPointerDown={(event) => {
+              onSelectObject?.(event, "project-note", note.id);
+              onStartDrag(event, "project-note", note.id, position);
+            }}
+            onResizePointerDown={(event) =>
+              onStartResize(event, "project-note", note.id, position)
+            }
+            onClickCapture={(event) =>
+              onSuppressClickAfterDrag(event, "project-note", note.id)
             }
           />
         );

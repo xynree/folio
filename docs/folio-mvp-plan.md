@@ -227,8 +227,8 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 
 - [x] Boards view opens to either a board browser grid or a focused active board
 - [x] Board browser cards show colored dot, board name, item count, and member thumbnail preview grid (max 8)
-- [x] Board browser contains the New board action; focused boards have a back button that returns to the browser
-- [x] Focused board header shows Add note, Import images, drawing/text tools, folder, undo, and Edit actions in one row
+- [x] Board browser empty state contains the New board action; focused boards have a back button that returns to the browser and a New board action in the toolbar
+- [x] Focused board header shows Add note, Import images, drawing/text tools, New board, undo, and Edit actions in one row
 - [x] Board edit popover supports rename, color picker, save, and delete board
 - [x] Canvas dots shown under strip/grid thumbnails (one smaller colored dot per board membership)
 - [x] Board chips shown in detail modal
@@ -240,7 +240,7 @@ Run once on every app launch, after `loadFolioData()`, before the UI renders. Di
 ### 3.1 Canvas view entry
 
 - [x] Canvas boards live in the project sidebar's Boards view, not in a persistent side dock beside the archive
-- [x] Board browser shows all boards and creates new boards
+- [x] Board browser shows all boards; new boards are created from the focused board toolbar or the browser's empty state
 - [x] Opening a board loads its items, positions, notes, text, strokes, and edges exactly as left
 - [x] Header shows board name, colored dot, created/saved timestamps, and board actions
 - [x] Switching boards loads persisted state from `canvases.json`

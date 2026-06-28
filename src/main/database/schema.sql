@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS canvases (
   createdAt           TEXT,
   updatedAt           TEXT,
   itemIds             TEXT NOT NULL DEFAULT '[]',
+  noteIds             TEXT NOT NULL DEFAULT '[]',
   positions           TEXT NOT NULL DEFAULT '{}',
   notes               TEXT NOT NULL DEFAULT '[]',
   edges               TEXT NOT NULL DEFAULT '[]',
@@ -71,4 +72,13 @@ CREATE TABLE IF NOT EXISTS canvases (
   links               TEXT,
   viewport            TEXT,
   createdFromTemplate TEXT
+);
+
+CREATE TABLE IF NOT EXISTS notes (
+  id        TEXT PRIMARY KEY,
+  title     TEXT NOT NULL DEFAULT '',
+  path      TEXT NOT NULL,
+  projectId TEXT NOT NULL,
+  createdAt TEXT NOT NULL,
+  updatedAt TEXT NOT NULL
 );

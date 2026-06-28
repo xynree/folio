@@ -6,6 +6,7 @@ export const EMPTY_DATA = {
   canvases: [],
   tags: [],
   projects: [],
+  notes: [],
 };
 
 export const TYPE_LABELS: Record<ItemType, string> = {

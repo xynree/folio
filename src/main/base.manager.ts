@@ -15,6 +15,7 @@ import {
   FolioData,
   FolioItem,
   ImportSource,
+  Note,
   Project,
   ProjectStatus,
   ReconciliationFile,
@@ -28,6 +29,7 @@ import {
 import { ArchiveManager } from "./archive.manager";
 import { BackupManager } from "./backup.manager";
 import { fetchLinkMetadata } from "./linkMetadata";
+import { deriveNoteTitle } from "./note.helpers";
 import { SettingsStore } from "./settings.store";
 import { StorageLocationManager } from "./storageLocation.manager";
 import {
@@ -55,6 +57,7 @@ const PHOTOS_PICKER_HELPER_NAME = "FolioPhotosPicker";
 const IMAGES_DIR_NAME = "images";
 const DOCUMENTS_DIR_NAME = "documents";
 const WORKS_DIR_NAME = "works";
+const NOTES_DIR_NAME = "notes";
 const LEGACY_REFERENCES_DIR_NAME = "references";
 const PROJECT_MEDIA_DIR_NAMES = [IMAGES_DIR_NAME, DOCUMENTS_DIR_NAME] as const;
 
@@ -96,6 +99,10 @@ export interface FolioManagerInterface {
     workItemIds: string[],
   ): Promise<FolioData>;
   deleteItems(itemIds: string[]): Promise<FolioData>;
+  createNote(projectId: string, title: string): Promise<Note>;
+  readNoteContent(noteId: string): Promise<string>;
+  writeNoteContent(noteId: string, content: string): Promise<Note>;
+  deleteNote(noteId: string): Promise<FolioData>;
   getBackupStatus(): Promise<BackupStatus>;
   backupToICloud(): Promise<BackupResult>;
   restoreFromICloud(): Promise<RestoreResult>;
@@ -115,6 +122,7 @@ export class FolioManager implements FolioManagerInterface {
   private canvases: Canvas[] = [];
   private tags: Tag[] = [];
   private projects: Project[] = [];
+  private notes: Note[] = [];
   private reconciliationResult: ReconciliationResult =
     emptyReconciliationResult();
   private pendingWatcherAdds = new Set<string>();
@@ -257,6 +265,23 @@ export class FolioManager implements FolioManagerInterface {
         return items;
       },
     );
+
+    ipcMain.handle(
+      "folio:create-note",
+      (_: unknown, projectId: string, title: string) =>
+        this.createNote(projectId, title),
+    );
+    ipcMain.handle("folio:read-note-content", (_: unknown, noteId: string) =>
+      this.readNoteContent(noteId),
+    );
+    ipcMain.handle(
+      "folio:write-note-content",
+      (_: unknown, noteId: string, content: string) =>
+        this.writeNoteContent(noteId, content),
+    );
+    ipcMain.handle("folio:delete-note", (_: unknown, noteId: string) =>
+      this.deleteNote(noteId),
+    );
   }
 
   registerProtocol() {
@@ -348,6 +373,7 @@ export class FolioManager implements FolioManagerInterface {
     this.tags = stored.tags;
     this.canvases = stored.canvases;
     this.projects = stored.projects;
+    this.notes = stored.notes ?? [];
 
     await this.ensureMediaDirectories();
     const repairedLegacyOutputStages = repairLegacyOutputStages(
@@ -402,6 +428,7 @@ export class FolioManager implements FolioManagerInterface {
       tags: this.tags,
       canvases: this.canvases,
       projects: this.projects,
+      notes: this.notes,
     };
   }
 
@@ -422,6 +449,7 @@ export class FolioManager implements FolioManagerInterface {
       ...project,
       reviews: project.reviews ?? [],
     }));
+    this.notes = data.notes ?? this.notes;
 
     await this.ensureMediaDirectories();
     await Promise.all(
@@ -439,6 +467,7 @@ export class FolioManager implements FolioManagerInterface {
       tags: this.tags,
       canvases: this.canvases,
       projects: this.projects,
+      notes: this.notes,
     });
   }
 
@@ -688,6 +717,7 @@ export class FolioManager implements FolioManagerInterface {
         imageIds: project.imageIds.filter((id) => !ids.has(id)),
         workItemIds: project.workItemIds.filter((id) => !ids.has(id)),
       })),
+      notes: this.notes,
     };
 
     await this.saveFolioData(nextData);
@@ -1315,6 +1345,7 @@ export class FolioManager implements FolioManagerInterface {
       tags: this.tags,
       canvases: this.canvases,
       projects: this.projects,
+      notes: this.notes,
     };
   }
 
@@ -1375,6 +1406,7 @@ export class FolioManager implements FolioManagerInterface {
       fs.mkdir(path.join(projectRoot, IMAGES_DIR_NAME), { recursive: true }),
       fs.mkdir(path.join(projectRoot, DOCUMENTS_DIR_NAME), { recursive: true }),
       fs.mkdir(path.join(projectRoot, WORKS_DIR_NAME), { recursive: true }),
+      fs.mkdir(path.join(projectRoot, NOTES_DIR_NAME), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "boards"), { recursive: true }),
       fs.mkdir(path.join(projectRoot, "reviews"), { recursive: true }),
       ...project.boardIds.map((boardId) =>
@@ -1397,6 +1429,99 @@ export class FolioManager implements FolioManagerInterface {
         ),
       ),
     );
+  }
+
+  /**
+   * Returns the absolute path of a note's Markdown file, guarding against any
+   * path that would resolve outside the Folio root.
+   */
+  private resolveNoteAbsolutePath(note: Note): string {
+    const absolutePath = path.resolve(this.folioRoot, note.path);
+    if (!isPathWithinRoot(absolutePath, this.folioRoot)) {
+      throw new Error("Note path escapes the Folio root.");
+    }
+    return absolutePath;
+  }
+
+  /** Creates a new empty Markdown note in the project's notes folder. */
+  async createNote(projectId: string, title: string): Promise<Note> {
+    const project = this.getProjectOrThrow(projectId);
+    await this.ensureProjectDirectories(project);
+
+    const now = new Date().toISOString();
+    const id = nanoid();
+    const trimmedTitle = title.trim() || "Untitled note";
+    const fileBaseName = sanitizeFileBaseName(trimmedTitle) || "note";
+    const relativePath = path.join(
+      project.folderPath,
+      NOTES_DIR_NAME,
+      `${fileBaseName}-${id}.md`,
+    );
+    const note: Note = {
+      id,
+      title: trimmedTitle,
+      path: relativePath,
+      projectId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const absolutePath = this.resolveNoteAbsolutePath(note);
+    await fs.writeFile(absolutePath, `# ${trimmedTitle}\n\n`);
+
+    this.notes = [note, ...this.notes];
+    this.db.upsertNote(note);
+
+    return note;
+  }
+
+  /** Reads a note's Markdown content from disk. Returns "" when the file is missing. */
+  async readNoteContent(noteId: string): Promise<string> {
+    const note = this.notes.find((candidate) => candidate.id === noteId);
+    if (!note) throw new Error(`Note ${noteId} was not found.`);
+
+    try {
+      return await fs.readFile(this.resolveNoteAbsolutePath(note), "utf-8");
+    } catch {
+      return "";
+    }
+  }
+
+  /** Writes a note's Markdown content to disk, refreshing its title and timestamp. */
+  async writeNoteContent(noteId: string, content: string): Promise<Note> {
+    const note = this.notes.find((candidate) => candidate.id === noteId);
+    if (!note) throw new Error(`Note ${noteId} was not found.`);
+
+    const absolutePath = this.resolveNoteAbsolutePath(note);
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.writeFile(absolutePath, content);
+
+    const updatedNote: Note = {
+      ...note,
+      title: deriveNoteTitle(content, note.title),
+      updatedAt: new Date().toISOString(),
+    };
+    this.notes = this.notes.map((candidate) =>
+      candidate.id === noteId ? updatedNote : candidate,
+    );
+    this.db.upsertNote(updatedNote);
+
+    return updatedNote;
+  }
+
+  /** Deletes a note's file from disk and removes its metadata. */
+  async deleteNote(noteId: string): Promise<FolioData> {
+    const note = this.notes.find((candidate) => candidate.id === noteId);
+    if (note) {
+      try {
+        await fs.rm(this.resolveNoteAbsolutePath(note), { force: true });
+      } catch (error) {
+        console.error("Failed to remove note file", error);
+      }
+      this.notes = this.notes.filter((candidate) => candidate.id !== noteId);
+      this.db.deleteNote(noteId);
+    }
+    return this.currentData();
   }
 
   private async syncProjectWorksFolder(project: Project): Promise<void> {

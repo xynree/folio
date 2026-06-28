@@ -9,6 +9,7 @@ import type {
   CanvasTextElement,
   FolioData,
   FolioItem,
+  Note,
   ThumbnailUrls,
 } from "../../types";
 import {
@@ -54,8 +55,10 @@ import {
   positionForCanvasItem,
   positionForCanvasLink,
   positionForCanvasNote,
+  positionForCanvasProjectNote,
   positionForCanvasSection,
   positionForCanvasText,
+  projectNotesForCanvas,
 } from "./canvasLayout";
 import type { CanvasDragPreview } from "./canvasLayout";
 import {
@@ -101,6 +104,7 @@ export function CanvasView({
   onBoardBrowserOpenChange,
   setActiveCanvasId,
   onOpenItem,
+  onOpenNote,
   onCreateBoard,
   thumbUrls,
   setThumbUrls,
@@ -116,6 +120,7 @@ export function CanvasView({
   onBoardBrowserOpenChange?: (open: boolean) => void;
   setActiveCanvasId: React.Dispatch<React.SetStateAction<string | null>>;
   onOpenItem: ItemDetailsOpenHandler;
+  onOpenNote?: (noteId: string) => void;
   onCreateBoard: (templateId?: CanvasTemplateId) => void;
   thumbUrls: ThumbnailUrls;
   setThumbUrls: React.Dispatch<React.SetStateAction<ThumbnailUrls>>;
@@ -310,6 +315,14 @@ export function CanvasView({
     () => itemsForCanvas(activeCanvas, itemsById),
     [activeCanvas, itemsById],
   );
+  const notesById = useMemo(
+    () => new Map(data.notes.map((note) => [note.id, note])),
+    [data.notes],
+  );
+  const activeProjectNotes = useMemo(
+    () => projectNotesForCanvas(activeCanvas, notesById),
+    [activeCanvas, notesById],
+  );
   const projectImages = useMemo(() => {
     const items = activeProject
       ? data.items.filter((item) => projectImageIdSet.has(item.id))
@@ -384,6 +397,7 @@ export function CanvasView({
   const {
     addNote,
     removeItem,
+    removeProjectNote,
     updateNote,
     updateNoteSize,
     updateLink,
@@ -604,6 +618,18 @@ export function CanvasView({
     [dragPreview],
   );
 
+  const positionForProjectNote = useCallback(
+    (note: Note, index: number): CanvasObjectGeometry => {
+      return positionForCanvasProjectNote(
+        note.id,
+        index,
+        activeCanvas,
+        dragPreview,
+      );
+    },
+    [activeCanvas, dragPreview],
+  );
+
   const positionForLink = useCallback(
     (link: CanvasLink): CanvasObjectGeometry => {
       return positionForCanvasLink(link, dragPreview);
@@ -630,6 +656,7 @@ export function CanvasView({
       buildCanvasObjectLayouts({
         activeCanvas,
         activeItems,
+        activeProjectNotes,
         activeLinks,
         activeNotes,
         activeSections,
@@ -639,6 +666,7 @@ export function CanvasView({
     [
       activeCanvas,
       activeItems,
+      activeProjectNotes,
       activeLinks,
       activeNotes,
       activeSections,
@@ -657,6 +685,7 @@ export function CanvasView({
       canvasObjectViews({
         canvas: activeCanvas,
         items: activeItems,
+        projectNotes: activeProjectNotes,
         links: activeLinks,
         notes: activeNotes,
         sections: activeSections,
@@ -666,6 +695,7 @@ export function CanvasView({
     [
       activeCanvas,
       activeItems,
+      activeProjectNotes,
       activeLinks,
       activeNotes,
       activeSections,
@@ -1206,16 +1236,6 @@ export function CanvasView({
     [activeCanvas, activeProjectId, data, saveData],
   );
 
-  const openBoardFolder = useCallback(() => {
-    if (!activeCanvas) return;
-    const boardFolder = activeProject
-      ? `${activeProject.folderPath}/boards/${activeCanvas.id}`
-      : "projects";
-    void window.folio.openInFinder(boardFolder).catch((error) => {
-      console.error(error);
-    });
-  }, [activeCanvas, activeProject]);
-
   const handleBoardDrop = useCallback(
     async (event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -1488,10 +1508,10 @@ export function CanvasView({
             onBoardColorDraftChange={setBoardColorDraft}
             onBoardSearchQueryChange={setBoardSearchQuery}
             onBoardTitleDraftChange={setBoardTitleDraft}
+            onCreateBoard={() => createBoardFromBrowser()}
             onDeleteBoard={deleteBoard}
             onFitContent={fitCanvasContent}
             onImportImages={importToBoard}
-            onOpenBoardFolder={openBoardFolder}
             onResetZoom={resetZoom}
             onSaveBoardSettings={saveBoardSettingsForCanvas}
             onToggleBoardTools={() => setBoardToolsOpen((current) => !current)}
@@ -1673,6 +1693,7 @@ export function CanvasView({
 
           <CanvasObjectLayer
             activeItems={activeItems}
+            activeProjectNotes={activeProjectNotes}
             activeLinks={activeLinks}
             activeNotes={activeNotes}
             activeSections={activeSections}
@@ -1683,6 +1704,7 @@ export function CanvasView({
             setThumbUrls={setThumbUrls}
             positionForLink={positionForLink}
             positionForItem={positionForItem}
+            positionForProjectNote={positionForProjectNote}
             positionForNote={positionForNote}
             positionForSection={positionForSection}
             positionForText={positionForText}
@@ -1691,7 +1713,9 @@ export function CanvasView({
             onDeleteSection={deleteSection}
             onDeleteTextElement={deleteTextElement}
             onOpenItem={onOpenItem}
+            onOpenProjectNote={onOpenNote}
             onRemoveItem={removeItem}
+            onRemoveProjectNote={removeProjectNote}
             onSelectObject={selectCanvasObject}
             onStartConnectorDrag={startConnectorDrag}
             onStartDrag={startDrag}

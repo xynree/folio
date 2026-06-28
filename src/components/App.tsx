@@ -11,6 +11,7 @@ import {
   Brush,
   ChevronDown,
   ChevronUp,
+  FileText,
   FolderOpen,
   Grid3X3,
   Images,
@@ -39,11 +40,7 @@ import {
   type CanvasTemplateId,
 } from "./canvas/canvasTemplates";
 import { DetailDrawer } from "./details/DetailDrawer";
-import {
-  EMPTY_DATA,
-  IMAGE_FILE_PATTERN,
-  ITEM_DRAG_MIME,
-} from "./folio/constants";
+import { EMPTY_DATA, ITEM_DRAG_MIME } from "./folio/constants";
 import type {
   ArchiveViewMode,
   DataUpdater,
@@ -55,11 +52,13 @@ import type {
 import {
   chooseAndImportItems,
   clipboardImageExtension,
+  getClipboardImageFiles,
   getImportFailureMessage,
 } from "./folio/importing";
 import {
   addItemToCanvas,
   addItemsToCanvas,
+  addNoteToCanvas,
   assignBoardToProject,
   createCanvas,
   createId,
@@ -72,9 +71,11 @@ import {
 } from "./folio/model";
 import { ReconciliationNotice } from "./layout/ReconciliationNotice";
 import { SelectionBar } from "./layout/SelectionBar";
+import { ProjectNotesView } from "./projects/ProjectNotesView";
 import { ProjectReviewEditorPage } from "./projects/ProjectReviewEditorPage";
 import { ProjectReviewView } from "./projects/ProjectReviewView";
 import { ProjectsView } from "./projects/ProjectsView";
+import { useProjectNotes } from "./projects/useProjectNotes";
 import { useProjectReviews } from "./projects/useProjectReviews";
 import { ButtonIcon } from "./shared/ButtonIcon";
 import { useTagsSidebarResize } from "./useTagsSidebarResize";
@@ -82,7 +83,7 @@ import { useTagsSidebarResize } from "./useTagsSidebarResize";
 const ARCHIVE_UI_SCALE_MIN = 50;
 const ARCHIVE_UI_SCALE_MAX = 200;
 const ARCHIVE_UI_SCALE_STEP = 5;
-type ProjectSurface = "images" | "works" | "boards" | "review";
+type ProjectSurface = "images" | "works" | "boards" | "review" | "notes";
 
 const VIEW_STATE_STORAGE_KEY = "folio:view-state";
 
@@ -91,6 +92,7 @@ type PersistedViewState = {
   activeProjectId: string | null;
   projectSurface: ProjectSurface;
   activeReviewId: string | null;
+  activeNoteId: string | null;
   activeCanvasId: string | null;
   boardBrowserOpen: boolean;
 };
@@ -140,6 +142,9 @@ export function AppShell() {
   );
   const [activeReviewId, setActiveReviewId] = useState<string | null>(
     persistedView.activeReviewId ?? null,
+  );
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(
+    persistedView.activeNoteId ?? null,
   );
   const [activeCanvasId, setActiveCanvasId] = useState<string | null>(
     persistedView.activeCanvasId ?? null,
@@ -267,6 +272,7 @@ export function AppShell() {
             setActiveProjectId(null);
             setProjectSurface("images");
             setActiveReviewId(null);
+            setActiveNoteId(null);
             setActiveCanvasId(null);
             restoredBoardBrowserOpenRef.current = null;
           } else {
@@ -277,6 +283,16 @@ export function AppShell() {
               )
             ) {
               setActiveReviewId(null);
+            }
+            if (
+              restored.activeNoteId &&
+              !(folioData.notes ?? []).some(
+                (note) =>
+                  note.id === restored.activeNoteId &&
+                  note.projectId === project.id,
+              )
+            ) {
+              setActiveNoteId(null);
             }
             if (
               restored.activeCanvasId &&
@@ -313,6 +329,7 @@ export function AppShell() {
       activeProjectId,
       projectSurface,
       activeReviewId,
+      activeNoteId,
       activeCanvasId,
       boardBrowserOpen: canvasBrowserOpen,
     };
@@ -326,6 +343,7 @@ export function AppShell() {
     activeProjectId,
     projectSurface,
     activeReviewId,
+    activeNoteId,
     activeCanvasId,
     canvasBrowserOpen,
   ]);
@@ -348,6 +366,16 @@ export function AppShell() {
       activeProject?.reviews.find((review) => review.id === activeReviewId) ??
       null,
     [activeProject, activeReviewId],
+  );
+
+  const projectNotes = useMemo(
+    () =>
+      activeProject
+        ? (data.notes ?? [])
+            .filter((note) => note.projectId === activeProject.id)
+            .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        : [],
+    [activeProject, data.notes],
   );
 
   const projectImageIdSet = useMemo(
@@ -470,6 +498,7 @@ export function AppShell() {
       setActiveProjectId(project.id);
       setProjectSurface("images");
       setActiveReviewId(null);
+      setActiveNoteId(null);
       setActiveCanvasId(project.boardIds[0] ?? null);
       clearSelection();
     },
@@ -480,6 +509,7 @@ export function AppShell() {
     setActiveProjectId(null);
     setProjectSurface("images");
     setActiveReviewId(null);
+    setActiveNoteId(null);
     setActiveCanvasId(null);
     setDetailItemId(null);
     clearSelection();
@@ -498,6 +528,16 @@ export function AppShell() {
       commitData,
       activeReviewId,
       setActiveReviewId,
+    });
+
+  const { createProjectNote, saveNoteContent, deleteProjectNote } =
+    useProjectNotes({
+      activeProjectId,
+      putData,
+      dataRef,
+      activeNoteId,
+      setActiveNoteId,
+      onToast: setToast,
     });
 
   const createProjectFromHome = useCallback(
@@ -670,16 +710,17 @@ export function AppShell() {
   const handlePaste = useCallback(
     async (event: ClipboardEvent) => {
       if (!activeProjectId || !event.clipboardData) return;
+      if (projectSurface !== "images" && projectSurface !== "works") return;
 
-      const files = Array.from(event.clipboardData.files).filter((file) => {
-        const filePath = window.folio.getPathForFile(file);
-        return IMAGE_FILE_PATTERN.test(filePath || file.name) ||
-          file.type.startsWith("image/");
-      });
+      const files = getClipboardImageFiles(
+        event.clipboardData,
+        window.folio.getPathForFile,
+      );
       if (!files.length) return;
 
       const filePaths: string[] = [];
       const sources: ImportSource[] = [];
+      event.preventDefault();
 
       for (const file of files) {
         const filePath = window.folio.getPathForFile(file);
@@ -700,14 +741,20 @@ export function AppShell() {
 
       if (!filePaths.length && !sources.length) return;
 
-      event.preventDefault();
       setBusy(true);
       try {
-        const importedFromPaths = filePaths.length && window.folio.copyToProject
+        if (filePaths.length && !window.folio.copyToProject) {
+          throw new Error("Project file import is not available.");
+        }
+        if (sources.length && !window.folio.importSourcesToProject) {
+          throw new Error("Clipboard image import is not available.");
+        }
+
+        const importedFromPaths = filePaths.length
           ? await window.folio.copyToProject(activeProjectId, filePaths)
           : [];
         const importedFromSources =
-          sources.length && window.folio.importSourcesToProject
+          sources.length
             ? await window.folio.importSourcesToProject(activeProjectId, sources)
             : [];
         const imported = [...importedFromPaths, ...importedFromSources];
@@ -717,12 +764,35 @@ export function AppShell() {
           return;
         }
 
+        const markAsWorks = projectSurface === "works";
+        const nextData = mergeImportedItemsIntoProject(
+          dataRef.current,
+          imported,
+          activeProjectId,
+          undefined,
+          markAsWorks,
+        );
+        const nextProject = nextData.projects.find(
+          (project) => project.id === activeProjectId,
+        );
+        const syncedData =
+          markAsWorks && nextProject
+            ? await window.folio.setProjectWorkItems(
+                activeProjectId,
+                nextProject.workItemIds,
+              )
+            : nextData;
+
         putData(
-          mergeImportedItemsIntoProject(
-            dataRef.current,
-            imported,
-            activeProjectId,
-          ),
+          markAsWorks
+            ? mergeImportedItemsIntoProject(
+                syncedData,
+                imported,
+                activeProjectId,
+                undefined,
+                true,
+              )
+            : syncedData,
         );
         setToast(`${formatCount(imported.length, "item")} pasted`);
       } catch (error) {
@@ -732,7 +802,7 @@ export function AppShell() {
         setBusy(false);
       }
     },
-    [activeProjectId, putData],
+    [activeProjectId, projectSurface, putData],
   );
 
   useEffect(() => {
@@ -837,6 +907,61 @@ export function AppShell() {
           canvases: canvases.map((canvas) =>
             canvas.id === targetCanvasId
               ? markCanvasSaved(addItemToCanvas(canvas, itemId), savedAt)
+              : canvas,
+          ),
+        };
+      }, createdCanvas ? "Board created" : "Added to board");
+
+      if (targetCanvasId) {
+        setActiveCanvasId(targetCanvasId);
+        setProjectSurface("boards");
+        setCanvasDetailRequestId((current) => current + 1);
+      }
+    },
+    [activeCanvasId, activeProjectId, commitData],
+  );
+
+  const addNoteToActiveCanvas = useCallback(
+    (noteId: string) => {
+      let targetCanvasId = activeCanvasId;
+      let createdCanvas: Canvas | null = null;
+
+      commitData((current) => {
+        const savedAt = new Date().toISOString();
+        let canvases = [...current.canvases];
+        const targetCanvas = targetCanvasId
+          ? canvases.find((canvas) => canvas.id === targetCanvasId)
+          : null;
+        const activeProject = activeProjectId
+          ? current.projects.find((project) => project.id === activeProjectId)
+          : null;
+        const targetBelongsToActiveProject =
+          !activeProjectId ||
+          targetCanvas?.projectId === activeProjectId ||
+          Boolean(activeProject?.boardIds.includes(targetCanvasId ?? ""));
+
+        if (!targetCanvas || !targetBelongsToActiveProject) {
+          createdCanvas = {
+            ...createCanvas(canvases.length),
+            projectId: activeProjectId ?? undefined,
+          };
+          targetCanvasId = createdCanvas.id;
+          canvases = [createdCanvas, ...canvases];
+        }
+
+        return {
+          ...current,
+          projects: createdCanvas
+            ? assignBoardToProject(
+                current.projects,
+                activeProjectId,
+                createdCanvas.id,
+                savedAt,
+              )
+            : current.projects,
+          canvases: canvases.map((canvas) =>
+            canvas.id === targetCanvasId
+              ? markCanvasSaved(addNoteToCanvas(canvas, noteId), savedAt)
               : canvas,
           ),
         };
@@ -1155,6 +1280,19 @@ export function AppShell() {
                   <ButtonIcon icon={NotebookPen} size={15} />
                   <span>Review</span>
                 </button>
+                <button
+                  className={projectSurface === "notes" ? "active" : ""}
+                  type="button"
+                  aria-pressed={projectSurface === "notes"}
+                  onClick={() => {
+                    setProjectSurface("notes");
+                    setActiveReviewId(null);
+                    clearSelection();
+                  }}
+                >
+                  <ButtonIcon icon={FileText} size={15} />
+                  <span>Notes</span>
+                </button>
               </nav>
             </section>
 
@@ -1199,6 +1337,10 @@ export function AppShell() {
                 onBoardBrowserOpenChange={handleCanvasBrowserOpenChange}
                 setActiveCanvasId={setActiveCanvasId}
                 onOpenItem={openItemDetails}
+                onOpenNote={(noteId) => {
+                  setProjectSurface("notes");
+                  setActiveNoteId(noteId);
+                }}
                 onCreateBoard={createBoard}
                 thumbUrls={thumbUrls}
                 setThumbUrls={setThumbUrls}
@@ -1207,6 +1349,20 @@ export function AppShell() {
                 clearDragState={() => {
                   dragDepth.current = 0;
                   setDragging(false);
+                }}
+              />
+            ) : projectSurface === "notes" ? (
+              <ProjectNotesView
+                notes={projectNotes}
+                activeNoteId={activeNoteId}
+                onCreateNote={() => {
+                  void createProjectNote();
+                }}
+                onOpenNote={setActiveNoteId}
+                onSaveNoteContent={saveNoteContent}
+                onAddNoteToBoard={addNoteToActiveCanvas}
+                onDeleteNote={(noteId) => {
+                  void deleteProjectNote(noteId);
                 }}
               />
             ) : (

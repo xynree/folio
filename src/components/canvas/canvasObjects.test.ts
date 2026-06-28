@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { makeCanvas, makeItem } from "../../test/fixtures";
+import { makeCanvas, makeItem, makeNote } from "../../test/fixtures";
 import { canvasObjectViews } from "./canvasObjects";
 
 describe("canvas object view helpers", () => {
   it("builds renderable object view models in layer order", () => {
     const canvas = makeCanvas("board-1", {
       itemIds: ["image", "doc"],
-      positions: { image: { x: 10, y: 20 }, doc: { x: 30, y: 40 } },
+      noteIds: ["project-note-1"],
+      positions: {
+        image: { x: 10, y: 20 },
+        doc: { x: 30, y: 40 },
+        "project-note-1": { x: 200, y: 210 },
+      },
     });
     const views = canvasObjectViews({
       canvas,
@@ -18,6 +23,7 @@ describe("canvas object view helpers", () => {
           path: "projects/studio-archive/documents/brief.md",
         }),
       ],
+      projectNotes: [makeNote("project-note-1", { title: "Research log" })],
       links: [
         {
           id: "link-1",
@@ -39,6 +45,7 @@ describe("canvas object view helpers", () => {
       ["image", "item", "Image"],
       ["doc", "document", "Brief"],
       ["link-1", "link", "Example"],
+      ["project-note-1", "project-note", "Research log"],
       ["note-1", "note", "Note"],
       ["text-1", "text", "Caption"],
     ]);

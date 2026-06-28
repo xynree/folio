@@ -6,6 +6,7 @@ import type {
   FolioItem,
   ImportSource,
   LinkMetadata,
+  Note,
   ProjectStatus,
   ReconciliationResult,
   RestoreResult,
@@ -56,6 +57,18 @@ const folioApi = {
 
   deleteItems: (itemIds: string[]): Promise<FolioData> =>
     ipcRenderer.invoke("folio:delete-items", itemIds),
+
+  createNote: (projectId: string, title: string): Promise<Note> =>
+    ipcRenderer.invoke("folio:create-note", projectId, title),
+
+  readNoteContent: (noteId: string): Promise<string> =>
+    ipcRenderer.invoke("folio:read-note-content", noteId),
+
+  writeNoteContent: (noteId: string, content: string): Promise<Note> =>
+    ipcRenderer.invoke("folio:write-note-content", noteId, content),
+
+  deleteNote: (noteId: string): Promise<FolioData> =>
+    ipcRenderer.invoke("folio:delete-note", noteId),
 
   openFileDialog: (): Promise<string[]> =>
     ipcRenderer.invoke("folio:open-file-dialog"),

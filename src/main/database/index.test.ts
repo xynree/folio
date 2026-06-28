@@ -3,7 +3,13 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FolioDB } from ".";
-import { makeCanvas, makeData, makeItem, makeProject } from "../../test/fixtures";
+import {
+  makeCanvas,
+  makeData,
+  makeItem,
+  makeNote,
+  makeProject,
+} from "../../test/fixtures";
 
 describe("FolioDB", () => {
   let db: FolioDB;
@@ -167,6 +173,23 @@ describe("FolioDB", () => {
     expect(canvases[0].edges[0].fromId).toBe("item-1");
   });
 
+  it("round-trips project note references on a canvas", () => {
+    const canvas = makeCanvas("c1", {
+      title: "Notes board",
+      noteIds: ["note-1", "note-2"],
+      positions: {
+        "note-1": { x: 80, y: 90 },
+        "note-2": { x: 270, y: 90 },
+      },
+    });
+
+    db.upsertCanvas(canvas);
+
+    const [stored] = db.getCanvases();
+    expect(stored.noteIds).toEqual(["note-1", "note-2"]);
+    expect(stored.positions["note-1"]).toMatchObject({ x: 80, y: 90 });
+  });
+
   // -------------------------------------------------------------------------
   // setFolioData — atomic bulk write
   // -------------------------------------------------------------------------
@@ -214,6 +237,47 @@ describe("FolioDB", () => {
     expect(db.getTags()[0].text).toBe("inspiration");
     expect(db.getProjects()[0].title).toBe("Portfolio");
     expect(db.getCanvases()[0].title).toBe("Vision board");
+  });
+
+  // -------------------------------------------------------------------------
+  // Notes
+  // -------------------------------------------------------------------------
+
+  it("round-trips a note through upsert and getNotes", () => {
+    db.upsertNote(makeNote("note-1", { title: "Ideas", projectId: "proj-1" }));
+
+    const notes = db.getNotes();
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({
+      id: "note-1",
+      title: "Ideas",
+      projectId: "proj-1",
+      path: "projects/studio-archive/notes/note-1.md",
+    });
+  });
+
+  it("setNotes replaces the notes collection and deleteNote removes one", () => {
+    db.setNotes([makeNote("note-1"), makeNote("note-2")]);
+    expect(db.getNotes()).toHaveLength(2);
+
+    db.setNotes([makeNote("note-2", { title: "Kept" })]);
+    const remaining = db.getNotes();
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].title).toBe("Kept");
+
+    db.deleteNote("note-2");
+    expect(db.getNotes()).toHaveLength(0);
+  });
+
+  it("getFolioData and setFolioData include notes", () => {
+    db.setFolioData(
+      makeData({
+        notes: [makeNote("note-1", { title: "Captured" })],
+      }),
+    );
+
+    expect(db.getNotes()).toHaveLength(1);
+    expect(db.getFolioData().notes[0].title).toBe("Captured");
   });
 
   // -------------------------------------------------------------------------

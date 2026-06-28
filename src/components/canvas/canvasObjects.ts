@@ -6,6 +6,7 @@ import type {
   CanvasSection,
   CanvasTextElement,
   FolioItem,
+  Note,
 } from "../../types";
 import { itemDisplayTitle } from "../folio/model";
 import {
@@ -13,6 +14,7 @@ import {
   positionForCanvasItem,
   positionForCanvasLink,
   positionForCanvasNote,
+  positionForCanvasProjectNote,
   positionForCanvasSection,
   positionForCanvasText,
   type CanvasDragPreview,
@@ -31,6 +33,7 @@ export type CanvasObjectView = {
 export function canvasObjectViews({
   canvas,
   items,
+  projectNotes,
   notes,
   texts,
   links,
@@ -39,6 +42,7 @@ export function canvasObjectViews({
 }: {
   canvas: Canvas | null;
   items: FolioItem[];
+  projectNotes: Note[];
   notes: CanvasNote[];
   texts: CanvasTextElement[];
   links: CanvasLink[];
@@ -50,6 +54,15 @@ export function canvasObjectViews({
     kind: canvasKindForItem(item),
     geometry: positionForCanvasItem(item, index, canvas, dragPreview),
     title: itemDisplayTitle(item),
+    connectable: true,
+    selectable: true,
+  }));
+
+  const projectNoteViews = projectNotes.map((note, index) => ({
+    id: note.id,
+    kind: "project-note" as const,
+    geometry: positionForCanvasProjectNote(note.id, index, canvas, dragPreview),
+    title: note.title.trim() || "Note",
     connectable: true,
     selectable: true,
   }));
@@ -94,6 +107,7 @@ export function canvasObjectViews({
     ...sectionViews,
     ...itemViews,
     ...linkViews,
+    ...projectNoteViews,
     ...noteViews,
     ...textViews,
   ];

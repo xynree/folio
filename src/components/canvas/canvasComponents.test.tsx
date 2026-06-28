@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { makeCanvas, makeItem } from "../../test/fixtures";
+import { makeCanvas, makeItem, makeNote } from "../../test/fixtures";
 import type { ThumbnailUrls } from "../../types";
 import { BoardBrowser } from "./BoardBrowser";
 import { BoardEditDialog } from "./BoardEditDialog";
@@ -9,6 +9,7 @@ import {
   CanvasItemCard,
   CanvasLinkCard,
   CanvasNoteCard,
+  CanvasProjectNoteCard,
   CanvasSectionFrame,
   CanvasTextCard,
 } from "./CanvasCards";
@@ -77,7 +78,6 @@ describe("canvas components", () => {
     const onOpenCanvas = vi.fn();
     const onEditCanvas = vi.fn();
     const onDeleteBoardById = vi.fn();
-    const onCreateBoard = vi.fn();
 
     render(
       <BoardBrowser
@@ -97,7 +97,7 @@ describe("canvas components", () => {
         onBoardTileDragOver={vi.fn()}
         onBoardTitleDraftChange={vi.fn()}
         onCloseBrowserEditCanvas={vi.fn()}
-        onCreateBoard={onCreateBoard}
+        onCreateBoard={vi.fn()}
         onDeleteBoardById={onDeleteBoardById}
         onEditCanvas={onEditCanvas}
         onOpenCanvas={onOpenCanvas}
@@ -106,15 +106,11 @@ describe("canvas components", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Template"), {
-      target: { value: "moodboard" },
-    });
-    fireEvent.click(screen.getByText("New board"));
+    expect(screen.queryByText("New board")).toBeNull();
     fireEvent.click(screen.getByLabelText(/Open Board/));
     fireEvent.click(screen.getByText("Edit"));
     fireEvent.click(screen.getByText("Delete"));
 
-    expect(onCreateBoard).toHaveBeenCalledWith("moodboard");
     expect(onOpenCanvas).toHaveBeenCalledWith("board-1");
     expect(onEditCanvas).toHaveBeenCalledWith("board-1");
     expect(onDeleteBoardById).toHaveBeenCalledWith("board-1");
@@ -122,6 +118,7 @@ describe("canvas components", () => {
   });
 
   it("renders board browser empty state", () => {
+    const onCreateBoard = vi.fn();
     render(
       <BoardBrowser
         activeCanvasId={null}
@@ -140,7 +137,7 @@ describe("canvas components", () => {
         onBoardTileDragOver={vi.fn()}
         onBoardTitleDraftChange={vi.fn()}
         onCloseBrowserEditCanvas={vi.fn()}
-        onCreateBoard={vi.fn()}
+        onCreateBoard={onCreateBoard}
         onDeleteBoardById={vi.fn()}
         onEditCanvas={vi.fn()}
         onOpenCanvas={vi.fn()}
@@ -150,11 +147,17 @@ describe("canvas components", () => {
     );
 
     expect(document.querySelector(".canvas-board-preview")).not.toBeNull();
+    fireEvent.change(screen.getByLabelText("Template"), {
+      target: { value: "moodboard" },
+    });
+    fireEvent.click(screen.getByText("New board"));
+    expect(onCreateBoard).toHaveBeenCalledWith("moodboard");
   });
 
   it("dispatches board header tool and action callbacks", () => {
     const onFitContent = vi.fn();
     const onAddLink = vi.fn();
+    const onCreateBoard = vi.fn();
     const onResetZoom = vi.fn();
     const onToggleBoardTools = vi.fn();
     const onZoomIn = vi.fn();
@@ -181,10 +184,10 @@ describe("canvas components", () => {
           onBoardColorDraftChange={vi.fn()}
           onBoardSearchQueryChange={vi.fn()}
           onBoardTitleDraftChange={vi.fn()}
+          onCreateBoard={onCreateBoard}
           onDeleteBoard={vi.fn()}
           onFitContent={onFitContent}
           onImportImages={vi.fn()}
-          onOpenBoardFolder={vi.fn()}
           onResetZoom={onResetZoom}
           onSaveBoardSettings={vi.fn()}
           onToggleBoardTools={onToggleBoardTools}
@@ -212,6 +215,8 @@ describe("canvas components", () => {
     fireEvent.click(screen.getByLabelText("Reset zoom"));
     fireEvent.click(screen.getByLabelText("Zoom in"));
     fireEvent.click(screen.getByLabelText("Fit content"));
+    fireEvent.click(screen.getByLabelText("New board"));
+    expect(onCreateBoard).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText("Reset zoom").textContent).toBe("75%");
     expect(screen.getByLabelText("Search board")).not.toBeNull();
     expect(onZoomOut).toHaveBeenCalledTimes(1);
@@ -625,8 +630,51 @@ describe("canvas components", () => {
     }
   });
 
+  it("opens, removes, and resizes a project note card", () => {
+    const onOpen = vi.fn();
+    const onRemove = vi.fn();
+    const onResizePointerDown = vi.fn();
+    const onPointerDown = vi.fn();
+
+    render(
+      <CanvasProjectNoteCard
+        note={makeNote("project-note-1", { title: "Research log" })}
+        position={{ x: 12, y: 14, width: 200, height: 124 }}
+        onOpen={onOpen}
+        onRemove={onRemove}
+        onConnectorPointerDown={vi.fn()}
+        onPointerDown={onPointerDown}
+        onResizePointerDown={onResizePointerDown}
+        onClickCapture={vi.fn()}
+      />,
+    );
+
+    const card = document.querySelector(
+      '[data-canvas-object-kind="project-note"]',
+    ) as HTMLElement;
+    expect(card).not.toBeNull();
+    expect(card.textContent).toContain("Research log");
+    expect(card.textContent).toContain("Note");
+
+    fireEvent.pointerDown(card);
+    expect(onPointerDown).toHaveBeenCalled();
+
+    fireEvent.doubleClick(card);
+    expect(onOpen).toHaveBeenCalledWith("project-note-1");
+
+    fireEvent.click(screen.getByLabelText("Remove Research log from board"));
+    expect(onRemove).toHaveBeenCalledWith("project-note-1");
+
+    fireEvent.pointerDown(
+      card.querySelector(".canvas-card-resize-corner") as HTMLElement,
+    );
+    expect(onResizePointerDown).toHaveBeenCalled();
+  });
+
   it("renders object layer and forwards object interactions", () => {
     const onOpenItem = vi.fn();
+    const onOpenProjectNote = vi.fn();
+    const onRemoveProjectNote = vi.fn();
     const onSelectObject = vi.fn();
     const onStartDrag = vi.fn();
     const onStartResize = vi.fn();
@@ -635,6 +683,7 @@ describe("canvas components", () => {
     render(
       <CanvasObjectLayer
         activeItems={[item]}
+        activeProjectNotes={[makeNote("project-note-1", { title: "Log" })]}
         activeLinks={[
           {
             id: "link-1",
@@ -655,6 +704,7 @@ describe("canvas components", () => {
         thumbUrls={thumbUrls}
         setThumbUrls={vi.fn()}
         positionForItem={() => ({ x: 1, y: 2, width: 210, height: 246 })}
+        positionForProjectNote={() => ({ x: 5, y: 6, width: 200, height: 124 })}
         positionForLink={(link) => ({ x: link.x, y: link.y })}
         positionForNote={(note) => ({ x: note.x, y: note.y })}
         positionForSection={(section) => ({ x: section.x, y: section.y })}
@@ -664,7 +714,9 @@ describe("canvas components", () => {
         onDeleteSection={vi.fn()}
         onDeleteTextElement={vi.fn()}
         onOpenItem={onOpenItem}
+        onOpenProjectNote={onOpenProjectNote}
         onRemoveItem={vi.fn()}
+        onRemoveProjectNote={onRemoveProjectNote}
         onSelectObject={onSelectObject}
         onStartConnectorDrag={vi.fn()}
         onStartDrag={onStartDrag}
@@ -701,6 +753,13 @@ describe("canvas components", () => {
       document.querySelector('[data-canvas-object-id="text-1"]') as HTMLElement,
     );
 
+    const projectNoteCard = document.querySelector(
+      '[data-canvas-object-kind="project-note"]',
+    ) as HTMLElement;
+    fireEvent.pointerDown(projectNoteCard);
+    fireEvent.doubleClick(projectNoteCard);
+    fireEvent.click(screen.getByLabelText("Remove Log from board"));
+
     expect(onStartDrag).toHaveBeenCalledWith(
       expect.any(Object),
       "item",
@@ -718,6 +777,13 @@ describe("canvas components", () => {
     expect(document.querySelector('[data-canvas-object-id="section-1"]')).not.toBeNull();
     expect(onSelectObject).toHaveBeenCalledWith(expect.any(Object), "link", "link-1");
     expect(onSelectObject).toHaveBeenCalledWith(expect.any(Object), "note", "note-1");
+    expect(onSelectObject).toHaveBeenCalledWith(
+      expect.any(Object),
+      "project-note",
+      "project-note-1",
+    );
+    expect(onOpenProjectNote).toHaveBeenCalledWith("project-note-1");
+    expect(onRemoveProjectNote).toHaveBeenCalledWith("project-note-1");
     expect(onSelectObject).toHaveBeenCalledWith(
       expect.any(Object),
       "section",

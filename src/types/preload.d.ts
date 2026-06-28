@@ -5,6 +5,7 @@ import type {
   FolioItem,
   ImportSource,
   LinkMetadata,
+  Note,
   ProjectStatus,
   ReconciliationResult,
   RestoreResult,
@@ -37,6 +38,10 @@ export interface FolioApi {
     workItemIds: string[],
   ) => Promise<FolioData>;
   deleteItems: (itemIds: string[]) => Promise<FolioData>;
+  createNote: (projectId: string, title: string) => Promise<Note>;
+  readNoteContent: (noteId: string) => Promise<string>;
+  writeNoteContent: (noteId: string, content: string) => Promise<Note>;
+  deleteNote: (noteId: string) => Promise<FolioData>;
   openFileDialog: () => Promise<string[]>;
   ensureThumbnails: (itemIds: string[]) => Promise<ThumbnailUrls>;
   getFileDataUrl: (filePath: string) => Promise<string>;

@@ -190,6 +190,7 @@ describe("canvas layout helpers", () => {
     const layouts = buildCanvasObjectLayouts({
       activeCanvas: canvas,
       activeItems: [item("item-1"), item("item-2")],
+      activeProjectNotes: [],
       activeLinks: canvas.links ?? [],
       activeNotes: canvas.notes,
       activeSections: canvas.sections ?? [],

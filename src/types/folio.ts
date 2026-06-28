@@ -14,6 +14,7 @@ export interface FolioData {
   canvases: Canvas[];
   tags: Tag[];
   projects: Project[];
+  notes: Note[];
 }
 
 /** Supported media types in the archive */
@@ -42,6 +43,17 @@ export interface Project {
   workItemIds: string[];
   boardIds: string[];
   reviews: ProjectReviewDocument[];
+}
+
+/** A standalone Markdown note attached to a project. Content lives at `path` on disk. */
+export interface Note {
+  id: string;
+  title: string;
+  /** Path relative to the Folio root, e.g. "projects/my-project/notes/note_abc.md" */
+  path: string;
+  projectId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ProjectReviewDocument {

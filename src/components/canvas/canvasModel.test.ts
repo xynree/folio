@@ -19,6 +19,7 @@ import {
   moveCanvasObject,
   removeCanvasStrokes,
   removeItemFromCanvas,
+  removeNoteFromCanvas,
   removeLastCanvasStroke,
   replaceCanvasNote,
   resizeCanvasObject,
@@ -307,6 +308,52 @@ describe("canvas model helpers", () => {
     expect(
       moveCanvasObject(canvas, "section", "section-1", { x: 61, y: 62 }).sections?.[0],
     ).toEqual(expect.objectContaining({ x: 61, y: 62 }));
+  });
+
+  it("moves, resizes, and removes project notes through the shared positions map", () => {
+    const canvas: Canvas = {
+      ...canvasFixture(),
+      noteIds: ["project-note-1"],
+      positions: {
+        ...canvasFixture().positions,
+        "project-note-1": { x: 200, y: 210 },
+      },
+      edges: [
+        {
+          id: "edge-3",
+          fromId: "project-note-1",
+          toId: "item-1",
+          fromSide: "left",
+          toSide: "right",
+        },
+      ],
+    };
+
+    expect(
+      moveCanvasObject(canvas, "project-note", "project-note-1", {
+        x: 12,
+        y: 14,
+      }).positions["project-note-1"],
+    ).toEqual({ x: 12, y: 14 });
+
+    expect(
+      resizeCanvasObject(canvas, "project-note", "project-note-1", {
+        width: 240,
+        height: 160,
+      }).positions["project-note-1"],
+    ).toMatchObject({ x: 200, y: 210, width: 240, height: 160 });
+
+    const removedByModel = removeNoteFromCanvas(canvas, "project-note-1");
+    expect(removedByModel.noteIds).toEqual([]);
+    expect(removedByModel.positions["project-note-1"]).toBeUndefined();
+    expect(removedByModel.edges).toEqual([]);
+
+    const removedByObject = deleteCanvasObject(
+      canvas,
+      "project-note",
+      "project-note-1",
+    );
+    expect(removedByObject.noteIds).toEqual([]);
   });
 
   it("resizes every supported canvas object kind", () => {

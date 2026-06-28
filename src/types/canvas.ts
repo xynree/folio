@@ -141,6 +141,7 @@ export interface Canvas {
   createdAt?: string;
   updatedAt?: string;
   itemIds: string[]; // IDs of items from the main archive
+  noteIds?: string[]; // IDs of project Notes placed on the board
   positions: Record<string, CanvasObjectGeometry>; // Item geometry keyed by item ID
   notes: CanvasNote[];
   edges: CanvasEdge[];

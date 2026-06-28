@@ -2,6 +2,7 @@ import { makeItem } from "../../test/fixtures";
 import {
   chooseAndImportItems,
   clipboardImageExtension,
+  getClipboardImageFiles,
   getImportFailureMessage,
 } from "./importing";
 
@@ -78,5 +79,37 @@ describe("clipboardImageExtension", () => {
     expect(
       clipboardImageExtension({ name: "clip", type: "image/bmp" } as File),
     ).toBe(".png");
+  });
+});
+
+describe("getClipboardImageFiles", () => {
+  it("finds image files from clipboard files and item blobs without duplicates", () => {
+    const copiedFile = new File(["one"], "copied.png", { type: "" });
+    const blobFile = new File(["two"], "clipboard-image", {
+      type: "image/png",
+    });
+    const clipboardData = {
+      files: [copiedFile],
+      items: [
+        {
+          kind: "file",
+          getAsFile: () => blobFile,
+        },
+        {
+          kind: "file",
+          getAsFile: () => copiedFile,
+        },
+        {
+          kind: "string",
+          getAsFile: () => null,
+        },
+      ],
+    } as unknown as DataTransfer;
+
+    const files = getClipboardImageFiles(clipboardData, (file) =>
+      file === copiedFile ? "/tmp/copied.png" : "",
+    );
+
+    expect(files).toEqual([copiedFile, blobFile]);
   });
 });

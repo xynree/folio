@@ -1,4 +1,5 @@
 import type { FolioItem } from "../../types";
+import { IMAGE_FILE_PATTERN } from "./constants";
 
 /** Picks a file extension for a pasted clipboard image, falling back to its MIME type. */
 export function clipboardImageExtension(file: File): string {
@@ -9,6 +10,35 @@ export function clipboardImageExtension(file: File): string {
   if (file.type === "image/webp") return ".webp";
   if (file.type === "image/gif") return ".gif";
   return ".png";
+}
+
+function clipboardFileKey(file: File): string {
+  return [file.name, file.type, file.size, file.lastModified].join("\0");
+}
+
+export function getClipboardImageFiles(
+  clipboardData: DataTransfer,
+  getPathForFile: (file: File) => string,
+): File[] {
+  const candidates = [
+    ...Array.from(clipboardData.files ?? []),
+    ...Array.from(clipboardData.items ?? [])
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file)),
+  ];
+  const seen = new Set<string>();
+
+  return candidates.filter((file) => {
+    const filePath = getPathForFile(file);
+    const isImage =
+      IMAGE_FILE_PATTERN.test(filePath || file.name) ||
+      file.type.startsWith("image/");
+    const key = clipboardFileKey(file);
+    if (!isImage || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function messageForError(error: unknown) {

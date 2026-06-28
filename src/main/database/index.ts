@@ -1,16 +1,18 @@
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
-import type { Canvas, FolioData, FolioItem, Project, Tag } from "../../types";
+import type { Canvas, FolioData, FolioItem, Note, Project, Tag } from "../../types";
 import { SCHEMA_VERSION } from "../../constants";
 import { SCHEMA_SQL } from "./schema";
-import type { CanvasRow, ItemRow, ProjectRow, TagRow } from "./rows";
+import type { CanvasRow, ItemRow, NoteRow, ProjectRow, TagRow } from "./rows";
 import {
   canvasToRow,
   itemToRow,
+  noteToRow,
   projectToRow,
   rowToCanvas,
   rowToItem,
+  rowToNote,
   rowToProject,
   rowToTag,
 } from "./converters";
@@ -33,6 +35,21 @@ export class FolioDB {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.exec(SCHEMA_SQL);
+    this.ensureColumn("canvases", "noteIds", "TEXT NOT NULL DEFAULT '[]'");
+  }
+
+  /**
+   * Adds a column to an existing table when it is missing. `CREATE TABLE IF NOT
+   * EXISTS` never alters an already-created table, so additive schema changes
+   * need this guard to reach databases created before the column existed.
+   */
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const columns = this.db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all() as Array<{ name: string }>;
+    if (!columns.some((existing) => existing.name === column)) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
   }
 
   close(): void {
@@ -232,12 +249,12 @@ export class FolioDB {
         `INSERT INTO canvases
            (id, title, description, color, projectId, kind, status, brief,
             outcome, startedAt, targetDate, completedAt, createdAt, updatedAt,
-            itemIds, positions, notes, edges, strokes, texts, sections, links,
+            itemIds, noteIds, positions, notes, edges, strokes, texts, sections, links,
             viewport, createdFromTemplate)
          VALUES
            (@id, @title, @description, @color, @projectId, @kind, @status, @brief,
             @outcome, @startedAt, @targetDate, @completedAt, @createdAt, @updatedAt,
-            @itemIds, @positions, @notes, @edges, @strokes, @texts, @sections, @links,
+            @itemIds, @noteIds, @positions, @notes, @edges, @strokes, @texts, @sections, @links,
             @viewport, @createdFromTemplate)
          ON CONFLICT(id) DO UPDATE SET
            title=excluded.title, description=excluded.description,
@@ -246,7 +263,7 @@ export class FolioDB {
            outcome=excluded.outcome, startedAt=excluded.startedAt,
            targetDate=excluded.targetDate, completedAt=excluded.completedAt,
            createdAt=excluded.createdAt, updatedAt=excluded.updatedAt,
-           itemIds=excluded.itemIds, positions=excluded.positions,
+           itemIds=excluded.itemIds, noteIds=excluded.noteIds, positions=excluded.positions,
            notes=excluded.notes, edges=excluded.edges, strokes=excluded.strokes,
            texts=excluded.texts, sections=excluded.sections, links=excluded.links,
            viewport=excluded.viewport,
@@ -260,12 +277,12 @@ export class FolioDB {
       `INSERT INTO canvases
          (id, title, description, color, projectId, kind, status, brief,
           outcome, startedAt, targetDate, completedAt, createdAt, updatedAt,
-          itemIds, positions, notes, edges, strokes, texts, sections, links,
+          itemIds, noteIds, positions, notes, edges, strokes, texts, sections, links,
           viewport, createdFromTemplate)
        VALUES
          (@id, @title, @description, @color, @projectId, @kind, @status, @brief,
           @outcome, @startedAt, @targetDate, @completedAt, @createdAt, @updatedAt,
-          @itemIds, @positions, @notes, @edges, @strokes, @texts, @sections, @links,
+          @itemIds, @noteIds, @positions, @notes, @edges, @strokes, @texts, @sections, @links,
           @viewport, @createdFromTemplate)
        ON CONFLICT(id) DO UPDATE SET
          title=excluded.title, description=excluded.description,
@@ -274,7 +291,7 @@ export class FolioDB {
          outcome=excluded.outcome, startedAt=excluded.startedAt,
          targetDate=excluded.targetDate, completedAt=excluded.completedAt,
          createdAt=excluded.createdAt, updatedAt=excluded.updatedAt,
-         itemIds=excluded.itemIds, positions=excluded.positions,
+         itemIds=excluded.itemIds, noteIds=excluded.noteIds, positions=excluded.positions,
          notes=excluded.notes, edges=excluded.edges, strokes=excluded.strokes,
          texts=excluded.texts, sections=excluded.sections, links=excluded.links,
          viewport=excluded.viewport,
@@ -310,12 +327,14 @@ export class FolioDB {
     tags: Tag[];
     canvases: Canvas[];
     projects: Project[];
+    notes?: Note[];
   }): void {
     this.db.transaction(() => {
       this.setItems(data.items);
       this.setTags(data.tags);
       this.setCanvases(data.canvases);
       this.setProjects(data.projects);
+      if (data.notes !== undefined) this.setNotes(data.notes);
     })();
   }
 
@@ -326,6 +345,7 @@ export class FolioDB {
       tags: this.getTags(),
       canvases: this.getCanvases(),
       projects: this.getProjects(),
+      notes: this.getNotes(),
     };
   }
 
@@ -360,6 +380,55 @@ export class FolioDB {
       for (const canvas of data.canvases ?? []) this.upsertCanvas(canvas);
       for (const project of data.projects ?? []) this.upsertProject(project);
     })();
+  }
+
+  // -------------------------------------------------------------------------
+  // Notes
+  // -------------------------------------------------------------------------
+
+  getNotes(): Note[] {
+    return (this.db.prepare("SELECT * FROM notes").all() as NoteRow[]).map(
+      rowToNote,
+    );
+  }
+
+  upsertNote(note: Note): void {
+    this.db
+      .prepare(
+        `INSERT INTO notes (id, title, path, projectId, createdAt, updatedAt)
+         VALUES (@id, @title, @path, @projectId, @createdAt, @updatedAt)
+         ON CONFLICT(id) DO UPDATE SET
+           title=excluded.title, path=excluded.path,
+           projectId=excluded.projectId, updatedAt=excluded.updatedAt`,
+      )
+      .run(noteToRow(note));
+  }
+
+  setNotes(notes: Note[]): void {
+    const upsert = this.db.prepare(
+      `INSERT INTO notes (id, title, path, projectId, createdAt, updatedAt)
+       VALUES (@id, @title, @path, @projectId, @createdAt, @updatedAt)
+       ON CONFLICT(id) DO UPDATE SET
+         title=excluded.title, path=excluded.path,
+         projectId=excluded.projectId, updatedAt=excluded.updatedAt`,
+    );
+    const deleteRemoved = this.db.prepare(
+      "DELETE FROM notes WHERE id NOT IN (SELECT value FROM json_each(?))",
+    );
+    const deleteAll = this.db.prepare("DELETE FROM notes");
+
+    this.db.transaction(() => {
+      for (const note of notes) upsert.run(noteToRow(note));
+      if (notes.length > 0) {
+        deleteRemoved.run(JSON.stringify(notes.map((note) => note.id)));
+      } else {
+        deleteAll.run();
+      }
+    })();
+  }
+
+  deleteNote(id: string): void {
+    this.db.prepare("DELETE FROM notes WHERE id = ?").run(id);
   }
 }
 

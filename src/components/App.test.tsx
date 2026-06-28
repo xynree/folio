@@ -14,6 +14,7 @@ import {
   emptyReconciliation,
   makeData,
   makeItem,
+  makeNote,
   makeProject,
 } from "../test/fixtures";
 
@@ -421,7 +422,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     ).toHaveLength(3);
     expect(
       projectActionSidebar?.querySelectorAll(".project-surface-tabs button svg"),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
     expect(
       screen.getByRole("button", { name: /^all images$/i }).closest(
         ".project-library-group",
@@ -458,6 +459,9 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     ).toBe(projectActionSidebar);
     expect(
       projectSidebarButton(/^review$/i).closest(".project-action-sidebar"),
+    ).toBe(projectActionSidebar);
+    expect(
+      projectSidebarButton(/^notes$/i).closest(".project-action-sidebar"),
     ).toBe(projectActionSidebar);
     expect(
       screen.getByRole("button", { name: /open project folder/i }).closest(
@@ -704,6 +708,63 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
     expect(await screen.findByText("Pasted")).not.toBeNull();
     expect(screen.getAllByText("4 items").length).toBeGreaterThan(0);
+  });
+
+  it("pastes raw clipboard images into the open project Works view", async () => {
+    const app = setupFolio({
+      importedItems: [
+        makeItem("pasted-work", {
+          title: "Pasted Work",
+          path: "projects/studio-archive/images/pasted-work.png",
+          date: "2026-06-15T11:00:00.000Z",
+        }),
+      ],
+    });
+    vi.mocked(window.folio.getPathForFile).mockReturnValue("");
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(projectSidebarButton(/^works$/i));
+
+    const pastedFile = new File(["pasted"], "clipboard-image", {
+      type: "image/png",
+    });
+    const pasteEvent = new Event("paste", {
+      bubbles: true,
+      cancelable: true,
+    }) as ClipboardEvent;
+    Object.defineProperty(pasteEvent, "clipboardData", {
+      value: {
+        files: [],
+        items: [
+          {
+            kind: "file",
+            type: "image/png",
+            getAsFile: () => pastedFile,
+          },
+        ],
+      },
+    });
+    window.dispatchEvent(pasteEvent);
+
+    await waitFor(() => {
+      expect(window.folio.importSourcesToProject).toHaveBeenCalledWith(
+        "project-1",
+        [
+          expect.objectContaining({
+            kind: "buffer",
+            ext: ".png",
+            filename: "clipboard-image",
+          }),
+        ],
+      );
+      expect(window.folio.setProjectWorkItems).toHaveBeenCalledWith(
+        "project-1",
+        expect.arrayContaining(["pasted-work"]),
+      );
+      expect(app.data.projects[0].workItemIds).toContain("pasted-work");
+    });
+    expect(await screen.findByText("Pasted Work")).not.toBeNull();
   });
 
   it("sorts grid results by most recent first and hides image type labels", async () => {
@@ -1209,10 +1270,9 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       expect(app.data.projects[0].reviews).toHaveLength(2);
       expect(app.data.projects[0].reviews[0].title).toBe("Review 2");
     });
-    await user.click(screen.getByRole("button", { name: /maximize editor/i }));
-    expect(screen.getByRole("button", { name: /minimize editor/i })).not.toBeNull();
-    await user.click(screen.getByRole("button", { name: /minimize editor/i }));
-    expect(screen.getByRole("button", { name: /maximize editor/i })).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /maximize editor/i }),
+    ).toBeNull();
 
     const workSelector = screen.getByLabelText("Review Works");
     await user.click(
@@ -1422,6 +1482,49 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
+  it("adds a project note to a board and opens it back from the board", async () => {
+    const app = setupFolio({
+      data: makeData({
+        notes: [makeNote("note-1", { title: "Research log", projectId: "project-1" })],
+      }),
+    });
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(projectSidebarButton(/^notes$/i));
+    await user.click(
+      await screen.findByRole("button", { name: /Research log/ }),
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: /add to board/i }),
+    );
+
+    await waitFor(() => {
+      expect(
+        app.data.canvases.some((canvas) =>
+          (canvas.noteIds ?? []).includes("note-1"),
+        ),
+      ).toBe(true);
+    });
+
+    const boardNoteCard = (await screen.findAllByText("Research log")).find(
+      (element) =>
+        element.closest('[data-canvas-object-kind="project-note"]') !== null,
+    );
+    expect(boardNoteCard).not.toBeUndefined();
+
+    fireEvent.doubleClick(
+      boardNoteCard?.closest(
+        '[data-canvas-object-kind="project-note"]',
+      ) as HTMLElement,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Research log" }),
+    ).not.toBeNull();
+  });
+
   it("runs detail modal Finder and delete actions and clears canvas memberships", async () => {
     const app = setupFolio({
       data: makeData({
@@ -1555,10 +1658,9 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
 
     await waitForArchive();
     await openActiveBoardCanvas(user);
-    await user.click(screen.getByLabelText("Open board folder"));
-    expect(window.folio.openInFinder).toHaveBeenCalledWith(
-      "projects/studio-archive/boards/board-1",
-    );
+    expect(
+      screen.queryByRole("button", { name: /open board folder/i }),
+    ).toBeNull();
     expect(
       screen.getByRole("button", { name: /add note/i }).closest(".canvas-board-actions"),
     ).not.toBeNull();
@@ -1648,13 +1750,12 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     });
   });
 
-  it("creates new empty boards from the board grid", async () => {
+  it("creates new empty boards from the board canvas toolbar", async () => {
     const app = setupFolio();
     const user = userEvent.setup();
 
     await waitForArchive();
-    await openBoardBrowser(user);
-    expect(screen.getByRole("button", { name: /new board/i })).not.toBeNull();
+    await openActiveBoardCanvas(user);
     await user.click(screen.getByRole("button", { name: /new board/i }));
 
     await waitFor(() => {
@@ -1713,6 +1814,7 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
       screen.queryByRole("button", { name: /^open other project board,/i }),
     ).toBeNull();
 
+    await openActiveBoardCanvas(user);
     await user.click(screen.getByRole("button", { name: /new board/i }));
 
     await waitFor(() => {

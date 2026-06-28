@@ -415,8 +415,8 @@ When items are selected, the top selection bar remains draggable as part of the 
 
 Boards are scoped to the active project. Boards are a project sidebar view, not a split side dock beside All Images or Works. The view can show either:
 
-- the project board browser, a grid of that project's boards with member previews and a New board action
-- a focused board with created/saved timestamps, board actions, the canvas viewport, and a scrollable tray of project images that can be added to the current board
+- the project board browser, a grid of that project's boards with member previews; the New board action appears in the browser's empty state so the first board can be created
+- a focused board with created/saved timestamps, board actions (including a New board action), the canvas viewport, and a scrollable tray of project images that can be added to the current board
 
 Board settings support title and color editing. The selected board color appears as dots on project image cards that belong to that board.
 

@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   Edit3,
   Eraser,
-  FolderOpen,
   Frame,
   ImagePlus,
   Images,
@@ -43,10 +42,10 @@ type CanvasBoardHeaderProps = {
   onBoardColorDraftChange: (color: string) => void;
   onBoardSearchQueryChange: (query: string) => void;
   onBoardTitleDraftChange: (title: string) => void;
+  onCreateBoard: () => void;
   onDeleteBoard: () => void;
   onFitContent: () => void;
   onImportImages: () => void;
-  onOpenBoardFolder: () => void;
   onResetZoom: () => void;
   onSaveBoardSettings: (canvas: Canvas) => void;
   onToggleBoardTools: () => void;
@@ -74,10 +73,10 @@ export function CanvasBoardHeader({
   onBoardColorDraftChange,
   onBoardSearchQueryChange,
   onBoardTitleDraftChange,
+  onCreateBoard,
   onDeleteBoard,
   onFitContent,
   onImportImages,
-  onOpenBoardFolder,
   onResetZoom,
   onSaveBoardSettings,
   onToggleBoardTools,
@@ -274,11 +273,11 @@ export function CanvasBoardHeader({
         <button
           className="canvas-board-action-button"
           type="button"
-          aria-label="Open board folder"
-          title="Open board folder"
-          onClick={onOpenBoardFolder}
+          aria-label="New board"
+          title="New board"
+          onClick={onCreateBoard}
         >
-          <ButtonIcon icon={FolderOpen} />
+          <ButtonIcon icon={Plus} />
         </button>
         <button
           className="canvas-board-action-button"

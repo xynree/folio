@@ -4,12 +4,11 @@ import {
   codeEdit,
   codeLive,
   codePreview,
-  divider,
   type ICommand,
 } from "@uiw/react-md-editor/commands";
 import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
-import { ArrowLeft, Maximize2, Minimize2, Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import type {
   FolioItem,
   Project,
@@ -23,6 +22,10 @@ import {
   reviewItemTitle,
   reviewWorkPatch,
 } from "./ProjectReviewEditorPage.helpers";
+
+// Only the edit / live / preview view toggles. The library's default toolbar
+// also injects a fullscreen command, which we intentionally leave out.
+const EDITOR_VIEW_COMMANDS: ICommand[] = [codeEdit, codeLive, codePreview];
 
 export function ProjectReviewEditorPage({
   project,
@@ -48,7 +51,6 @@ export function ProjectReviewEditorPage({
 }) {
   const [titleDraft, setTitleDraft] = useState(review.title);
   const [markdownDraft, setMarkdownDraft] = useState(review.markdown);
-  const [editorFullscreen, setEditorFullscreen] = useState(false);
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const taggedWorkIds = useMemo(
     () => new Set(review.workItemIds),
@@ -57,33 +59,6 @@ export function ProjectReviewEditorPage({
   const reviewCandidates = useMemo(
     () => reviewCandidateItems(project, itemById),
     [itemById, project],
-  );
-  const editorExtraCommands = useMemo<ICommand[]>(
-    () => [
-      codeEdit,
-      codeLive,
-      codePreview,
-      divider,
-      {
-        name: editorFullscreen ? "minimize" : "maximize",
-        keyCommand: "fullscreen",
-        value: "fullscreen",
-        buttonProps: {
-          "aria-label": editorFullscreen ? "Minimize editor" : "Maximize editor",
-          title: editorFullscreen ? "Minimize editor" : "Maximize editor",
-        },
-        icon: editorFullscreen ? (
-          <Minimize2 size={13} strokeWidth={2.4} />
-        ) : (
-          <Maximize2 size={13} strokeWidth={2.4} />
-        ),
-        execute: (_state, api) => {
-          api.textArea.focus();
-          setEditorFullscreen((current) => !current);
-        },
-      },
-    ],
-    [editorFullscreen],
   );
 
   useEffect(() => {
@@ -199,8 +174,7 @@ export function ProjectReviewEditorPage({
 
           <div className="project-markdown-editor" data-color-mode="light">
             <MDEditor
-              extraCommands={editorExtraCommands}
-              fullscreen={editorFullscreen}
+              extraCommands={EDITOR_VIEW_COMMANDS}
               height={520}
               preview="live"
               value={markdownDraft}

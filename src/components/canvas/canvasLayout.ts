@@ -6,6 +6,7 @@ import type {
   CanvasSection,
   CanvasTextElement,
   FolioItem,
+  Note,
 } from "../../types";
 import {
   objectLayoutFromPosition,
@@ -35,6 +36,16 @@ export function itemsForCanvas(
   return canvas.itemIds
     .map((itemId) => itemsById.get(itemId))
     .filter(Boolean) as FolioItem[];
+}
+
+export function projectNotesForCanvas(
+  canvas: Canvas | null,
+  notesById: Map<string, Note>,
+): Note[] {
+  if (!canvas) return [];
+  return (canvas.noteIds ?? [])
+    .map((noteId) => notesById.get(noteId))
+    .filter(Boolean) as Note[];
 }
 
 export function boardPreviewItemIds(
@@ -73,6 +84,33 @@ export function positionForCanvasItem(
           height: item.mediaHeight,
         })
       : objectLayoutFromPosition(item.id, "document", savedPosition).size;
+
+  return {
+    ...savedPosition,
+    width: size.width,
+    height: size.height,
+  };
+}
+
+export function positionForCanvasProjectNote(
+  noteId: string,
+  index: number,
+  canvas: Canvas | null,
+  dragPreview: CanvasDragPreview | null,
+): CanvasObjectGeometry {
+  if (dragPreview?.kind === "project-note" && dragPreview.id === noteId) {
+    return dragPreview.position;
+  }
+
+  const savedPosition = canvas?.positions[noteId] ?? {
+    x: 80 + (index % 4) * 190,
+    y: 90 + Math.floor(index / 4) * 230,
+  };
+  const size = objectLayoutFromPosition(
+    noteId,
+    "project-note",
+    savedPosition,
+  ).size;
 
   return {
     ...savedPosition,
@@ -143,6 +181,7 @@ export function positionForCanvasText(
 export function buildCanvasObjectLayouts({
   activeCanvas,
   activeItems,
+  activeProjectNotes,
   activeNotes,
   activeLinks,
   activeSections,
@@ -151,6 +190,7 @@ export function buildCanvasObjectLayouts({
 }: {
   activeCanvas: Canvas | null;
   activeItems: FolioItem[];
+  activeProjectNotes: Note[];
   activeNotes: CanvasNote[];
   activeLinks: CanvasLink[];
   activeSections: CanvasSection[];
@@ -166,6 +206,17 @@ export function buildCanvasObjectLayouts({
         item.id,
         canvasKindForItem(item),
         positionForCanvasItem(item, index, activeCanvas, dragPreview),
+      ),
+    );
+  });
+
+  activeProjectNotes.forEach((note, index) => {
+    layouts.set(
+      note.id,
+      objectLayoutFromPosition(
+        note.id,
+        "project-note",
+        positionForCanvasProjectNote(note.id, index, activeCanvas, dragPreview),
       ),
     );
   });

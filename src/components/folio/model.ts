@@ -23,6 +23,7 @@ export function normalizeFolioData(data: FolioData): FolioData {
     canvases: data.canvases ?? [],
     tags: data.tags ?? [],
     projects: data.projects ?? [],
+    notes: data.notes ?? [],
   };
 }
 
@@ -63,6 +64,7 @@ export function mergeImportedItemsIntoProject(
   imported: FolioItem[],
   projectId?: string | null,
   savedAt = new Date().toISOString(),
+  markAsWorks = false,
 ): FolioData {
   const items = mergeItems(current.items, imported);
   if (!projectId || !imported.length) {
@@ -86,6 +88,10 @@ export function mergeImportedItemsIntoProject(
             imageIds: Array.from(
               new Set([...project.imageIds, ...importedIds]),
             ),
+            workItemIds: markAsWorks
+              ? Array.from(new Set([...project.workItemIds, ...importedIds]))
+              : project.workItemIds,
+            workUpdatedAt: markAsWorks ? savedAt : project.workUpdatedAt,
             updatedAt: savedAt,
           }
         : project,
@@ -247,6 +253,32 @@ export function addItemsToCanvas(
   return {
     ...canvas,
     itemIds: nextItemIds,
+    positions,
+  };
+}
+
+export function addNoteToCanvas(
+  canvas: Canvas,
+  noteId: string,
+  origin?: CanvasPosition,
+): Canvas {
+  const nextNoteIds = [...(canvas.noteIds ?? [])];
+  if (nextNoteIds.includes(noteId)) return canvas;
+
+  const positions = { ...canvas.positions };
+  const gridIndex = nextNoteIds.length;
+  positions[noteId] = origin
+    ? { x: origin.x, y: origin.y }
+    : {
+        x: 80 + (gridIndex % 4) * 190,
+        y: 90 + Math.floor(gridIndex / 4) * 230,
+      };
+
+  nextNoteIds.push(noteId);
+
+  return {
+    ...canvas,
+    noteIds: nextNoteIds,
     positions,
   };
 }

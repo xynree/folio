@@ -68,37 +68,40 @@ export function BoardBrowser({
   const [selectedTemplateId, setSelectedTemplateId] =
     useState<CanvasTemplateId>("blank");
 
+  const createBoardControl = (
+    <div className="canvas-board-browser-actions">
+      <label className="canvas-template-picker">
+        <span>Template</span>
+        <select
+          value={selectedTemplateId}
+          onChange={(event) =>
+            setSelectedTemplateId(event.target.value as CanvasTemplateId)
+          }
+        >
+          {CANVAS_TEMPLATES.map((template) => (
+            <option key={template.id} value={template.id}>
+              {template.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        className="secondary-action canvas-board-new-button"
+        type="button"
+        onClick={() => onCreateBoard(selectedTemplateId)}
+      >
+        <ButtonIcon icon={Plus} />
+        New board
+      </button>
+    </div>
+  );
+
   return (
     <section className="canvas-workspace canvas-board-browser">
       <header className="canvas-board-browser-header">
         <div className="canvas-board-browser-copy">
           <strong>Boards</strong>
           <span>{formatCount(canvases.length, "board")}</span>
-        </div>
-        <div className="canvas-board-browser-actions">
-          <label className="canvas-template-picker">
-            <span>Template</span>
-            <select
-              value={selectedTemplateId}
-              onChange={(event) =>
-                setSelectedTemplateId(event.target.value as CanvasTemplateId)
-              }
-            >
-              {CANVAS_TEMPLATES.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="secondary-action canvas-board-new-button"
-            type="button"
-            onClick={() => onCreateBoard(selectedTemplateId)}
-          >
-            <ButtonIcon icon={Plus} />
-            New board
-          </button>
         </div>
       </header>
 
@@ -238,6 +241,7 @@ export function BoardBrowser({
               <path d="M164 164 C226 186, 292 178, 346 142" />
             </svg>
           </div>
+          {createBoardControl}
         </div>
       )}
 

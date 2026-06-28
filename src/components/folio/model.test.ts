@@ -2,6 +2,7 @@ import { describe, it, vi, expect } from "vitest";
 import type { Canvas, FolioItem } from "../../types";
 import {
   addItemsToCanvas,
+  addNoteToCanvas,
   assignBoardToProject,
   buildDateRange,
   canvasColorsForItem,
@@ -103,6 +104,28 @@ describe("folio model helpers", () => {
     expect(next.projects[0].updatedAt).toBe("2026-06-15T12:00:00.000Z");
   });
 
+  it("can mark imported project images as Works", () => {
+    const next = mergeImportedItemsIntoProject(
+      makeData({
+        projects: [
+          makeProject("project-1", {
+            imageIds: ["alpha"],
+            workItemIds: ["alpha"],
+            workUpdatedAt: "2026-06-15T09:00:00.000Z",
+          }),
+        ],
+      }),
+      [item("new-work", "2026-06-15T11:00:00.000Z")],
+      "project-1",
+      "2026-06-15T12:00:00.000Z",
+      true,
+    );
+
+    expect(next.projects[0].imageIds).toEqual(["alpha", "new-work"]);
+    expect(next.projects[0].workItemIds).toEqual(["alpha", "new-work"]);
+    expect(next.projects[0].workUpdatedAt).toBe("2026-06-15T12:00:00.000Z");
+  });
+
   it("adds canvas items once and assigns drop-relative positions", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-15T12:00:00.000Z"));
@@ -117,6 +140,20 @@ describe("folio model helpers", () => {
       b: { x: 144, y: 20 },
     });
     vi.useRealTimers();
+  });
+
+  it("adds project notes once with grid or drop positions", () => {
+    const canvas = createCanvas(0, "Board");
+    const placed = addNoteToCanvas(canvas, "note-1");
+    expect(placed.noteIds).toEqual(["note-1"]);
+    expect(placed.positions["note-1"]).toEqual({ x: 80, y: 90 });
+
+    const placedAgain = addNoteToCanvas(placed, "note-1");
+    expect(placedAgain).toBe(placed);
+
+    const dropped = addNoteToCanvas(placed, "note-2", { x: 150, y: 160 });
+    expect(dropped.noteIds).toEqual(["note-1", "note-2"]);
+    expect(dropped.positions["note-2"]).toEqual({ x: 150, y: 160 });
   });
 
   it("marks board saves with an updated timestamp", () => {

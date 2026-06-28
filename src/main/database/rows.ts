@@ -58,6 +58,7 @@ export interface CanvasRow {
   createdAt: string | null;
   updatedAt: string | null;
   itemIds: string;
+  noteIds: string;
   positions: string;
   notes: string;
   edges: string;
@@ -67,4 +68,13 @@ export interface CanvasRow {
   links: string | null;
   viewport: string | null;
   createdFromTemplate: string | null;
+}
+
+export interface NoteRow {
+  id: string;
+  title: string;
+  path: string;
+  projectId: string;
+  createdAt: string;
+  updatedAt: string;
 }

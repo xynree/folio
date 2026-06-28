@@ -5,8 +5,8 @@
  * never deals with raw JSON strings.
  */
 
-import type { Canvas, FolioItem, Project, Tag } from "../../types";
-import type { CanvasRow, ItemRow, ProjectRow, TagRow } from "./rows";
+import type { Canvas, FolioItem, Note, Project, Tag } from "../../types";
+import type { CanvasRow, ItemRow, NoteRow, ProjectRow, TagRow } from "./rows";
 
 export function rowToItem(row: ItemRow): FolioItem {
   const item: FolioItem = {
@@ -104,6 +104,7 @@ export function rowToCanvas(row: CanvasRow): Canvas {
     createdAt: row.createdAt ?? undefined,
     updatedAt: row.updatedAt ?? undefined,
     itemIds: JSON.parse(row.itemIds) as string[],
+    noteIds: JSON.parse(row.noteIds ?? "[]") as string[],
     positions: JSON.parse(row.positions) as Canvas["positions"],
     notes: JSON.parse(row.notes) as Canvas["notes"],
     edges: JSON.parse(row.edges) as Canvas["edges"],
@@ -133,6 +134,7 @@ export function canvasToRow(canvas: Canvas): Record<string, unknown> {
     createdAt: canvas.createdAt ?? null,
     updatedAt: canvas.updatedAt ?? null,
     itemIds: JSON.stringify(canvas.itemIds ?? []),
+    noteIds: JSON.stringify(canvas.noteIds ?? []),
     positions: JSON.stringify(canvas.positions ?? {}),
     notes: JSON.stringify(canvas.notes ?? []),
     edges: JSON.stringify(canvas.edges ?? []),
@@ -142,5 +144,27 @@ export function canvasToRow(canvas: Canvas): Record<string, unknown> {
     links: canvas.links ? JSON.stringify(canvas.links) : null,
     viewport: canvas.viewport ? JSON.stringify(canvas.viewport) : null,
     createdFromTemplate: canvas.createdFromTemplate ?? null,
+  };
+}
+
+export function rowToNote(row: NoteRow): Note {
+  return {
+    id: row.id,
+    title: row.title,
+    path: row.path,
+    projectId: row.projectId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function noteToRow(note: Note): Record<string, unknown> {
+  return {
+    id: note.id,
+    title: note.title,
+    path: note.path,
+    projectId: note.projectId,
+    createdAt: note.createdAt,
+    updatedAt: note.updatedAt,
   };
 }
