@@ -90,6 +90,7 @@ export interface FolioManagerInterface {
   loadData(): Promise<FolioData>;
   saveFolioData(data: FolioData): Promise<void>;
   createProject(input: CreateProjectInput): Promise<FolioData>;
+  deleteProject(projectId: string): Promise<FolioData>;
   copyToFolio(filePaths: string[]): Promise<FolioItem[]>;
   copyToProject(projectId: string, filePaths: string[]): Promise<FolioItem[]>;
   importToFolio(): Promise<FolioItem[]>;
@@ -186,6 +187,9 @@ export class FolioManager implements FolioManagerInterface {
     ipcMain.handle(
       "folio:create-project",
       (_: unknown, input: CreateProjectInput) => this.createProject(input),
+    );
+    ipcMain.handle("folio:delete-project", (_: unknown, projectId: string) =>
+      this.deleteProject(projectId),
     );
     ipcMain.handle("folio:copy-to-folio", (_: unknown, filePaths: string[]) =>
       this.copyToFolio(filePaths),
@@ -361,7 +365,7 @@ export class FolioManager implements FolioManagerInterface {
 
       if (!item || item.missing) return;
       item.missing = true;
-      await this.archiveManager.save(SCHEMA_VERSION);
+      await this.archiveManager.save();
       mainWindow.webContents.send("folio:files-added", [item]);
     });
   }
@@ -396,7 +400,7 @@ export class FolioManager implements FolioManagerInterface {
       repairedMissingFlags ||
       repairedMediaDimensions
     ) {
-      await this.archiveManager.save(SCHEMA_VERSION);
+      await this.archiveManager.save();
     }
 
     if (migratedProjects || removedLegacyCanvasReferences) {
@@ -413,7 +417,7 @@ export class FolioManager implements FolioManagerInterface {
       this.archiveManager.setItems(brokenLinks.items);
       this.projects = brokenLinks.projects;
       this.canvases = brokenLinks.canvases;
-      await this.archiveManager.save(SCHEMA_VERSION);
+      await this.archiveManager.save();
       this.db.setFolioData({
         items: brokenLinks.items,
         tags: this.tags,
@@ -497,6 +501,112 @@ export class FolioManager implements FolioManagerInterface {
     return this.currentData();
   }
 
+  async deleteProject(projectId: string): Promise<FolioData> {
+    const project = this.getProjectOrThrow(projectId);
+    const projectRoot = path.resolve(this.folioRoot, project.folderPath);
+    if (!isPathInsideDirectory(projectRoot, this.folioRoot)) {
+      throw new Error("Project folder path must be inside the Folio root.");
+    }
+
+    const projectItems = this.archiveManager
+      .getItems()
+      .filter(
+        (item) =>
+          item.projectId === projectId ||
+          project.imageIds.includes(item.id) ||
+          project.workItemIds.includes(item.id),
+      );
+    const projectItemIds = new Set(projectItems.map((item) => item.id));
+    const projectNotes = this.notes.filter((note) => note.projectId === projectId);
+    const projectNoteIds = new Set(projectNotes.map((note) => note.id));
+    const projectBoardIds = new Set([
+      ...project.boardIds,
+      ...this.canvases
+        .filter((canvas) => canvas.projectId === projectId)
+        .map((canvas) => canvas.id),
+    ]);
+
+    await Promise.all(
+      projectItems.map(async (item) => {
+        const absolutePath = this.archiveManager.getAbsolutePath(item.path);
+        if (!isPathWithinRoot(absolutePath, this.folioRoot)) return;
+        if (isPathInsideDirectory(absolutePath, projectRoot)) return;
+        if (!(await this.fileExists(absolutePath))) return;
+        await shell.trashItem(absolutePath);
+      }),
+    );
+    await Promise.all(
+      projectNotes.map(async (note) => {
+        const absolutePath = this.resolveNoteAbsolutePath(note);
+        if (isPathInsideDirectory(absolutePath, projectRoot)) return;
+        if (!(await this.fileExists(absolutePath))) return;
+        await shell.trashItem(absolutePath);
+      }),
+    );
+
+    const remainingItems = this.archiveManager
+      .getItems()
+      .filter((item) => !projectItemIds.has(item.id));
+    const remainingCanvases = this.canvases
+      .filter((canvas) => !projectBoardIds.has(canvas.id))
+      .map((canvas) => {
+        const positions = { ...canvas.positions };
+        projectItemIds.forEach((itemId) => delete positions[itemId]);
+        projectNoteIds.forEach((noteId) => delete positions[noteId]);
+        return {
+          ...canvas,
+          itemIds: canvas.itemIds.filter((itemId) => !projectItemIds.has(itemId)),
+          noteIds: (canvas.noteIds ?? []).filter(
+            (noteId) => !projectNoteIds.has(noteId),
+          ),
+          positions,
+          edges: canvas.edges.filter(
+            (edge) =>
+              !projectItemIds.has(edge.fromId) &&
+              !projectItemIds.has(edge.toId) &&
+              !projectNoteIds.has(edge.fromId) &&
+              !projectNoteIds.has(edge.toId),
+          ),
+        };
+      });
+    const remainingNotes = this.notes.filter((note) => note.projectId !== projectId);
+    const remainingProjects = this.projects
+      .filter((candidate) => candidate.id !== projectId)
+      .map((candidate) => ({
+        ...candidate,
+        imageIds: candidate.imageIds.filter((itemId) => !projectItemIds.has(itemId)),
+        workItemIds: candidate.workItemIds.filter(
+          (itemId) => !projectItemIds.has(itemId),
+        ),
+        boardIds: candidate.boardIds.filter(
+          (boardId) => !projectBoardIds.has(boardId),
+        ),
+        reviews: candidate.reviews.map((review) => ({
+          ...review,
+          workItemIds: review.workItemIds.filter(
+            (itemId) => !projectItemIds.has(itemId),
+          ),
+        })),
+      }));
+
+    if (await this.fileExists(projectRoot)) {
+      await shell.trashItem(projectRoot);
+    }
+    await this.archiveManager.deleteThumbnails(Array.from(projectItemIds));
+
+    const nextData: FolioData = {
+      version: SCHEMA_VERSION,
+      items: remainingItems,
+      tags: this.tags,
+      canvases: remainingCanvases,
+      projects: remainingProjects,
+      notes: remainingNotes,
+    };
+    await this.saveFolioData(nextData);
+
+    return nextData;
+  }
+
   private async appendItemsToProject(
     projectId: string,
     items: FolioItem[],
@@ -516,7 +626,7 @@ export class FolioManager implements FolioManagerInterface {
     );
 
     await Promise.all([
-      this.archiveManager.save(SCHEMA_VERSION),
+      this.archiveManager.save(),
     ]);
     this.db.setProjects(this.projects);
   }
@@ -545,7 +655,7 @@ export class FolioManager implements FolioManagerInterface {
 
   async saveItems(items: FolioItem[]): Promise<void> {
     this.archiveManager.setItems(items);
-    await this.archiveManager.save(SCHEMA_VERSION);
+    await this.archiveManager.save();
   }
 
   async saveCanvases(canvases: Canvas[]): Promise<void> {
@@ -921,7 +1031,7 @@ export class FolioManager implements FolioManagerInterface {
         project.folderPath,
       );
       if (result.changed) {
-        await this.archiveManager.save(SCHEMA_VERSION);
+        await this.archiveManager.save();
       }
       if (result.items.length) {
         addedItems.push(...result.items);
@@ -994,7 +1104,7 @@ export class FolioManager implements FolioManagerInterface {
     );
 
     if (changed) {
-      await this.archiveManager.save(SCHEMA_VERSION);
+      await this.archiveManager.save();
     }
 
     return {

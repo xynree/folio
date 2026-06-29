@@ -28,6 +28,9 @@ const folioApi = {
     status?: ProjectStatus;
   }): Promise<FolioData> => ipcRenderer.invoke("folio:create-project", input),
 
+  deleteProject: (projectId: string): Promise<FolioData> =>
+    ipcRenderer.invoke("folio:delete-project", projectId),
+
   copyToFolio: (filePaths: string[]): Promise<FolioItem[]> =>
     ipcRenderer.invoke("folio:copy-to-folio", filePaths),
 

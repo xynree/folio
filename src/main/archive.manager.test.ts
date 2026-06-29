@@ -271,7 +271,7 @@ describe("ArchiveManager project imports", () => {
     expect(persistedItems[0].missing).toBeFalsy();
   });
 
-  it("generates fit thumbnails without cropping tall images", async () => {
+  it("generates oriented fit thumbnails without reusing older cache variants", async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-project-"));
     const dotFolio = path.join(tempDir, ".folio");
     const imagesDir = path.join(tempDir, "projects", "color-study", "images");
@@ -280,14 +280,9 @@ describe("ArchiveManager project imports", () => {
     const db = new FolioDB(path.join(dotFolio, "folio.db"));
     const imagePath = path.join(imagesDir, "tall.png");
     await fs.writeFile(imagePath, "image bytes");
-    const resize = vi.fn(() => ({
+    vi.mocked(nativeImage.createThumbnailFromPath).mockResolvedValue({
       isEmpty: () => false,
       toJPEG: () => Buffer.from("fit thumbnail"),
-    }));
-    vi.mocked(nativeImage.createFromPath).mockReturnValue({
-      getSize: () => ({ width: 400, height: 1200 }),
-      isEmpty: () => false,
-      resize,
     } as unknown as Electron.NativeImage);
 
     const manager = new ArchiveManager(tempDir, db);
@@ -300,12 +295,18 @@ describe("ArchiveManager project imports", () => {
 
     const thumbnails = await manager.ensureThumbnails(["tall"]);
 
-    expect(resize).toHaveBeenCalledWith({ height: 320, quality: "best" });
+    expect(nativeImage.createThumbnailFromPath).toHaveBeenCalledWith(imagePath, {
+      width: 320,
+      height: 320,
+    });
     expect(thumbnails).toEqual({
-      tall: "folio://thumb/tall-fit-small.jpg",
+      tall: "folio://thumb/tall-oriented-fit-small.jpg",
     });
     await expect(
-      fs.readFile(path.join(dotFolio, "thumbs", "tall-fit-small.jpg"), "utf-8"),
+      fs.readFile(
+        path.join(dotFolio, "thumbs", "tall-oriented-fit-small.jpg"),
+        "utf-8",
+      ),
     ).resolves.toBe("fit thumbnail");
   });
 

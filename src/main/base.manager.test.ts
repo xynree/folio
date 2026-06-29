@@ -5,7 +5,13 @@ import { FolioManager } from "./base.manager";
 import { FolioDB } from "./database";
 import { computeHash } from "../helpers";
 import { SCHEMA_VERSION } from "../constants";
-import { makeCanvas, makeData, makeItem, makeProject } from "../test/fixtures";
+import {
+  makeCanvas,
+  makeData,
+  makeItem,
+  makeNote,
+  makeProject,
+} from "../test/fixtures";
 import type { Canvas, FolioData } from "../types";
 
 type WatchCallback = (filePath: string) => void | Promise<void>;
@@ -656,6 +662,145 @@ describe("FolioManager project Works", () => {
     expect(data.canvases[0].edges).toEqual([]);
     expect(data.projects[0].imageIds).toEqual(["bravo"]);
     expect(data.projects[0].workItemIds).toEqual([]);
+  });
+
+  it("deletes a project with its metadata, folder, notes, boards, items, and thumbnails", async () => {
+    const { folioRoot, dotFolio } = await makeTempFolioHome();
+    const projectFolder = path.join(folioRoot, "projects", "color-study");
+    const legacyProjectFile = path.join(folioRoot, "items", "legacy-beta.png");
+    const thumbsDir = path.join(dotFolio, "thumbs");
+    await fs.mkdir(thumbsDir, { recursive: true });
+    await fs.mkdir(path.dirname(legacyProjectFile), { recursive: true });
+    await fs.writeFile(legacyProjectFile, "legacy image");
+    await fs.writeFile(path.join(thumbsDir, "alpha-oriented-fit-small.jpg"), "a");
+    await fs.writeFile(path.join(thumbsDir, "beta-small.jpg"), "b");
+    electronMocks.trashItem.mockResolvedValue(undefined);
+
+    const manager = new FolioManager();
+    await manager.saveFolioData(
+      makeData({
+        items: [
+          makeItem("alpha", {
+            path: "projects/color-study/images/alpha.png",
+            projectId: "project-1",
+          }),
+          makeItem("beta", {
+            path: "items/legacy-beta.png",
+            projectId: "project-1",
+          }),
+          makeItem("delta", {
+            path: "projects/other/images/delta.png",
+            projectId: "project-2",
+          }),
+        ],
+        canvases: [
+          makeCanvas("board-1", {
+            projectId: "project-1",
+            itemIds: ["alpha"],
+          }),
+          makeCanvas("board-2", {
+            projectId: "project-2",
+            itemIds: ["alpha", "delta"],
+            noteIds: ["note-1", "note-2"],
+            positions: {
+              alpha: { x: 10, y: 20 },
+              delta: { x: 30, y: 40 },
+              "note-1": { x: 50, y: 60 },
+              "note-2": { x: 70, y: 80 },
+            },
+            edges: [
+              {
+                id: "edge-1",
+                fromId: "alpha",
+                toId: "delta",
+                createdAt: "2026-06-17T10:00:00.000Z",
+              },
+              {
+                id: "edge-2",
+                fromId: "note-1",
+                toId: "note-2",
+                createdAt: "2026-06-17T10:00:00.000Z",
+              },
+            ],
+          }),
+        ],
+        projects: [
+          makeProject("project-1", {
+            folderPath: "projects/color-study",
+            imageIds: ["alpha"],
+            workItemIds: ["alpha"],
+            boardIds: ["board-1"],
+          }),
+          makeProject("project-2", {
+            folderPath: "projects/other",
+            imageIds: ["delta", "alpha"],
+            workItemIds: ["alpha"],
+            boardIds: ["board-2", "board-1"],
+          }),
+        ],
+        notes: [
+          makeNote("note-1", {
+            path: "projects/color-study/notes/note-1.md",
+            projectId: "project-1",
+          }),
+          makeNote("note-2", {
+            path: "projects/other/notes/note-2.md",
+            projectId: "project-2",
+          }),
+        ],
+      }),
+    );
+
+    const data = await manager.deleteProject("project-1");
+
+    expect(electronMocks.trashItem).toHaveBeenCalledWith(projectFolder);
+    expect(electronMocks.trashItem).toHaveBeenCalledWith(legacyProjectFile);
+    expect(data.items.map((item) => item.id)).toEqual(["delta"]);
+    expect(data.notes.map((note) => note.id)).toEqual(["note-2"]);
+    expect(data.canvases.map((canvas) => canvas.id)).toEqual(["board-2"]);
+    expect(data.canvases[0].itemIds).toEqual(["delta"]);
+    expect(data.canvases[0].noteIds).toEqual(["note-2"]);
+    expect(data.canvases[0].positions).toEqual({
+      delta: { x: 30, y: 40 },
+      "note-2": { x: 70, y: 80 },
+    });
+    expect(data.canvases[0].edges).toEqual([]);
+    expect(data.projects).toEqual([
+      expect.objectContaining({
+        id: "project-2",
+        imageIds: ["delta"],
+        workItemIds: [],
+        boardIds: ["board-2"],
+      }),
+    ]);
+    await expect(
+      fs.access(path.join(thumbsDir, "alpha-oriented-fit-small.jpg")),
+    ).rejects.toThrow();
+    await expect(fs.access(path.join(thumbsDir, "beta-small.jpg"))).rejects.toThrow();
+  });
+
+  it("refuses to delete a project whose folder resolves to the Folio root", async () => {
+    await makeTempFolioHome();
+    electronMocks.trashItem.mockResolvedValue(undefined);
+
+    const manager = new FolioManager();
+    await manager.saveFolioData(
+      makeData({
+        projects: [
+          makeProject("project-1", {
+            folderPath: ".",
+            imageIds: ["alpha"],
+            workItemIds: ["alpha"],
+          }),
+        ],
+        items: [makeItem("alpha", { projectId: "project-1" })],
+      }),
+    );
+
+    await expect(manager.deleteProject("project-1")).rejects.toThrow(
+      "Project folder path must be inside the Folio root.",
+    );
+    expect(electronMocks.trashItem).not.toHaveBeenCalled();
   });
 
   it("reconciles relocated, missing, repaired, and untracked project files on launch", async () => {

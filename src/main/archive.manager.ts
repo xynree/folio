@@ -8,7 +8,6 @@ import {
   inferItemType,
   sanitizeFileBaseName,
 } from "../helpers";
-import { SCHEMA_VERSION } from "../constants";
 import type {
   FolioItem,
   ImportSource,
@@ -40,7 +39,7 @@ const PLACEHOLDER_SVG_BY_TYPE: Record<ItemType, string> = {
 };
 const THUMBNAIL_JPEG_QUALITY = 72;
 const THUMBNAIL_SIZE = 320;
-const THUMBNAIL_VARIANT = "fit";
+const THUMBNAIL_VARIANT = "oriented-fit";
 const IMAGES_DIR_NAME = "images";
 const DOCUMENTS_DIR_NAME = "documents";
 
@@ -252,10 +251,28 @@ export class ArchiveManager {
     }
 
     if (repairedMissingFlag) {
-      await this.save(SCHEMA_VERSION);
+      await this.save();
     }
 
     return urls;
+  }
+
+  public async deleteThumbnails(itemIds: string[]): Promise<void> {
+    if (!itemIds.length) return;
+
+    const thumbsDir = path.join(this.folioRoot, ".folio", "thumbs");
+    await Promise.all(
+      itemIds.flatMap((itemId) =>
+        [
+          `${itemId}-small.jpg`,
+          `${itemId}-small.svg`,
+          `${itemId}-fit-small.jpg`,
+          `${itemId}-oriented-fit-small.jpg`,
+        ].map((filename) =>
+          fs.rm(path.join(thumbsDir, filename), { force: true }),
+        ),
+      ),
+    );
   }
 
   public async getFileDataUrl(relativeOrAbsolutePath: string): Promise<string> {
@@ -313,7 +330,7 @@ export class ArchiveManager {
   /**
    * Saves the current items to disk.
    */
-  async save(version: number): Promise<void> {
+  async save(): Promise<void> {
     this.db.setItems(this.items);
   }
 
@@ -609,19 +626,10 @@ export class ArchiveManager {
     }
 
     try {
-      const image = nativeImage.createFromPath(sourcePath);
-      if (image.isEmpty()) {
-        const placeholderPath = this.getPlaceholderPath(item);
-        await this.writePlaceholderThumbnail(item, placeholderPath);
-        return placeholderPath;
-      }
-
-      const sourceSize = image.getSize();
-      const thumb = image.resize(
-        sourceSize.width >= sourceSize.height
-          ? { width: THUMBNAIL_SIZE, quality: "best" }
-          : { height: THUMBNAIL_SIZE, quality: "best" },
-      );
+      const thumb = await nativeImage.createThumbnailFromPath(sourcePath, {
+        width: THUMBNAIL_SIZE,
+        height: THUMBNAIL_SIZE,
+      });
 
       if (thumb.isEmpty()) {
         const placeholderPath = this.getPlaceholderPath(item);

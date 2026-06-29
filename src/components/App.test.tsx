@@ -60,6 +60,28 @@ function setupFolio({
     };
     return cloneData(currentData);
   });
+  vi.mocked(window.folio.deleteProject).mockImplementation(async (projectId) => {
+    const project = currentData.projects.find(
+      (candidate) => candidate.id === projectId,
+    );
+    const itemIds = new Set([
+      ...(project?.imageIds ?? []),
+      ...(project?.workItemIds ?? []),
+    ]);
+    currentData = {
+      ...currentData,
+      items: currentData.items.filter((item) => !itemIds.has(item.id)),
+      canvases: currentData.canvases.filter(
+        (canvas) =>
+          canvas.projectId !== projectId && !(project?.boardIds ?? []).includes(canvas.id),
+      ),
+      projects: currentData.projects.filter(
+        (candidate) => candidate.id !== projectId,
+      ),
+      notes: (currentData.notes ?? []).filter((note) => note.projectId !== projectId),
+    };
+    return cloneData(currentData);
+  });
   vi.mocked(window.folio.openFileDialog).mockResolvedValue(dialogPaths);
   vi.mocked(window.folio.copyToFolio).mockResolvedValue(importedItems);
   vi.mocked(window.folio.importToFolio).mockResolvedValue(importedItems);
@@ -395,6 +417,37 @@ describe("AppShell Phase 1 and Phase 2 workflows", () => {
     expect(screen.queryByLabelText("Open images folder")).toBeNull();
     expect(screen.queryByLabelText("Open Works folder")).toBeNull();
     expect(screen.queryByLabelText("Open references folder")).toBeNull();
+  });
+
+  it("confirms before deleting an open project", async () => {
+    const app = setupFolio();
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(screen.getByLabelText("Delete project"));
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining('Delete project "Studio Archive"?'),
+    );
+    await waitFor(() => {
+      expect(window.folio.deleteProject).toHaveBeenCalledWith("project-1");
+      expect(app.data.projects).toEqual([]);
+      expect(app.data.items).toEqual([]);
+    });
+    expect(await screen.findByText("No projects yet")).not.toBeNull();
+    expect(screen.getByText("Project deleted")).not.toBeNull();
+  });
+
+  it("keeps the project when delete confirmation is dismissed", async () => {
+    setupFolio();
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    const user = userEvent.setup();
+
+    await waitForArchive();
+    await user.click(screen.getByLabelText("Delete project"));
+
+    expect(window.folio.deleteProject).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("Studio Archive")).not.toBeNull();
   });
 
   it("loads archive data, thumbnails, and opens boards from the sidebar", async () => {

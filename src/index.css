@@ -1549,7 +1549,7 @@ button svg {
 
 .project-folder-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 30px;
   gap: var(--space-6);
   min-width: 0;
   -webkit-app-region: no-drag;
@@ -1571,6 +1571,23 @@ button svg {
 .project-folder-actions .icon-button:focus-visible {
   background: rgba(73, 73, 73, 0.16);
   transform: none;
+}
+
+.project-folder-actions .project-delete-button {
+  width: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  color: var(--color-danger);
+  border-color: rgba(179, 57, 43, 0.34);
+  background: rgba(179, 57, 43, 0.08);
+}
+
+.project-folder-actions .project-delete-button:hover,
+.project-folder-actions .project-delete-button:focus-visible {
+  color: #8f2318;
+  border-color: rgba(179, 57, 43, 0.58);
+  background: rgba(179, 57, 43, 0.16);
 }
 
 .project-surface-tabs button {

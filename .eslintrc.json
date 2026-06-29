@@ -23,7 +23,7 @@
   ],
   "parser": "@typescript-eslint/parser",
   "settings": {
-    "import/ignore": ["^vitest$", "^@testing-library/"],
+    "import/ignore": ["\\.d\\.ts$", "^vitest$", "^@testing-library/"],
     "import/resolver": {
       "typescript": {
         "extensions": [".ts", ".tsx", ".js", ".jsx"]

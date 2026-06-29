@@ -19,6 +19,7 @@ import {
   NotebookPen,
   PanelsTopLeft,
   Rows3,
+  Trash2,
   Upload,
 } from "lucide-react";
 import type {
@@ -559,6 +560,48 @@ export function AppShell() {
     },
     [putData],
   );
+
+  const deleteActiveProject = useCallback(async () => {
+    if (!activeProject) return;
+
+    const confirmed = window.confirm(
+      `Delete project "${activeProject.title}"? This will move its folder to Trash and remove all project data from Folio.`,
+    );
+    if (!confirmed) return;
+
+    const deletedProjectItemIds = new Set([
+      ...activeProject.imageIds,
+      ...activeProject.workItemIds,
+      ...dataRef.current.items
+        .filter((item) => item.projectId === activeProject.id)
+        .map((item) => item.id),
+    ]);
+    setBusy(true);
+    try {
+      const nextData = await window.folio.deleteProject(activeProject.id);
+      putData(nextData);
+      setThumbUrls((current) => {
+        const next = { ...current };
+        deletedProjectItemIds.forEach((itemId) => {
+          delete next[itemId];
+        });
+        return next;
+      });
+      setActiveProjectId(null);
+      setProjectSurface("images");
+      setActiveReviewId(null);
+      setActiveNoteId(null);
+      setActiveCanvasId(null);
+      setDetailItemId(null);
+      clearSelection();
+      setToast("Project deleted");
+    } catch (error) {
+      console.error(error);
+      setToast("Project could not be deleted");
+    } finally {
+      setBusy(false);
+    }
+  }, [activeProject, clearSelection, putData]);
 
   const setSelectionWorksMembership = useCallback(async () => {
     if (!activeProject || !selectedItemIds.length) return;
@@ -1316,6 +1359,18 @@ export function AppShell() {
                   onClick={() => openFolioPath(activeProject.folderPath)}
                 >
                   <ButtonIcon icon={FolderOpen} />
+                </button>
+                <button
+                  className="icon-button project-delete-button"
+                  type="button"
+                  aria-label="Delete project"
+                  title="Delete project"
+                  disabled={busy}
+                  onClick={() => {
+                    void deleteActiveProject();
+                  }}
+                >
+                  <ButtonIcon icon={Trash2} size={14} />
                 </button>
               </div>
             </section>

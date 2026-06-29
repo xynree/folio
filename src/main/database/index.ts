@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import BetterSqlite3 from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import type { Canvas, FolioData, FolioItem, Note, Project, Tag } from "../../types";
@@ -25,13 +25,13 @@ import {
  * database useful in tests.
  */
 export class FolioDB {
-  private readonly db: Database.Database;
+  private readonly db: BetterSqlite3.Database;
 
   constructor(dbPath: string) {
     if (dbPath !== ":memory:") {
       fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     }
-    this.db = new Database(dbPath);
+    this.db = new BetterSqlite3(dbPath);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.exec(SCHEMA_SQL);

@@ -63,7 +63,9 @@ export class FolioStorage {
   private static instance: FolioStorage;
   private readonly fileStrategy = new FileSaveStrategy();
 
-  private constructor() {}
+  private constructor() {
+    // Enforces singleton construction through getInstance.
+  }
 
   public static getInstance(): FolioStorage {
     if (!FolioStorage.instance) {
@@ -76,4 +78,3 @@ export class FolioStorage {
     await this.fileStrategy.save(destPath, source);
   }
 }
-

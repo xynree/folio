@@ -105,8 +105,9 @@ export function repairBrokenLinks({
   const repairedItems = items.map((item) => {
     if (item.projectId !== undefined && !projectIds.has(item.projectId)) {
       changed = true;
-      const { projectId: _dropped, ...rest } = item;
-      return rest as FolioItem;
+      const rest = { ...item };
+      delete rest.projectId;
+      return rest;
     }
     return item;
   });

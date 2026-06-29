@@ -22,6 +22,7 @@ export interface FolioApi {
     description?: string;
     status?: ProjectStatus;
   }) => Promise<FolioData>;
+  deleteProject: (projectId: string) => Promise<FolioData>;
   copyToFolio: (filePaths: string[]) => Promise<FolioItem[]>;
   importToFolio?: () => Promise<FolioItem[]>;
   copyToProject?: (
